@@ -9,6 +9,7 @@ export type Order = Tables<"orders"> & {
   order_items?: Tables<"order_items">[];
   order_payments?: Tables<"order_payments">[];
   table?: Tables<"tables"> | null;
+  delivery_order?: Tables<"delivery_orders"> | null;
 };
 
 export type OrderItem = Tables<"order_items">;
@@ -55,7 +56,8 @@ export function useOrders(filters?: {
           *,
           order_items(*),
           order_payments(*),
-          table:tables(*)
+          table:tables(*),
+          delivery_order:delivery_orders(*)
         `)
         .eq("unit_id", selectedUnit.id)
         .order("created_at", { ascending: false });
