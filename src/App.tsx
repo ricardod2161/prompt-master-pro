@@ -21,6 +21,7 @@ import Tables from "./pages/Tables";
 import Inventory from "./pages/Inventory";
 import Reports from "./pages/Reports";
 import Delivery from "./pages/Delivery";
+import WhatsAppSettings from "./pages/WhatsAppSettings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -51,7 +52,7 @@ const App = () => (
                   <Route path="/inventory" element={<Inventory />} />
                   <Route path="/reports" element={<Reports />} />
                   <Route path="/delivery" element={<Delivery />} />
-                  <Route path="/whatsapp/settings" element={<ComingSoon title="WhatsApp" />} />
+                  <Route path="/whatsapp/settings" element={<WhatsAppSettings />} />
                   <Route path="/settings" element={<ComingSoon title="Configurações" />} />
                 </Route>
 
