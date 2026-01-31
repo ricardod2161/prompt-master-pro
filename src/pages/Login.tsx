@@ -4,15 +4,19 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Utensils, Loader2 } from "lucide-react";
 
 export default function Login() {
   const navigate = useNavigate();
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, resetPassword } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
   // Login form
   const [loginEmail, setLoginEmail] = useState("");
@@ -64,12 +68,32 @@ export default function Login() {
         description: error.message,
       });
     } else {
-      toast.success("Conta criada com sucesso!", {
-        description: "Verifique seu email para confirmar a conta.",
-      });
+      toast.success("Conta criada com sucesso!");
+      navigate("/select-unit");
     }
 
     setLoading(false);
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetLoading(true);
+
+    const { error } = await resetPassword(resetEmail);
+
+    if (error) {
+      toast.error("Erro ao enviar email", {
+        description: error.message,
+      });
+    } else {
+      toast.success("Email enviado!", {
+        description: "Verifique sua caixa de entrada para redefinir a senha.",
+      });
+      setResetDialogOpen(false);
+      setResetEmail("");
+    }
+
+    setResetLoading(false);
   };
 
   return (
@@ -112,7 +136,51 @@ export default function Login() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="login-password">Senha</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="login-password">Senha</Label>
+                      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button variant="link" className="px-0 h-auto text-xs text-muted-foreground hover:text-primary">
+                            Esqueceu a senha?
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <form onSubmit={handleResetPassword}>
+                            <DialogHeader>
+                              <DialogTitle>Recuperar Senha</DialogTitle>
+                              <DialogDescription>
+                                Digite seu email para receber um link de recuperação de senha.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="py-4">
+                              <Label htmlFor="reset-email">Email</Label>
+                              <Input
+                                id="reset-email"
+                                type="email"
+                                placeholder="seu@email.com"
+                                value={resetEmail}
+                                onChange={(e) => setResetEmail(e.target.value)}
+                                required
+                                disabled={resetLoading}
+                                className="mt-2"
+                              />
+                            </div>
+                            <DialogFooter>
+                              <Button type="submit" disabled={resetLoading}>
+                                {resetLoading ? (
+                                  <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Enviando...
+                                  </>
+                                ) : (
+                                  "Enviar Link"
+                                )}
+                              </Button>
+                            </DialogFooter>
+                          </form>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
                     <Input
                       id="login-password"
                       type="password"
@@ -209,7 +277,7 @@ export default function Login() {
         </Card>
 
         <p className="text-center text-sm text-muted-foreground">
-          © 2024 RestaurantOS. Todos os direitos reservados.
+          © 2026 RestaurantOS. Todos os direitos reservados.
         </p>
       </div>
     </div>
