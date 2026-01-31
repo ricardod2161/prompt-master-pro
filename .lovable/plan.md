@@ -1,182 +1,263 @@
 
-# 🍽️ RestaurantOS - Sistema de Gestão Multiunidade
 
-## Visão Geral
-Sistema SaaS completo para gestão de restaurantes com múltiplas unidades, integrando PDV, KDS, delivery, controle de estoque e atendimento automatizado via WhatsApp com IA.
+# Plano de Implementacao Completa - RestaurantOS
 
----
+## Resumo
 
-## 🎨 Design System
-
-**Tema:** Dark Mode Profissional
-- Interface escura moderna otimizada para ambientes de cozinha e baixa luminosidade
-- Cores de status bem definidas (verde para sucesso, amarelo para em preparo, vermelho para urgente)
-- Tipografia legível em diferentes distâncias (importante para KDS)
-- Componentes touch-friendly para tablets e telas sensíveis ao toque
+Implementacao de todos os modulos funcionais do sistema com atualizacao em tempo real, design responsivo profissional e todas as funcionalidades de gestao.
 
 ---
 
-## 📱 Módulos e Telas
+## Modulos a Implementar
 
-### 1. Autenticação e Acesso
-- **Login** (`/`) - Autenticação com email/senha
-- **Seleção de Unidade** (`/select-unit`) - Escolha da unidade ativa com visual de cards
-- **Gestão de Usuários** (`/settings/users`) - Controle de acesso por perfil (admin, caixa, cozinha, garçom)
+### 1. PDV - Ponto de Venda (`/pos`)
 
-### 2. Dashboard Executivo (`/dashboard`)
-- Cards de KPIs: faturamento, ticket médio, pedidos do dia
-- Gráfico de vendas por canal (WhatsApp, Mesa, Balcão, Delivery)
-- Lista de pedidos recentes com status visual
-- Comparativo com período anterior
+**Interface:**
+- Grade visual de produtos organizados por categoria (estilo tablet-friendly)
+- Barra de busca inteligente com resultados instantaneos
+- Carrinho lateral com ajuste de quantidade e observacoes
+- Selecao de canal (Balcao, Mesa, Delivery, WhatsApp)
+- Modal de finalizacao com multiplas formas de pagamento
+- Botao de impressao termica (preparado para integracao)
 
-### 3. PDV - Ponto de Venda (`/pos`)
-- Busca inteligente de produtos
-- Grade visual de produtos por categoria
-- Carrinho com ajuste de quantidade e observações
-- Seleção de mesa ou cliente
-- Múltiplas formas de pagamento
-- **Integração com impressora térmica** para cupom
+**Funcionalidades:**
+- Filtro por categoria com scroll horizontal
+- Calculo automatico de totais
+- Selecao de mesa (quando canal = mesa)
+- Campo de cliente e telefone (opcional)
+- Split de pagamento (ex: parte PIX, parte dinheiro)
 
-### 4. KDS - Kitchen Display System (`/kds`)
-- Visualização em colunas: Pendente → Em Preparo → Pronto
-- Temporizador visual por pedido
-- Alertas de pedidos atrasados
-- Som de notificação para novos pedidos
-- Interface otimizada para touch em tela grande
+---
 
-### 5. Gestão de Pedidos (`/orders`)
-- Tabela completa com filtros por status, canal e período
+### 2. KDS - Kitchen Display System (`/kds`)
+
+**Interface:**
+- Layout em 3 colunas: Pendente | Em Preparo | Pronto
+- Cards de pedido com temporizador visual
+- Destaque visual para pedidos atrasados (>15min)
+- Interface touch-friendly para telas grandes
+- Som de notificacao para novos pedidos
+
+**Funcionalidades:**
+- Atualizacao em tempo real via Supabase Realtime
+- Botoes de acao: "Iniciar Preparo" e "Marcar Pronto"
+- Filtro por tipo de item (bebidas, comidas)
+- Exibicao de observacoes do cliente
+- Tempo de espera calculado automaticamente
+
+---
+
+### 3. Gestao de Pedidos (`/orders`)
+
+**Interface:**
+- Tabela completa com paginacao
+- Filtros: status, canal, periodo, busca
+- Badge de status colorido
 - Modal de detalhes com timeline do pedido
-- Atualização em tempo real via websockets
-- Histórico completo de alterações
 
-### 6. Cardápio Digital (`/menu`)
-- CRUD de produtos com imagem, preço e disponibilidade
-- Gestão de categorias com ordenação
-- Adicionais e complementos por produto
-- Preços diferenciados por canal (delivery vs presencial)
-- Horários de disponibilidade por produto
+**Funcionalidades:**
+- Atualizacao em tempo real
+- Edicao de status do pedido
+- Visualizacao de itens e pagamentos
+- Historico de alteracoes
+- Exportacao para Excel (futuro)
 
-### 7. Gestão de Estoque (`/inventory`) ✨ **Nova funcionalidade**
-- Cadastro de insumos com unidade de medida
-- Fichas técnicas vinculando produtos aos insumos
-- Baixa automática de estoque por venda
-- Alertas de estoque mínimo
-- Relatório de movimentação
+---
 
-### 8. WhatsApp + IA (`/whatsapp/settings`)
-- Conexão via Evolution API com QR Code
-- System prompt customizável para comportamento da IA
-- Toggle de ativação do bot
-- Visualização de conversas e intervenção manual
-- Configuração de mensagens automáticas
+### 4. Controle de Caixa (`/cashier`)
 
-### 9. Delivery (`/delivery`)
-- Lista de pedidos aguardando despacho
-- Cadastro de entregadores
-- Atribuição de pedido a motoboy
-- Mapa com localização aproximada dos pedidos
-- Rastreamento de status da entrega
+**Interface:**
+- Card de status do caixa (aberto/fechado)
+- Formulario de abertura com valor inicial
+- Lista de movimentacoes do dia
+- Resumo financeiro em tempo real
 
-### 10. Mesas e QR Codes (`/tables`)
-- Mapa visual das mesas do restaurante
-- Status em tempo real: livre, ocupada, pedido pendente
-- Geração de QR Code único por mesa
-- Exportação em PDF para impressão
-
-### 11. Controle de Caixa (`/cashier`)
+**Funcionalidades:**
 - Abertura de caixa com valor inicial
 - Registro de sangrias e suprimentos
-- Fechamento com conferência de valores
-- Histórico de movimentações
-- Relatório de discrepâncias
+- Fechamento com conferencia automatica
+- Calculo de diferenca (esperado vs real)
+- Historico de caixas anteriores
 
-### 12. Relatórios (`/reports`)
-- Filtros por período e categoria
+---
+
+### 5. Gestao de Mesas (`/tables`)
+
+**Interface:**
+- Grid visual das mesas com status colorido
+- Indicadores: Livre (verde), Ocupada (azul), Pedido Pendente (amarelo)
+- Botao de geracao de QR Code
+
+**Funcionalidades:**
+- CRUD de mesas
+- Geracao de QR Code unico por mesa
+- Vinculacao de pedido a mesa
+- Status atualizado em tempo real
+
+---
+
+### 6. Gestao de Estoque (`/inventory`)
+
+**Interface:**
+- Tabela de insumos com estoque atual
+- Indicador visual de estoque baixo (vermelho)
+- Modal de entrada/saida manual
+- Fichas tecnicas (produto -> insumos)
+
+**Funcionalidades:**
+- CRUD de insumos
+- Movimentacoes manuais com justificativa
+- Alertas de estoque minimo
+- Vincular produtos a ingredientes
+- Historico de movimentacoes
+
+---
+
+### 7. Relatorios (`/reports`)
+
+**Interface:**
+- Seletor de periodo
+- Cards de resumo (faturamento, pedidos, ticket medio)
+- Graficos de vendas por periodo
 - Ranking de produtos mais vendidos
-- Análise de faturamento por canal
-- Relatório de estoque
-- Exportação em Excel e PDF
 
-### 13. Configurações (`/settings`)
-- Dados da unidade (nome, endereço, CNPJ)
-- Configuração de impressoras
-- Formas de pagamento aceitas
-- Integrações externas
+**Funcionalidades:**
+- Filtro por periodo customizado
+- Grafico de vendas por canal
+- Top 10 produtos vendidos
+- Comparativo com periodo anterior
+- Exportacao PDF/Excel (estrutura)
 
 ---
 
-## 🗄️ Estrutura do Banco de Dados (Melhorado)
+### 8. Delivery (`/delivery`)
 
-### Tabelas Principais:
-- **units** - Unidades do restaurante
-- **profiles** - Perfis de usuários com roles e permissões
-- **user_units** - Associação usuário-unidade
+**Interface:**
+- Lista de pedidos aguardando despacho
+- Cadastro de entregadores
+- Card de atribuicao de motoboy
 
-### Cardápio:
-- **categories** - Categorias de produtos
-- **products** - Produtos do cardápio
-- **product_addons** - Adicionais dos produtos
-
-### Pedidos:
-- **orders** - Pedidos com status, canal e timestamps
-- **order_items** - Itens com status de cozinha
-- **order_payments** - Pagamentos por pedido
-
-### Estoque:
-- **inventory_items** - Cadastro de insumos
-- **product_ingredients** - Ficha técnica (produto → insumos)
-- **inventory_movements** - Movimentações de estoque
-
-### Operacional:
-- **tables** - Mesas do restaurante
-- **cash_registers** - Caixas diários
-- **cash_movements** - Movimentações de caixa
-
-### Delivery:
-- **delivery_drivers** - Entregadores
-- **delivery_orders** - Entregas com rastreamento
-
-### WhatsApp:
-- **whatsapp_settings** - Configurações por unidade
-- **whatsapp_conversations** - Histórico de conversas
+**Funcionalidades:**
+- CRUD de entregadores
+- Atribuir pedido a entregador
+- Status de entrega (despachado, entregue)
+- Tempo de entrega estimado
 
 ---
 
-## 🔧 Integrações
+## Configuracoes Tecnicas
 
-1. **Supabase** - Backend completo com realtime
-2. **Evolution API** - WhatsApp Business self-hosted
-3. **Lovable AI** - Processamento de linguagem natural para o chatbot
-4. **Impressão Térmica** - Via API de impressão local
+### Tempo Real (Supabase Realtime)
+
+Habilitar realtime nas tabelas:
+- `orders` - novos pedidos e mudancas de status
+- `order_items` - status da cozinha
+- `tables` - status das mesas
+- `cash_registers` - caixa aberto/fechado
+
+### Hooks e Componentes Reutilizaveis
+
+- `useOrders()` - hook para pedidos com realtime
+- `useProducts()` - hook para produtos
+- `useCashRegister()` - hook para caixa do dia
+- `OrderCard` - componente de card de pedido
+- `ProductGrid` - grade de produtos
+- `StatusBadge` - badge de status reutilizavel
 
 ---
 
-## 📋 Fases de Implementação
+## Melhorias de UX
 
-### Fase 1 - Core
-- Autenticação e seleção de unidade
-- Dashboard básico
-- CRUD de cardápio
-- Estrutura do banco de dados
+1. **Loading States** - Skeletons em todas as listagens
+2. **Empty States** - Ilustracoes quando nao ha dados
+3. **Error Handling** - Toasts com mensagens claras
+4. **Confirmacoes** - Dialogs para acoes destrutivas
+5. **Responsividade** - Mobile-first em todas as telas
+6. **Atalhos de Teclado** - PDV e KDS (ex: Enter para finalizar)
+7. **Feedback Visual** - Animacoes suaves em acoes
 
-### Fase 2 - Vendas
-- PDV completo
-- KDS em tempo real
-- Gestão de pedidos
-- Controle de caixa
+---
 
-### Fase 3 - Delivery & Mesas
-- Gestão de delivery
-- QR Codes de mesas
-- Mapa de entregas
+## Estrutura de Arquivos
 
-### Fase 4 - Automação
-- Integração WhatsApp
-- Chatbot com IA
-- Estoque automatizado
+```text
+src/
+├── pages/
+│   ├── POS.tsx           # Ponto de Venda
+│   ├── KDS.tsx           # Monitor de Cozinha
+│   ├── Orders.tsx        # Gestao de Pedidos
+│   ├── Cashier.tsx       # Controle de Caixa
+│   ├── Tables.tsx        # Gestao de Mesas
+│   ├── Inventory.tsx     # Gestao de Estoque
+│   ├── Reports.tsx       # Relatorios
+│   └── Delivery.tsx      # Gestao de Delivery
+├── components/
+│   ├── pos/
+│   │   ├── ProductGrid.tsx
+│   │   ├── Cart.tsx
+│   │   └── CheckoutDialog.tsx
+│   ├── kds/
+│   │   ├── KDSColumn.tsx
+│   │   └── KDSOrderCard.tsx
+│   ├── orders/
+│   │   ├── OrdersTable.tsx
+│   │   └── OrderDetailsDialog.tsx
+│   └── shared/
+│       ├── StatusBadge.tsx
+│       └── EmptyState.tsx
+├── hooks/
+│   ├── useOrders.ts
+│   ├── useProducts.ts
+│   ├── useRealtime.ts
+│   └── useCashRegister.ts
+```
 
-### Fase 5 - Analytics
-- Relatórios avançados
-- Exportações
-- Dashboard executivo completo
+---
+
+## Ordem de Implementacao
+
+1. **Hooks e Componentes Base** - Estrutura reutilizavel
+2. **PDV** - Sistema de vendas completo
+3. **KDS** - Monitor de cozinha com realtime
+4. **Gestao de Pedidos** - Tabela e detalhes
+5. **Controle de Caixa** - Abertura/fechamento
+6. **Mesas e QR Codes** - Gestao visual
+7. **Estoque** - Insumos e movimentacoes
+8. **Relatorios** - Dashboards e graficos
+9. **Delivery** - Entregadores e despacho
+
+---
+
+## Secao Tecnica
+
+### Migracao SQL para Realtime
+
+```sql
+-- Habilitar realtime nas tabelas principais
+ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.order_items;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.tables;
+```
+
+### Hook de Realtime (useRealtime)
+
+```typescript
+const channel = supabase
+  .channel('orders-realtime')
+  .on('postgres_changes', 
+    { event: '*', schema: 'public', table: 'orders' },
+    (payload) => handleOrderChange(payload)
+  )
+  .subscribe()
+```
+
+### Integracao Impressao Termica
+
+Interface preparada para chamar API local:
+```typescript
+const printReceipt = async (order: Order) => {
+  // POST para localhost:3001/print
+  // Pode ser integrado com ESC/POS ou sistema proprio
+}
+```
+
