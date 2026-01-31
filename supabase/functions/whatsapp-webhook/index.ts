@@ -128,6 +128,58 @@ const tools = [
   }
 ];
 
+// Parse action from content when AI returns JSON instead of using tool_calls
+function parseActionFromContent(content: string): { action: string; input: Record<string, unknown> } | null {
+  if (!content) return null;
+  
+  try {
+    // Match JSON containing action/action_input pattern
+    const jsonMatch = content.match(/\{[\s\S]*?"action"[\s\S]*?"action_input"[\s\S]*?\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.action && parsed.action_input !== undefined) {
+        let input = parsed.action_input;
+        // action_input can be a string (JSON) or already an object
+        if (typeof input === "string") {
+          try {
+            input = JSON.parse(input);
+          } catch {
+            // If it's not valid JSON, use as-is
+            input = { value: input };
+          }
+        }
+        console.log(`Detected action in content: ${parsed.action}`, input);
+        return { action: parsed.action, input: input || {} };
+      }
+    }
+  } catch (error) {
+    console.error("Error parsing action from content:", error);
+  }
+  return null;
+}
+
+// Sanitize response to remove any JSON or technical content
+function sanitizeResponse(response: string): string {
+  if (!response) return "";
+  
+  // Remove JSON blocks
+  let sanitized = response.replace(/```json[\s\S]*?```/g, "");
+  sanitized = sanitized.replace(/```[\s\S]*?```/g, "");
+  
+  // Remove action/action_input JSON patterns
+  sanitized = sanitized.replace(/\{[\s\S]*?"action"[\s\S]*?"action_input"[\s\S]*?\}/g, "");
+  
+  // Remove other common technical patterns
+  sanitized = sanitized.replace(/\{[\s\S]*?"function_call"[\s\S]*?\}/g, "");
+  sanitized = sanitized.replace(/\{[\s\S]*?"tool_calls?"[\s\S]*?\}/g, "");
+  
+  // Clean up multiple newlines and whitespace
+  sanitized = sanitized.replace(/\n{3,}/g, "\n\n");
+  sanitized = sanitized.trim();
+  
+  return sanitized;
+}
+
 // Tool execution functions
 async function executeTool(
   supabase: any,
@@ -137,7 +189,7 @@ async function executeTool(
   customerPhone: string,
   customerName: string
 ): Promise<string> {
-  console.log(`Executing tool: ${toolName} with args:`, args);
+  console.log(`Executing tool: ${toolName} with args:`, JSON.stringify(args));
 
   switch (toolName) {
     case "listar_cardapio":
@@ -476,11 +528,11 @@ async function processWithAI(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
+          model: "google/gemini-2.5-flash",
           messages: currentMessages,
           tools,
           tool_choice: "auto",
-          max_tokens: 1000,
+          max_tokens: 1500,
         }),
       }
     );
@@ -507,7 +559,7 @@ async function processWithAI(
 
     const message = choice.message;
     
-    // Check if AI wants to call tools
+    // Check if AI wants to call tools via standard tool_calls
     if (message.tool_calls && message.tool_calls.length > 0) {
       console.log(`AI requested ${message.tool_calls.length} tool(s)`);
       
@@ -541,8 +593,43 @@ async function processWithAI(
       continue;
     }
 
-    // No tool calls, return the final message
-    return message.content || "Desculpe, não consegui gerar uma resposta.";
+    // Check if AI returned action/action_input JSON in content (fallback)
+    const parsedAction = parseActionFromContent(message.content || "");
+    if (parsedAction) {
+      console.log(`Detected action in content: ${parsedAction.action}`);
+      
+      // Execute the tool
+      const result = await executeTool(
+        supabase,
+        unitId,
+        parsedAction.action,
+        parsedAction.input,
+        customerPhone,
+        customerName
+      );
+
+      // Add context and request a new response
+      currentMessages.push({
+        role: "assistant",
+        content: `[Executando ${parsedAction.action}...]`
+      });
+      currentMessages.push({
+        role: "user", 
+        content: `Resultado da consulta:\n\n${result}\n\nAgora responda ao cliente de forma natural e amigável baseado nesse resultado. Não use JSON, apenas texto natural em português.`
+      });
+      
+      // Continue to get natural response
+      continue;
+    }
+
+    // No tool calls and no action in content - return the final message
+    const finalResponse = sanitizeResponse(message.content || "");
+    
+    if (!finalResponse) {
+      return "Desculpe, não consegui gerar uma resposta. Por favor, tente reformular sua pergunta.";
+    }
+    
+    return finalResponse;
   }
 
   return "Desculpe, tive dificuldade em processar sua solicitação. Por favor, tente novamente de forma mais simples.";
@@ -682,23 +769,8 @@ serve(async (req) => {
       .order("created_at", { ascending: false })
       .limit(15);
 
-    // Build messages array for AI
-    const systemPrompt = settings.system_prompt || `Você é um assistente virtual de atendimento ao cliente de um restaurante.
-Seja cordial, prestativo e objetivo nas respostas.
-Responda sempre em português brasileiro.
-
-Suas capacidades:
-- Listar o cardápio completo (use a ferramenta listar_cardapio)
-- Buscar produtos específicos (use a ferramenta buscar_produto)
-- Calcular o total de um pedido (use a ferramenta calcular_total)
-- Criar pedidos (use a ferramenta criar_pedido)
-
-Ao criar pedidos, sempre confirme:
-1. Os itens e quantidades
-2. O endereço de entrega
-3. A forma de pagamento
-
-Seja profissional e amigável!`;
+    // Build messages array for AI with enhanced system prompt
+    const systemPrompt = settings.system_prompt || getDefaultSystemPrompt();
 
     const messages = [
       { role: "system", content: systemPrompt },
@@ -734,6 +806,9 @@ Seja profissional e amigável!`;
         assistantMessage = "Desculpe, ocorreu um erro. Por favor, tente novamente.";
       }
     }
+
+    // Final sanitization before sending
+    assistantMessage = sanitizeResponse(assistantMessage);
 
     // Store assistant message
     await supabase.from("whatsapp_messages").insert({
@@ -773,6 +848,36 @@ Seja profissional e amigável!`;
     );
   }
 });
+
+function getDefaultSystemPrompt(): string {
+  return `Você é um assistente virtual de atendimento ao cliente de um restaurante.
+
+REGRAS IMPORTANTES:
+1. NUNCA responda com JSON, código ou dados técnicos
+2. SEMPRE responda em português brasileiro natural e amigável
+3. Seja cordial, prestativo e objetivo
+4. Use emojis com moderação para deixar a conversa mais amigável
+
+SUAS CAPACIDADES:
+- Mostrar o cardápio completo do restaurante
+- Buscar produtos específicos e seus preços
+- Calcular o valor total de um pedido
+- Registrar pedidos no sistema
+
+FLUXO DE PEDIDO:
+1. Ajude o cliente a escolher os produtos
+2. Confirme os itens e quantidades
+3. Peça o endereço de entrega
+4. Confirme a forma de pagamento (dinheiro, cartão crédito/débito ou pix)
+5. Finalize o pedido
+
+EXEMPLOS DE RESPOSTAS CORRETAS:
+- "Claro! Vou mostrar nosso cardápio completo 📋"
+- "O X-Bacon custa R$ 38,90 e vem com hambúrguer 180g, bacon crocante e queijo cheddar!"
+- "Perfeito! Seu pedido ficou em R$ 52,80. Qual o endereço de entrega?"
+
+Seja profissional e crie uma ótima experiência para o cliente!`;
+}
 
 async function sendWhatsAppMessage(
   apiUrl: string,
