@@ -1,190 +1,154 @@
 
+# Plano: Painel de Acompanhamento em Tempo Real e Melhorias na Página de Pedidos
 
-# Plano: Bot WhatsApp Profissional com Fluxo Completo de Pedido
+## Problemas Identificados
 
-## Análise do Estado Atual
+### 1. Modal de Detalhes do Pedido
+- O conteudo esta fixo e nao rola quando tem muita informacao
+- Design basico sem hierarquia visual clara
+- Falta endereco de entrega no modal
 
-O bot atual possui ferramentas básicas, mas falta:
-1. **System prompt profissional** que guia todo o fluxo de atendimento
-2. **Coleta completa de dados**: nome, endereço detalhado (rua, número, bairro, referência)
-3. **Opções de modalidade**: entrega, retirada ou consumo no local
-4. **Tratamento de troco** para pagamento em dinheiro
-5. **Fluxo estruturado** que leva o cliente até a confirmação final
+### 2. Pagina de Pedidos
+- Layout funcional mas sem visual profissional
+- Falta painel de acompanhamento em tempo real para a equipe
+- Tabela basica sem destaque para informacoes importantes
 
-## Solução Proposta
+## Solucao Proposta
 
-### Arquivo: `supabase/functions/whatsapp-webhook/index.ts`
+### Parte 1: Melhorar Modal de Detalhes do Pedido
 
-### 1. System Prompt Profissional Reformulado
+**Mudancas:**
+- Adicionar `ScrollArea` no conteudo do modal para permitir rolagem
+- Definir altura maxima `max-h-[80vh]` para funcionar em telas pequenas
+- Redesenhar com secoes visuais mais claras
+- Mostrar endereco de entrega quando disponivel
+- Icones para cada secao (Itens, Pagamento, Endereco)
+- Botoes de status com cores mais visiveis
 
-O novo prompt será estruturado para:
-- Saudar e identificar o cliente pelo nome
-- Apresentar as opções de forma clara
-- Conduzir o fluxo de pedido passo a passo
-- Perguntar cada informação necessária no momento certo
+### Parte 2: Painel de Acompanhamento em Tempo Real
 
-### 2. Nova Tool: `confirmar_pedido`
+**Novo layout da pagina com 2 modos:**
 
-Substituirá a `criar_pedido` atual com parâmetros completos:
+**Modo Tabela (atual melhorado):**
+- Header com metricas rapidas (Total hoje, Em preparo, Prontos)
+- Tabela responsiva com melhor design
+- Cores de status mais visiveis
+- Informacao de tempo de espera
 
-```text
-PARÂMETROS DA NOVA TOOL:
-├── cliente
-│   ├── nome (string) - Nome do cliente
-│   └── telefone (string) - Telefone (já disponível)
-├── itens[] 
-│   ├── nome (string)
-│   └── quantidade (number)
-├── modalidade (enum)
-│   ├── "entrega" - Delivery
-│   ├── "retirada" - Cliente busca no local
-│   └── "local" - Consumir no estabelecimento
-├── endereco (objeto - apenas para entrega)
-│   ├── rua (string)
-│   ├── numero (string)
-│   ├── bairro (string)
-│   └── referencia (string - opcional)
-├── pagamento
-│   ├── forma (enum: dinheiro, pix, credito, debito, voucher)
-│   └── troco_para (number - apenas se dinheiro)
-└── observacoes (string - opcional)
+**Modo Kanban (novo):**
+- Colunas: Pendente | Preparando | Pronto | Entregue
+- Cards com informacoes resumidas do pedido
+- Drag-and-drop visual (sem funcionalidade real, apenas visual)
+- Auto-atualizacao em tempo real (ja implementado)
+- Toggle para alternar entre modos
+
+### Parte 3: Melhorias de Responsividade
+
+**Mobile:**
+- Cards ao inves de tabela em telas pequenas
+- Filtros colapsaveis
+- Modal adaptado para tela cheia em mobile
+
+**Tablet/Desktop:**
+- Grid de 2-3 colunas no modo Kanban
+- Tabela completa com hover states
+- Metricas sempre visiveis
+
+## Estrutura do Layout
+
+```
++----------------------------------------------------------+
+|  HEADER: Pedidos                                          |
+|  [Metricas: Total | Em Preparo | Prontos | Entregues]    |
++----------------------------------------------------------+
+|  FILTROS: [Busca] [Status] [Canal] [Data] | [Tabela/Kanban]|
++----------------------------------------------------------+
+|                                                           |
+|  MODO TABELA:                                             |
+|  +------------------------------------------------------+ |
+|  | # | Data | Canal | Cliente | Total | Status | Acoes  | |
+|  +------------------------------------------------------+ |
+|                                                           |
+|  MODO KANBAN:                                             |
+|  +------------+ +------------+ +------------+             |
+|  | PENDENTE   | | PREPARANDO | | PRONTO    |             |
+|  |  Card 1    | |  Card 3    | |  Card 5   |             |
+|  |  Card 2    | |  Card 4    | |           |             |
+|  +------------+ +------------+ +------------+             |
++----------------------------------------------------------+
 ```
 
-### 3. Fluxo de Atendimento Profissional
+## Modal Melhorado
 
-```text
-┌─────────────────────────────────────────────────────────────────────┐
-│  ETAPA 1: SAUDAÇÃO E IDENTIFICAÇÃO                                  │
-│  "Olá! Bem-vindo ao [Restaurante]! 👋                              │
-│   Para começarmos, qual o seu nome?"                                │
-├─────────────────────────────────────────────────────────────────────┤
-│  ETAPA 2: CARDÁPIO E ESCOLHA                                        │
-│  "Prazer, [Nome]! Posso te ajudar com nosso cardápio?               │
-│   Digite 1️⃣ para ver o cardápio                                    │
-│   Ou me diga o que você procura!"                                   │
-├─────────────────────────────────────────────────────────────────────┤
-│  ETAPA 3: CONFIRMAÇÃO DOS ITENS                                     │
-│  "Perfeito! Seu pedido até agora:                                   │
-│   • 2x X-Bacon - R$ 77,80                                           │
-│   • 1x Suco Laranja - R$ 12,00                                      │
-│   Total: R$ 89,80                                                   │
-│   Deseja adicionar mais alguma coisa?"                              │
-├─────────────────────────────────────────────────────────────────────┤
-│  ETAPA 4: MODALIDADE DO PEDIDO                                      │
-│  "Como você prefere receber seu pedido?                             │
-│   🛵 Entrega no seu endereço                                        │
-│   🏃 Retirada no local                                              │
-│   🍽️ Comer aqui no restaurante"                                     │
-├─────────────────────────────────────────────────────────────────────┤
-│  ETAPA 5A: COLETA DE ENDEREÇO (se entrega)                          │
-│  "Ótimo! Preciso do endereço completo:                              │
-│   • Qual a rua?                                                     │
-│   • Qual o número?                                                  │
-│   • Qual o bairro?                                                  │
-│   • Tem algum ponto de referência?"                                 │
-├─────────────────────────────────────────────────────────────────────┤
-│  ETAPA 6: FORMA DE PAGAMENTO                                        │
-│  "Agora, como você prefere pagar?                                   │
-│   💵 Dinheiro                                                       │
-│   💳 Cartão de Crédito                                              │
-│   💳 Cartão de Débito                                               │
-│   📱 Pix                                                            │
-│   🎫 Vale Refeição"                                                 │
-├─────────────────────────────────────────────────────────────────────┤
-│  ETAPA 6A: TROCO (se dinheiro)                                      │
-│  "O total do pedido é R$ 89,80.                                     │
-│   Vai precisar de troco? Se sim, para quanto?"                      │
-├─────────────────────────────────────────────────────────────────────┤
-│  ETAPA 7: RESUMO E CONFIRMAÇÃO FINAL                                │
-│  "📋 RESUMO DO SEU PEDIDO                                           │
-│   Cliente: João                                                     │
-│   Itens: 2x X-Bacon, 1x Suco Laranja                                │
-│   Total: R$ 89,80                                                   │
-│   Entrega: Rua das Flores, 123 - Centro                             │
-│   Pagamento: Dinheiro (troco para R$ 100)                           │
-│                                                                     │
-│   ✅ Confirma o pedido?"                                            │
-├─────────────────────────────────────────────────────────────────────┤
-│  ETAPA 8: PEDIDO CONFIRMADO                                         │
-│  "✅ PEDIDO CONFIRMADO!                                             │
-│   Número: #1234                                                     │
-│   ⏱️ Tempo estimado: 30-45 minutos                                  │
-│   Obrigado pela preferência! 🙏"                                    │
-└─────────────────────────────────────────────────────────────────────┘
 ```
-
-### 4. Melhorias na Função `criar_pedido`
-
-**Novos campos na tabela `delivery_orders`** a serem utilizados:
-- `address` - Endereço formatado completo
-- Campos adicionais armazenados em `notes` do pedido
-
-**Lógica para diferentes modalidades:**
-- **Entrega**: Cria `delivery_orders` com endereço
-- **Retirada**: Canal = "counter", sem delivery_orders
-- **Local**: Canal = "table" ou "counter", sem delivery_orders
-
-**Pagamento em dinheiro com troco:**
-- Armazenar valor do troco nas observações do pedido
-
-### 5. System Prompt Detalhado
-
-```text
-VOCÊ É O ATENDENTE VIRTUAL DO RESTAURANTE
-
-PERSONALIDADE:
-- Profissional, cordial e eficiente
-- Usa emojis com moderação
-- Respostas curtas e objetivas
-- Sempre confirma cada etapa antes de avançar
-
-REGRAS CRÍTICAS:
-1. NUNCA pule etapas - siga o fluxo na ordem
-2. SEMPRE confirme os itens antes de pedir endereço
-3. SEMPRE pergunte sobre troco se pagamento for dinheiro
-4. NUNCA finalize pedido sem confirmação explícita do cliente
-5. Se o cliente não fornecer informação, pergunte novamente educadamente
-
-FLUXO OBRIGATÓRIO:
-1. Perguntar/confirmar nome do cliente
-2. Ajudar na escolha dos produtos
-3. Confirmar itens e valores
-4. Perguntar modalidade (entrega/retirada/local)
-5. Se entrega: coletar endereço completo (rua, número, bairro, referência)
-6. Perguntar forma de pagamento
-7. Se dinheiro: perguntar valor para troco
-8. Mostrar resumo completo
-9. Aguardar confirmação explícita ("sim", "confirmo", etc.)
-10. Criar o pedido e informar número
-
-FORMAS DE PAGAMENTO DISPONÍVEIS:
-- Dinheiro (perguntar troco)
-- Cartão de Crédito
-- Cartão de Débito  
-- Pix
-- Vale Refeição
-
-MODALIDADES:
-- Entrega (delivery) - requer endereço completo
-- Retirada - cliente busca no estabelecimento
-- Consumir no local - cliente come no restaurante
++------------------------------------------+
+|  Pedido #123                         [X] |
++------------------------------------------+
+| [Delivery] [Pendente]     31/01 18:07    |
++------------------------------------------+
+| ScrollArea (rolavel)                     |
+| +--------------------------------------+ |
+| | CLIENTE                              | |
+| | Joao Silva | 11999999999             | |
+| +--------------------------------------+ |
+| | ENDERECO DE ENTREGA                  | |
+| | Rua das Flores, 123 - Centro         | |
+| | Ref: Proximo ao mercado              | |
+| +--------------------------------------+ |
+| | ITENS                                | |
+| | 2x X-Bacon ............. R$ 77,80    | |
+| | 1x Suco Laranja ....... R$ 12,00     | |
+| +--------------------------------------+ |
+| | TOTAL ................. R$ 89,80     | |
+| +--------------------------------------+ |
+| | PAGAMENTO                            | |
+| | Dinheiro - R$ 89,80                  | |
+| | Troco para: R$ 100,00                | |
+| +--------------------------------------+ |
+| | ALTERAR STATUS                       | |
+| | [Pendente] [Preparando] [Pronto]...  | |
+| +--------------------------------------+ |
++------------------------------------------+
 ```
 
 ## Arquivos Modificados
 
-| Arquivo | Mudanças |
+| Arquivo | Mudancas |
 |---------|----------|
-| `supabase/functions/whatsapp-webhook/index.ts` | System prompt profissional, nova tool `confirmar_pedido`, fluxo completo |
+| `src/pages/Orders.tsx` | Redesign completo com modo Kanban, metricas, modal scrollavel |
+
+## Componentes Novos (dentro do arquivo)
+
+1. **OrderMetrics** - Cards com metricas do dia
+2. **OrderKanbanView** - Visualizacao em colunas
+3. **OrderCard** - Card para o modo Kanban
+4. **OrderDetailsModal** - Modal redesenhado com scroll
+
+## Detalhes Tecnicos
+
+### ScrollArea no Modal
+```tsx
+<DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
+  <DialogHeader>...</DialogHeader>
+  <ScrollArea className="flex-1 pr-4">
+    {/* Conteudo do pedido */}
+  </ScrollArea>
+</DialogContent>
+```
+
+### Metricas com Realtime
+As metricas serao calculadas a partir dos dados ja carregados pelo `useOrders`, que ja possui subscription realtime configurada.
+
+### Toggle de Visualizacao
+```tsx
+const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
+```
 
 ## Resultado Esperado
 
-O bot será capaz de:
-- Identificar e chamar o cliente pelo nome
-- Mostrar cardápio de forma organizada
-- Conduzir pedido até a confirmação final
-- Coletar todos os dados necessários na ordem correta
-- Oferecer opções de entrega, retirada ou consumo local
-- Tratar pagamento em dinheiro perguntando sobre troco
-- Confirmar resumo completo antes de finalizar
-- Criar pedido apenas após confirmação explícita
-
+- Modal com scroll funcionando para pedidos longos
+- Visualizacao profissional com metricas claras
+- Modo Kanban para acompanhamento visual da equipe
+- Design responsivo para mobile/tablet/desktop
+- Informacoes de endereco e troco visiveis
+- Auto-atualizacao em tempo real
