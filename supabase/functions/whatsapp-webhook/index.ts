@@ -27,8 +27,528 @@ interface EvolutionWebhookPayload {
   };
 }
 
+interface ToolCall {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+interface Product {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  delivery_price: number | null;
+  category: { name: string } | null;
+}
+
+// Tool definitions for function calling
+const tools = [
+  {
+    type: "function",
+    function: {
+      name: "listar_cardapio",
+      description: "Lista o cardápio completo do restaurante com todos os produtos disponíveis, organizados por categoria. Use quando o cliente pedir para ver o cardápio, menu, o que tem disponível, etc.",
+      parameters: { type: "object", properties: {}, required: [] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "buscar_produto",
+      description: "Busca um produto específico pelo nome. Use quando o cliente perguntar sobre um item específico, preço de algo, ou se tem determinado produto.",
+      parameters: {
+        type: "object",
+        properties: {
+          nome: { type: "string", description: "Nome ou parte do nome do produto a buscar" }
+        },
+        required: ["nome"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "calcular_total",
+      description: "Calcula o valor total de um pedido com base nos itens e quantidades. Use quando o cliente quiser saber quanto vai dar o pedido.",
+      parameters: {
+        type: "object",
+        properties: {
+          itens: {
+            type: "array",
+            description: "Lista de itens do pedido",
+            items: {
+              type: "object",
+              properties: {
+                nome: { type: "string", description: "Nome do produto" },
+                quantidade: { type: "number", description: "Quantidade do item" }
+              },
+              required: ["nome", "quantidade"]
+            }
+          }
+        },
+        required: ["itens"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "criar_pedido",
+      description: "Cria um pedido no sistema. Use apenas quando o cliente confirmar que quer fazer o pedido, após informar todos os itens, endereço e forma de pagamento.",
+      parameters: {
+        type: "object",
+        properties: {
+          itens: {
+            type: "array",
+            description: "Lista de itens do pedido",
+            items: {
+              type: "object",
+              properties: {
+                nome: { type: "string", description: "Nome do produto" },
+                quantidade: { type: "number", description: "Quantidade" }
+              },
+              required: ["nome", "quantidade"]
+            }
+          },
+          endereco: { type: "string", description: "Endereço de entrega completo" },
+          forma_pagamento: { 
+            type: "string", 
+            description: "Forma de pagamento escolhida",
+            enum: ["dinheiro", "cartao_credito", "cartao_debito", "pix"]
+          },
+          observacoes: { type: "string", description: "Observações do pedido" }
+        },
+        required: ["itens", "endereco", "forma_pagamento"]
+      }
+    }
+  }
+];
+
+// Tool execution functions
+async function executeTool(
+  supabase: any,
+  unitId: string,
+  toolName: string,
+  args: Record<string, unknown>,
+  customerPhone: string,
+  customerName: string
+): Promise<string> {
+  console.log(`Executing tool: ${toolName} with args:`, args);
+
+  switch (toolName) {
+    case "listar_cardapio":
+      return await listarCardapio(supabase, unitId);
+    case "buscar_produto":
+      return await buscarProduto(supabase, unitId, args.nome as string);
+    case "calcular_total":
+      return await calcularTotal(supabase, unitId, args.itens as Array<{nome: string, quantidade: number}>);
+    case "criar_pedido":
+      return await criarPedido(
+        supabase, 
+        unitId, 
+        args.itens as Array<{nome: string, quantidade: number}>,
+        args.endereco as string,
+        args.forma_pagamento as string,
+        args.observacoes as string | undefined,
+        customerPhone,
+        customerName
+      );
+    default:
+      return `Ferramenta "${toolName}" não encontrada.`;
+  }
+}
+
+async function listarCardapio(
+  supabase: any,
+  unitId: string
+): Promise<string> {
+  const { data: products, error } = await supabase
+    .from("products")
+    .select(`
+      id,
+      name,
+      description,
+      price,
+      delivery_price,
+      category:categories(name)
+    `)
+    .eq("unit_id", unitId)
+    .eq("available", true)
+    .order("name");
+
+  if (error) {
+    console.error("Error fetching menu:", error);
+    return "Erro ao buscar o cardápio. Por favor, tente novamente.";
+  }
+
+  if (!products || products.length === 0) {
+    return "No momento não temos produtos disponíveis no cardápio.";
+  }
+
+  // Group by category
+  const byCategory: Record<string, Product[]> = {};
+  for (const product of products as Product[]) {
+    const categoryName = product.category?.name || "Outros";
+    if (!byCategory[categoryName]) {
+      byCategory[categoryName] = [];
+    }
+    byCategory[categoryName].push(product);
+  }
+
+  let menu = "CARDÁPIO DISPONÍVEL:\n\n";
+  for (const [category, items] of Object.entries(byCategory)) {
+    menu += `📋 ${category.toUpperCase()}\n`;
+    for (const item of items) {
+      const price = item.delivery_price || item.price;
+      menu += `• ${item.name} - R$ ${price.toFixed(2)}`;
+      if (item.description) {
+        menu += `\n  ${item.description}`;
+      }
+      menu += "\n";
+    }
+    menu += "\n";
+  }
+
+  return menu;
+}
+
+async function buscarProduto(
+  supabase: any,
+  unitId: string,
+  nome: string
+): Promise<string> {
+  const { data: products, error } = await supabase
+    .from("products")
+    .select(`
+      name,
+      description,
+      price,
+      delivery_price,
+      category:categories(name)
+    `)
+    .eq("unit_id", unitId)
+    .eq("available", true)
+    .ilike("name", `%${nome}%`);
+
+  if (error) {
+    console.error("Error searching product:", error);
+    return "Erro ao buscar o produto. Por favor, tente novamente.";
+  }
+
+  if (!products || products.length === 0) {
+    return `Não encontrei nenhum produto com "${nome}" no nosso cardápio.`;
+  }
+
+  let result = `Encontrei ${products.length} produto(s):\n\n`;
+  for (const product of products as Product[]) {
+    const price = product.delivery_price || product.price;
+    result += `🍽️ ${product.name}\n`;
+    result += `💰 R$ ${price.toFixed(2)}\n`;
+    if (product.description) {
+      result += `📝 ${product.description}\n`;
+    }
+    if (product.category?.name) {
+      result += `📋 Categoria: ${product.category.name}\n`;
+    }
+    result += "\n";
+  }
+
+  return result;
+}
+
+async function calcularTotal(
+  supabase: any,
+  unitId: string,
+  itens: Array<{nome: string, quantidade: number}>
+): Promise<string> {
+  if (!itens || itens.length === 0) {
+    return "Nenhum item informado para calcular.";
+  }
+
+  let total = 0;
+  const detalhes: string[] = [];
+  const itensNaoEncontrados: string[] = [];
+
+  for (const item of itens) {
+    const { data: products } = await supabase
+      .from("products")
+      .select("name, price, delivery_price")
+      .eq("unit_id", unitId)
+      .eq("available", true)
+      .ilike("name", `%${item.nome}%`)
+      .limit(1);
+
+    if (products && products.length > 0) {
+      const product = products[0] as { name: string; price: number; delivery_price: number | null };
+      const preco = product.delivery_price || product.price;
+      const subtotal = preco * item.quantidade;
+      total += subtotal;
+      detalhes.push(`${item.quantidade}x ${product.name} = R$ ${subtotal.toFixed(2)}`);
+    } else {
+      itensNaoEncontrados.push(item.nome);
+    }
+  }
+
+  let resultado = "📋 RESUMO DO PEDIDO:\n\n";
+  if (detalhes.length > 0) {
+    resultado += detalhes.join("\n") + "\n\n";
+    resultado += `💰 TOTAL: R$ ${total.toFixed(2)}`;
+  }
+  
+  if (itensNaoEncontrados.length > 0) {
+    resultado += `\n\n⚠️ Itens não encontrados: ${itensNaoEncontrados.join(", ")}`;
+  }
+
+  return resultado;
+}
+
+async function criarPedido(
+  supabase: any,
+  unitId: string,
+  itens: Array<{nome: string, quantidade: number}>,
+  endereco: string,
+  formaPagamento: string,
+  observacoes: string | undefined,
+  customerPhone: string,
+  customerName: string
+): Promise<string> {
+  if (!itens || itens.length === 0) {
+    return "Não foi possível criar o pedido: nenhum item informado.";
+  }
+
+  if (!endereco) {
+    return "Preciso do endereço de entrega para finalizar o pedido.";
+  }
+
+  // Map payment method
+  const paymentMap: Record<string, string> = {
+    "dinheiro": "cash",
+    "cartao_credito": "credit",
+    "cartao_debito": "debit",
+    "pix": "pix"
+  };
+  const paymentMethod = paymentMap[formaPagamento] || "cash";
+
+  // Find products and calculate total
+  const orderItems: Array<{product_id: string, product_name: string, unit_price: number, quantity: number, total_price: number}> = [];
+  let totalPrice = 0;
+
+  for (const item of itens) {
+    const { data: products } = await supabase
+      .from("products")
+      .select("id, name, price, delivery_price")
+      .eq("unit_id", unitId)
+      .eq("available", true)
+      .ilike("name", `%${item.nome}%`)
+      .limit(1);
+
+    if (products && products.length > 0) {
+      const product = products[0] as { id: string; name: string; price: number; delivery_price: number | null };
+      const preco = product.delivery_price || product.price;
+      const subtotal = preco * item.quantidade;
+      totalPrice += subtotal;
+      orderItems.push({
+        product_id: product.id,
+        product_name: product.name,
+        unit_price: preco,
+        quantity: item.quantidade,
+        total_price: subtotal
+      });
+    }
+  }
+
+  if (orderItems.length === 0) {
+    return "Não encontrei nenhum dos produtos informados no cardápio.";
+  }
+
+  // Create order
+  const { data: order, error: orderError } = await supabase
+    .from("orders")
+    .insert({
+      unit_id: unitId,
+      channel: "whatsapp",
+      status: "pending",
+      total_price: totalPrice,
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      notes: observacoes || null
+    })
+    .select("id, order_number")
+    .single();
+
+  if (orderError) {
+    console.error("Error creating order:", orderError);
+    return "Erro ao registrar o pedido. Por favor, tente novamente ou entre em contato por telefone.";
+  }
+
+  // Create order items
+  const itemsToInsert = orderItems.map(item => ({
+    order_id: order.id,
+    product_id: item.product_id,
+    product_name: item.product_name,
+    unit_price: item.unit_price,
+    quantity: item.quantity,
+    total_price: item.total_price
+  }));
+
+  const { error: itemsError } = await supabase
+    .from("order_items")
+    .insert(itemsToInsert);
+
+  if (itemsError) {
+    console.error("Error creating order items:", itemsError);
+  }
+
+  // Create delivery order
+  const { error: deliveryError } = await supabase
+    .from("delivery_orders")
+    .insert({
+      order_id: order.id,
+      address: endereco
+    });
+
+  if (deliveryError) {
+    console.error("Error creating delivery order:", deliveryError);
+  }
+
+  // Create payment record
+  const { error: paymentError } = await supabase
+    .from("order_payments")
+    .insert({
+      order_id: order.id,
+      method: paymentMethod,
+      amount: totalPrice
+    });
+
+  if (paymentError) {
+    console.error("Error creating payment:", paymentError);
+  }
+
+  let resultado = `✅ PEDIDO CONFIRMADO!\n\n`;
+  resultado += `📦 Número do pedido: #${order.order_number}\n\n`;
+  resultado += `📋 Itens:\n`;
+  for (const item of orderItems) {
+    resultado += `• ${item.quantity}x ${item.product_name} - R$ ${item.total_price.toFixed(2)}\n`;
+  }
+  resultado += `\n💰 Total: R$ ${totalPrice.toFixed(2)}\n`;
+  resultado += `🏠 Entrega: ${endereco}\n`;
+  resultado += `💳 Pagamento: ${formaPagamento.replace("_", " ")}\n`;
+  if (observacoes) {
+    resultado += `📝 Obs: ${observacoes}\n`;
+  }
+  resultado += `\n⏱️ Tempo estimado: 30-45 minutos\n`;
+  resultado += `\nAgradecemos pela preferência! 🙏`;
+
+  return resultado;
+}
+
+// Process AI response with tool calling loop
+async function processWithAI(
+  supabase: any,
+  unitId: string,
+  messages: Array<{role: string, content: string}>,
+  customerPhone: string,
+  customerName: string
+): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    throw new Error("LOVABLE_API_KEY is not configured");
+  }
+
+  const MAX_ITERATIONS = 5;
+  let iterations = 0;
+  const currentMessages: any[] = [...messages];
+
+  while (iterations < MAX_ITERATIONS) {
+    iterations++;
+    console.log(`AI iteration ${iterations}/${MAX_ITERATIONS}`);
+
+    const aiResponse = await fetch(
+      "https://ai.gateway.lovable.dev/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-3-flash-preview",
+          messages: currentMessages,
+          tools,
+          tool_choice: "auto",
+          max_tokens: 1000,
+        }),
+      }
+    );
+
+    if (!aiResponse.ok) {
+      const errorText = await aiResponse.text();
+      console.error("AI API error:", aiResponse.status, errorText);
+      
+      if (aiResponse.status === 429) {
+        throw new Error("RATE_LIMIT");
+      }
+      if (aiResponse.status === 402) {
+        throw new Error("PAYMENT_REQUIRED");
+      }
+      throw new Error(`AI API error: ${aiResponse.status}`);
+    }
+
+    const aiData = await aiResponse.json();
+    const choice = aiData.choices?.[0];
+    
+    if (!choice) {
+      throw new Error("No response from AI");
+    }
+
+    const message = choice.message;
+    
+    // Check if AI wants to call tools
+    if (message.tool_calls && message.tool_calls.length > 0) {
+      console.log(`AI requested ${message.tool_calls.length} tool(s)`);
+      
+      // Add assistant message with tool calls
+      currentMessages.push({
+        role: "assistant",
+        content: message.content || "",
+        tool_calls: message.tool_calls
+      });
+
+      // Execute each tool and add results
+      for (const toolCall of message.tool_calls as ToolCall[]) {
+        const args = JSON.parse(toolCall.function.arguments || "{}");
+        const result = await executeTool(
+          supabase, 
+          unitId, 
+          toolCall.function.name, 
+          args,
+          customerPhone,
+          customerName
+        );
+
+        currentMessages.push({
+          role: "tool",
+          content: result,
+          tool_call_id: toolCall.id
+        });
+      }
+      
+      // Continue loop to get final response
+      continue;
+    }
+
+    // No tool calls, return the final message
+    return message.content || "Desculpe, não consegui gerar uma resposta.";
+  }
+
+  return "Desculpe, tive dificuldade em processar sua solicitação. Por favor, tente novamente de forma mais simples.";
+}
+
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -147,29 +667,6 @@ serve(async (req) => {
       });
     }
 
-    // Get recent conversation history for context
-    const { data: recentMessages } = await supabase
-      .from("whatsapp_messages")
-      .select("role, content")
-      .eq("conversation_id", conversation.id)
-      .order("created_at", { ascending: false })
-      .limit(10);
-
-    // Build messages array for AI
-    const systemPrompt = settings.system_prompt || `Você é um assistente virtual de atendimento ao cliente de um restaurante. 
-Seja cordial, prestativo e objetivo nas respostas.
-Ajude com informações sobre o cardápio, horários de funcionamento, pedidos e reservas.
-Responda sempre em português brasileiro.`;
-
-    const messages = [
-      { role: "system", content: systemPrompt },
-      ...(recentMessages || []).reverse().map((m: any) => ({
-        role: m.role,
-        content: m.content,
-      })),
-      { role: "user", content: messageText },
-    ];
-
     // Store user message
     await supabase.from("whatsapp_messages").insert({
       conversation_id: conversation.id,
@@ -177,50 +674,66 @@ Responda sempre em português brasileiro.`;
       content: messageText,
     });
 
-    // Generate AI response using Lovable AI
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
+    // Get recent conversation history for context
+    const { data: recentMessages } = await supabase
+      .from("whatsapp_messages")
+      .select("role, content")
+      .eq("conversation_id", conversation.id)
+      .order("created_at", { ascending: false })
+      .limit(15);
 
-    const aiResponse = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages,
-          max_tokens: 500,
-        }),
-      }
-    );
+    // Build messages array for AI
+    const systemPrompt = settings.system_prompt || `Você é um assistente virtual de atendimento ao cliente de um restaurante.
+Seja cordial, prestativo e objetivo nas respostas.
+Responda sempre em português brasileiro.
 
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error("AI API error:", aiResponse.status, errorText);
+Suas capacidades:
+- Listar o cardápio completo (use a ferramenta listar_cardapio)
+- Buscar produtos específicos (use a ferramenta buscar_produto)
+- Calcular o total de um pedido (use a ferramenta calcular_total)
+- Criar pedidos (use a ferramenta criar_pedido)
+
+Ao criar pedidos, sempre confirme:
+1. Os itens e quantidades
+2. O endereço de entrega
+3. A forma de pagamento
+
+Seja profissional e amigável!`;
+
+    const messages = [
+      { role: "system", content: systemPrompt },
+      ...(recentMessages || []).reverse().map((m: any) => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: m.content,
+      })),
+    ];
+
+    // Process with AI (including tool calling loop)
+    let assistantMessage: string;
+    
+    try {
+      assistantMessage = await processWithAI(
+        supabase,
+        settings.unit_id,
+        messages,
+        phone,
+        customerName
+      );
+    } catch (error) {
+      console.error("AI processing error:", error);
       
-      if (aiResponse.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      if (error instanceof Error) {
+        if (error.message === "RATE_LIMIT") {
+          assistantMessage = "No momento estamos com muitas solicitações. Por favor, aguarde alguns segundos e tente novamente. 🙏";
+        } else if (error.message === "PAYMENT_REQUIRED") {
+          assistantMessage = "No momento estamos com um problema técnico temporário. Por favor, tente novamente em alguns minutos.";
+        } else {
+          assistantMessage = "Desculpe, tive um problema ao processar sua mensagem. Por favor, tente novamente ou entre em contato por telefone.";
+        }
+      } else {
+        assistantMessage = "Desculpe, ocorreu um erro. Por favor, tente novamente.";
       }
-      if (aiResponse.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required" }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw new Error(`AI API error: ${aiResponse.status}`);
     }
-
-    const aiData = await aiResponse.json();
-    const assistantMessage =
-      aiData.choices?.[0]?.message?.content || "Desculpe, não consegui processar sua mensagem.";
 
     // Store assistant message
     await supabase.from("whatsapp_messages").insert({
