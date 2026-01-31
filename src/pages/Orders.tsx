@@ -4,7 +4,7 @@ import { ptBR } from "date-fns/locale";
 import { 
   Search, Filter, Eye, Clock, Package, User, MapPin, 
   CreditCard, LayoutGrid, List, ChefHat, CheckCircle2, 
-  Truck, XCircle, ShoppingBag, Banknote
+  Truck, XCircle, ShoppingBag, Banknote, Printer
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import { StatusBadge, ChannelBadge } from "@/components/shared/StatusBadge";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { usePrintOrder } from "@/hooks/usePrintOrder";
 import { cn } from "@/lib/utils";
 
 const statusOptions: { value: OrderStatus | "all"; label: string }[] = [
@@ -253,11 +254,13 @@ function OrderDetailsModal({
   order,
   onClose,
   onStatusChange,
+  onPrint,
   isUpdating,
 }: {
   order: Order | null;
   onClose: () => void;
   onStatusChange: (orderId: string, status: OrderStatus) => void;
+  onPrint: (order: Order) => void;
   isUpdating: boolean;
 }) {
   if (!order) return null;
@@ -401,38 +404,51 @@ function OrderDetailsModal({
               </div>
             )}
             
-            {/* Status buttons */}
-            <div className="space-y-2 pt-2">
-              <div className="text-sm font-medium">Alterar Status</div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {(["pending", "preparing", "ready", "delivered", "cancelled"] as OrderStatus[]).map((status) => {
-                  const statusConfig: Record<OrderStatus, { icon: React.ReactNode; className: string }> = {
-                    pending: { icon: <Clock className="h-3.5 w-3.5" />, className: "border-yellow-500 text-yellow-600 hover:bg-yellow-500/10" },
-                    preparing: { icon: <ChefHat className="h-3.5 w-3.5" />, className: "border-blue-500 text-blue-600 hover:bg-blue-500/10" },
-                    ready: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, className: "border-green-500 text-green-600 hover:bg-green-500/10" },
-                    delivered: { icon: <Truck className="h-3.5 w-3.5" />, className: "border-gray-500 text-gray-600 hover:bg-gray-500/10" },
-                    cancelled: { icon: <XCircle className="h-3.5 w-3.5" />, className: "border-red-500 text-red-600 hover:bg-red-500/10" },
-                  };
-                  const config = statusConfig[status];
-                  const isActive = order.status === status;
-                  
-                  return (
-                    <Button
-                      key={status}
-                      variant={isActive ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => onStatusChange(order.id, status)}
-                      disabled={isUpdating}
-                      className={cn(
-                        "flex items-center gap-1.5",
-                        !isActive && config.className
-                      )}
-                    >
-                      {config.icon}
-                      {statusOptions.find((s) => s.value === status)?.label}
-                    </Button>
-                  );
-                })}
+            {/* Actions */}
+            <div className="space-y-4 pt-2">
+              {/* Print button */}
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => onPrint(order)}
+              >
+                <Printer className="h-4 w-4 mr-2" />
+                Imprimir Comanda
+              </Button>
+              
+              {/* Status buttons */}
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Alterar Status</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {(["pending", "preparing", "ready", "delivered", "cancelled"] as OrderStatus[]).map((status) => {
+                    const statusConfig: Record<OrderStatus, { icon: React.ReactNode; className: string }> = {
+                      pending: { icon: <Clock className="h-3.5 w-3.5" />, className: "border-yellow-500 text-yellow-600 hover:bg-yellow-500/10" },
+                      preparing: { icon: <ChefHat className="h-3.5 w-3.5" />, className: "border-blue-500 text-blue-600 hover:bg-blue-500/10" },
+                      ready: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, className: "border-green-500 text-green-600 hover:bg-green-500/10" },
+                      delivered: { icon: <Truck className="h-3.5 w-3.5" />, className: "border-gray-500 text-gray-600 hover:bg-gray-500/10" },
+                      cancelled: { icon: <XCircle className="h-3.5 w-3.5" />, className: "border-red-500 text-red-600 hover:bg-red-500/10" },
+                    };
+                    const config = statusConfig[status];
+                    const isActive = order.status === status;
+                    
+                    return (
+                      <Button
+                        key={status}
+                        variant={isActive ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => onStatusChange(order.id, status)}
+                        disabled={isUpdating}
+                        className={cn(
+                          "flex items-center gap-1.5",
+                          !isActive && config.className
+                        )}
+                      >
+                        {config.icon}
+                        {statusOptions.find((s) => s.value === status)?.label}
+                      </Button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
@@ -496,6 +512,7 @@ export default function Orders() {
   });
 
   const updateOrderStatus = useUpdateOrderStatus();
+  const { printKitchenTicket, printOnPreparing } = usePrintOrder();
 
   const filteredOrders = orders?.filter((order) => {
     if (!search) return true;
@@ -507,8 +524,21 @@ export default function Orders() {
     );
   }) || [];
 
-  const handleStatusChange = (orderId: string, status: OrderStatus) => {
+  const handleStatusChange = async (orderId: string, status: OrderStatus) => {
+    // Find the order to get current status
+    const order = orders?.find(o => o.id === orderId);
+    const previousStatus = order?.status || null;
+    
     updateOrderStatus.mutate({ orderId, status });
+    
+    // Auto-print when status changes to preparing
+    if (order && status === "preparing" && previousStatus !== "preparing") {
+      await printKitchenTicket(order);
+    }
+  };
+  
+  const handleManualPrint = (order: Order) => {
+    printKitchenTicket(order);
   };
 
   if (isLoading) {
@@ -698,6 +728,7 @@ export default function Orders() {
         order={selectedOrder}
         onClose={() => setSelectedOrder(null)}
         onStatusChange={handleStatusChange}
+        onPrint={handleManualPrint}
         isUpdating={updateOrderStatus.isPending}
       />
     </div>
