@@ -240,24 +240,27 @@ export function useTestConnection() {
       apiToken: string;
       instanceName: string;
     }) => {
-      // Test connection to Evolution API
-      const response = await fetch(`${apiUrl}/instance/connectionState/${instanceName}`, {
-        headers: {
-          apikey: apiToken,
-        },
+      // Test connection via edge function to avoid CORS issues
+      const response = await supabase.functions.invoke("test-evolution-connection", {
+        body: { apiUrl, apiToken, instanceName },
       });
 
-      if (!response.ok) {
-        throw new Error("Falha ao conectar com a Evolution API");
+      if (response.error) {
+        throw new Error(response.error.message || "Erro ao testar conexão");
       }
 
-      const data = await response.json();
-      return data;
+      const result = response.data;
+      
+      if (!result.success) {
+        throw new Error(result.error || "Falha ao conectar com a Evolution API");
+      }
+
+      return result.data;
     },
     onSuccess: (data) => {
       toast({
         title: "Conexão estabelecida",
-        description: `Status: ${data.instance?.state || "conectado"}`,
+        description: `Status: ${data?.instance?.state || "conectado"}`,
       });
     },
     onError: (error) => {
