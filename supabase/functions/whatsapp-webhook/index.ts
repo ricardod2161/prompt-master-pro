@@ -45,7 +45,7 @@ interface Product {
   category: { name: string } | null;
 }
 
-// Tool definitions for function calling
+// Tool definitions for function calling - FLUXO PROFISSIONAL COMPLETO
 const tools = [
   {
     type: "function",
@@ -73,7 +73,7 @@ const tools = [
     type: "function",
     function: {
       name: "calcular_total",
-      description: "Calcula o valor total de um pedido com base nos itens e quantidades. Use quando o cliente quiser saber quanto vai dar o pedido.",
+      description: "Calcula o valor total de um pedido com base nos itens e quantidades. Use quando precisar mostrar o resumo do pedido ao cliente.",
       parameters: {
         type: "object",
         properties: {
@@ -97,11 +97,19 @@ const tools = [
   {
     type: "function",
     function: {
-      name: "criar_pedido",
-      description: "Cria um pedido no sistema. Use apenas quando o cliente confirmar que quer fazer o pedido, após informar todos os itens, endereço e forma de pagamento.",
+      name: "confirmar_pedido",
+      description: "Cria e confirma um pedido completo no sistema. Use APENAS quando o cliente CONFIRMAR explicitamente que quer finalizar o pedido (dizendo 'sim', 'confirmo', 'pode confirmar', etc.) E você já tiver coletado TODOS os dados necessários: nome do cliente, itens do pedido, modalidade (entrega/retirada/local), endereço (se entrega), forma de pagamento e troco (se dinheiro).",
       parameters: {
         type: "object",
         properties: {
+          cliente: {
+            type: "object",
+            description: "Dados do cliente",
+            properties: {
+              nome: { type: "string", description: "Nome do cliente" }
+            },
+            required: ["nome"]
+          },
           itens: {
             type: "array",
             description: "Lista de itens do pedido",
@@ -114,15 +122,44 @@ const tools = [
               required: ["nome", "quantidade"]
             }
           },
-          endereco: { type: "string", description: "Endereço de entrega completo" },
-          forma_pagamento: { 
-            type: "string", 
-            description: "Forma de pagamento escolhida",
-            enum: ["dinheiro", "cartao_credito", "cartao_debito", "pix"]
+          modalidade: {
+            type: "string",
+            description: "Como o cliente receberá o pedido",
+            enum: ["entrega", "retirada", "local"]
           },
-          observacoes: { type: "string", description: "Observações do pedido" }
+          endereco: {
+            type: "object",
+            description: "Endereço de entrega (obrigatório se modalidade = entrega)",
+            properties: {
+              rua: { type: "string", description: "Nome da rua" },
+              numero: { type: "string", description: "Número da casa/apartamento" },
+              bairro: { type: "string", description: "Bairro" },
+              referencia: { type: "string", description: "Ponto de referência (opcional)" }
+            },
+            required: ["rua", "numero", "bairro"]
+          },
+          pagamento: {
+            type: "object",
+            description: "Dados do pagamento",
+            properties: {
+              forma: {
+                type: "string",
+                description: "Forma de pagamento escolhida",
+                enum: ["dinheiro", "pix", "credito", "debito", "voucher"]
+              },
+              troco_para: {
+                type: "number",
+                description: "Valor para troco (obrigatório se forma = dinheiro e cliente precisa de troco)"
+              }
+            },
+            required: ["forma"]
+          },
+          observacoes: {
+            type: "string",
+            description: "Observações adicionais do pedido (opcional)"
+          }
         },
-        required: ["itens", "endereco", "forma_pagamento"]
+        required: ["cliente", "itens", "modalidade", "pagamento"]
       }
     }
   }
@@ -133,18 +170,15 @@ function parseActionFromContent(content: string): { action: string; input: Recor
   if (!content) return null;
   
   try {
-    // Match JSON containing action/action_input pattern
     const jsonMatch = content.match(/\{[\s\S]*?"action"[\s\S]*?"action_input"[\s\S]*?\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
       if (parsed.action && parsed.action_input !== undefined) {
         let input = parsed.action_input;
-        // action_input can be a string (JSON) or already an object
         if (typeof input === "string") {
           try {
             input = JSON.parse(input);
           } catch {
-            // If it's not valid JSON, use as-is
             input = { value: input };
           }
         }
@@ -162,18 +196,11 @@ function parseActionFromContent(content: string): { action: string; input: Recor
 function sanitizeResponse(response: string): string {
   if (!response) return "";
   
-  // Remove JSON blocks
   let sanitized = response.replace(/```json[\s\S]*?```/g, "");
   sanitized = sanitized.replace(/```[\s\S]*?```/g, "");
-  
-  // Remove action/action_input JSON patterns
   sanitized = sanitized.replace(/\{[\s\S]*?"action"[\s\S]*?"action_input"[\s\S]*?\}/g, "");
-  
-  // Remove other common technical patterns
   sanitized = sanitized.replace(/\{[\s\S]*?"function_call"[\s\S]*?\}/g, "");
   sanitized = sanitized.replace(/\{[\s\S]*?"tool_calls?"[\s\S]*?\}/g, "");
-  
-  // Clean up multiple newlines and whitespace
   sanitized = sanitized.replace(/\n{3,}/g, "\n\n");
   sanitized = sanitized.trim();
   
@@ -198,8 +225,16 @@ async function executeTool(
       return await buscarProduto(supabase, unitId, args.nome as string);
     case "calcular_total":
       return await calcularTotal(supabase, unitId, args.itens as Array<{nome: string, quantidade: number}>);
+    case "confirmar_pedido":
+      return await confirmarPedido(
+        supabase,
+        unitId,
+        args as unknown as ConfirmarPedidoArgs,
+        customerPhone
+      );
+    // Legacy support
     case "criar_pedido":
-      return await criarPedido(
+      return await criarPedidoLegacy(
         supabase, 
         unitId, 
         args.itens as Array<{nome: string, quantidade: number}>,
@@ -214,10 +249,7 @@ async function executeTool(
   }
 }
 
-async function listarCardapio(
-  supabase: any,
-  unitId: string
-): Promise<string> {
+async function listarCardapio(supabase: any, unitId: string): Promise<string> {
   const { data: products, error } = await supabase
     .from("products")
     .select(`
@@ -241,7 +273,6 @@ async function listarCardapio(
     return "No momento não temos produtos disponíveis no cardápio.";
   }
 
-  // Group by category
   const byCategory: Record<string, Product[]> = {};
   for (const product of products as Product[]) {
     const categoryName = product.category?.name || "Outros";
@@ -251,14 +282,14 @@ async function listarCardapio(
     byCategory[categoryName].push(product);
   }
 
-  let menu = "CARDÁPIO DISPONÍVEL:\n\n";
+  let menu = "📋 *CARDÁPIO*\n\n";
   for (const [category, items] of Object.entries(byCategory)) {
-    menu += `📋 ${category.toUpperCase()}\n`;
+    menu += `*${category.toUpperCase()}*\n`;
     for (const item of items) {
       const price = item.delivery_price || item.price;
-      menu += `• ${item.name} - R$ ${price.toFixed(2)}`;
+      menu += `• ${item.name} - R$ ${price.toFixed(2).replace(".", ",")}`;
       if (item.description) {
-        menu += `\n  ${item.description}`;
+        menu += `\n  _${item.description}_`;
       }
       menu += "\n";
     }
@@ -268,11 +299,7 @@ async function listarCardapio(
   return menu;
 }
 
-async function buscarProduto(
-  supabase: any,
-  unitId: string,
-  nome: string
-): Promise<string> {
+async function buscarProduto(supabase: any, unitId: string, nome: string): Promise<string> {
   const { data: products, error } = await supabase
     .from("products")
     .select(`
@@ -298,13 +325,10 @@ async function buscarProduto(
   let result = `Encontrei ${products.length} produto(s):\n\n`;
   for (const product of products as Product[]) {
     const price = product.delivery_price || product.price;
-    result += `🍽️ ${product.name}\n`;
-    result += `💰 R$ ${price.toFixed(2)}\n`;
+    result += `🍽️ *${product.name}*\n`;
+    result += `💰 R$ ${price.toFixed(2).replace(".", ",")}\n`;
     if (product.description) {
       result += `📝 ${product.description}\n`;
-    }
-    if (product.category?.name) {
-      result += `📋 Categoria: ${product.category.name}\n`;
     }
     result += "\n";
   }
@@ -339,16 +363,16 @@ async function calcularTotal(
       const preco = product.delivery_price || product.price;
       const subtotal = preco * item.quantidade;
       total += subtotal;
-      detalhes.push(`${item.quantidade}x ${product.name} = R$ ${subtotal.toFixed(2)}`);
+      detalhes.push(`• ${item.quantidade}x ${product.name} - R$ ${subtotal.toFixed(2).replace(".", ",")}`);
     } else {
       itensNaoEncontrados.push(item.nome);
     }
   }
 
-  let resultado = "📋 RESUMO DO PEDIDO:\n\n";
+  let resultado = "📋 *RESUMO DO PEDIDO*\n\n";
   if (detalhes.length > 0) {
     resultado += detalhes.join("\n") + "\n\n";
-    resultado += `💰 TOTAL: R$ ${total.toFixed(2)}`;
+    resultado += `💰 *TOTAL: R$ ${total.toFixed(2).replace(".", ",")}*`;
   }
   
   if (itensNaoEncontrados.length > 0) {
@@ -358,35 +382,70 @@ async function calcularTotal(
   return resultado;
 }
 
-async function criarPedido(
+interface ConfirmarPedidoArgs {
+  cliente: { nome: string };
+  itens: Array<{ nome: string; quantidade: number }>;
+  modalidade: "entrega" | "retirada" | "local";
+  endereco?: {
+    rua: string;
+    numero: string;
+    bairro: string;
+    referencia?: string;
+  };
+  pagamento: {
+    forma: "dinheiro" | "pix" | "credito" | "debito" | "voucher";
+    troco_para?: number;
+  };
+  observacoes?: string;
+}
+
+async function confirmarPedido(
   supabase: any,
   unitId: string,
-  itens: Array<{nome: string, quantidade: number}>,
-  endereco: string,
-  formaPagamento: string,
-  observacoes: string | undefined,
-  customerPhone: string,
-  customerName: string
+  args: ConfirmarPedidoArgs,
+  customerPhone: string
 ): Promise<string> {
+  const { cliente, itens, modalidade, endereco, pagamento, observacoes } = args;
+
+  // Validations
   if (!itens || itens.length === 0) {
-    return "Não foi possível criar o pedido: nenhum item informado.";
+    return "❌ Não foi possível criar o pedido: nenhum item informado.";
   }
 
-  if (!endereco) {
-    return "Preciso do endereço de entrega para finalizar o pedido.";
+  if (!cliente?.nome) {
+    return "❌ Preciso do nome do cliente para finalizar o pedido.";
   }
 
-  // Map payment method
+  if (modalidade === "entrega" && (!endereco?.rua || !endereco?.numero || !endereco?.bairro)) {
+    return "❌ Para entrega, preciso do endereço completo (rua, número e bairro).";
+  }
+
+  // Map payment method to DB enum
   const paymentMap: Record<string, string> = {
     "dinheiro": "cash",
-    "cartao_credito": "credit",
-    "cartao_debito": "debit",
-    "pix": "pix"
+    "pix": "pix",
+    "credito": "credit",
+    "debito": "debit",
+    "voucher": "voucher"
   };
-  const paymentMethod = paymentMap[formaPagamento] || "cash";
+  const paymentMethod = paymentMap[pagamento.forma] || "cash";
+
+  // Map modalidade to channel
+  const channelMap: Record<string, string> = {
+    "entrega": "delivery",
+    "retirada": "counter",
+    "local": "table"
+  };
+  const channel = channelMap[modalidade] || "whatsapp";
 
   // Find products and calculate total
-  const orderItems: Array<{product_id: string, product_name: string, unit_price: number, quantity: number, total_price: number}> = [];
+  const orderItems: Array<{
+    product_id: string;
+    product_name: string;
+    unit_price: number;
+    quantity: number;
+    total_price: number;
+  }> = [];
   let totalPrice = 0;
 
   for (const item of itens) {
@@ -400,7 +459,7 @@ async function criarPedido(
 
     if (products && products.length > 0) {
       const product = products[0] as { id: string; name: string; price: number; delivery_price: number | null };
-      const preco = product.delivery_price || product.price;
+      const preco = modalidade === "entrega" ? (product.delivery_price || product.price) : product.price;
       const subtotal = preco * item.quantidade;
       totalPrice += subtotal;
       orderItems.push({
@@ -414,7 +473,20 @@ async function criarPedido(
   }
 
   if (orderItems.length === 0) {
-    return "Não encontrei nenhum dos produtos informados no cardápio.";
+    return "❌ Não encontrei nenhum dos produtos informados no cardápio.";
+  }
+
+  // Build notes with additional info
+  const notesArray: string[] = [];
+  if (observacoes) notesArray.push(observacoes);
+  if (pagamento.forma === "dinheiro" && pagamento.troco_para) {
+    notesArray.push(`💵 Troco para: R$ ${pagamento.troco_para.toFixed(2).replace(".", ",")}`);
+  }
+  if (modalidade === "retirada") {
+    notesArray.push("🏃 Cliente vai retirar no local");
+  }
+  if (modalidade === "local") {
+    notesArray.push("🍽️ Cliente vai consumir no local");
   }
 
   // Create order
@@ -422,19 +494,19 @@ async function criarPedido(
     .from("orders")
     .insert({
       unit_id: unitId,
-      channel: "whatsapp",
+      channel: channel,
       status: "pending",
       total_price: totalPrice,
-      customer_name: customerName,
+      customer_name: cliente.nome,
       customer_phone: customerPhone,
-      notes: observacoes || null
+      notes: notesArray.length > 0 ? notesArray.join(" | ") : null
     })
     .select("id, order_number")
     .single();
 
   if (orderError) {
     console.error("Error creating order:", orderError);
-    return "Erro ao registrar o pedido. Por favor, tente novamente ou entre em contato por telefone.";
+    return "❌ Erro ao registrar o pedido. Por favor, tente novamente ou entre em contato por telefone.";
   }
 
   // Create order items
@@ -447,55 +519,105 @@ async function criarPedido(
     total_price: item.total_price
   }));
 
-  const { error: itemsError } = await supabase
-    .from("order_items")
-    .insert(itemsToInsert);
+  await supabase.from("order_items").insert(itemsToInsert);
 
-  if (itemsError) {
-    console.error("Error creating order items:", itemsError);
-  }
-
-  // Create delivery order
-  const { error: deliveryError } = await supabase
-    .from("delivery_orders")
-    .insert({
+  // Create delivery order if modalidade is entrega
+  if (modalidade === "entrega" && endereco) {
+    const fullAddress = `${endereco.rua}, ${endereco.numero} - ${endereco.bairro}${endereco.referencia ? ` (${endereco.referencia})` : ""}`;
+    
+    await supabase.from("delivery_orders").insert({
       order_id: order.id,
-      address: endereco
+      address: fullAddress
     });
-
-  if (deliveryError) {
-    console.error("Error creating delivery order:", deliveryError);
   }
 
   // Create payment record
-  const { error: paymentError } = await supabase
-    .from("order_payments")
-    .insert({
-      order_id: order.id,
-      method: paymentMethod,
-      amount: totalPrice
-    });
+  await supabase.from("order_payments").insert({
+    order_id: order.id,
+    method: paymentMethod,
+    amount: totalPrice
+  });
 
-  if (paymentError) {
-    console.error("Error creating payment:", paymentError);
-  }
+  // Build confirmation message
+  const formasPagamentoLabel: Record<string, string> = {
+    "dinheiro": "💵 Dinheiro",
+    "pix": "📱 Pix",
+    "credito": "💳 Cartão de Crédito",
+    "debito": "💳 Cartão de Débito",
+    "voucher": "🎫 Vale Refeição"
+  };
 
-  let resultado = `✅ PEDIDO CONFIRMADO!\n\n`;
-  resultado += `📦 Número do pedido: #${order.order_number}\n\n`;
-  resultado += `📋 Itens:\n`;
+  const modalidadeLabel: Record<string, string> = {
+    "entrega": "🛵 Entrega",
+    "retirada": "🏃 Retirada no local",
+    "local": "🍽️ Consumir no local"
+  };
+
+  let resultado = `✅ *PEDIDO CONFIRMADO!*\n\n`;
+  resultado += `📦 *Número:* #${order.order_number}\n`;
+  resultado += `👤 *Cliente:* ${cliente.nome}\n\n`;
+  resultado += `📋 *Itens:*\n`;
+  
   for (const item of orderItems) {
-    resultado += `• ${item.quantity}x ${item.product_name} - R$ ${item.total_price.toFixed(2)}\n`;
+    resultado += `• ${item.quantity}x ${item.product_name} - R$ ${item.total_price.toFixed(2).replace(".", ",")}\n`;
   }
-  resultado += `\n💰 Total: R$ ${totalPrice.toFixed(2)}\n`;
-  resultado += `🏠 Entrega: ${endereco}\n`;
-  resultado += `💳 Pagamento: ${formaPagamento.replace("_", " ")}\n`;
+  
+  resultado += `\n💰 *Total:* R$ ${totalPrice.toFixed(2).replace(".", ",")}\n\n`;
+  resultado += `📍 *Modalidade:* ${modalidadeLabel[modalidade]}\n`;
+  
+  if (modalidade === "entrega" && endereco) {
+    resultado += `🏠 *Endereço:* ${endereco.rua}, ${endereco.numero} - ${endereco.bairro}\n`;
+    if (endereco.referencia) {
+      resultado += `📍 *Referência:* ${endereco.referencia}\n`;
+    }
+  }
+  
+  resultado += `💳 *Pagamento:* ${formasPagamentoLabel[pagamento.forma]}\n`;
+  
+  if (pagamento.forma === "dinheiro" && pagamento.troco_para) {
+    const troco = pagamento.troco_para - totalPrice;
+    resultado += `💵 *Troco para:* R$ ${pagamento.troco_para.toFixed(2).replace(".", ",")}\n`;
+    resultado += `💰 *Troco:* R$ ${troco.toFixed(2).replace(".", ",")}\n`;
+  }
+  
   if (observacoes) {
-    resultado += `📝 Obs: ${observacoes}\n`;
+    resultado += `\n📝 *Obs:* ${observacoes}\n`;
   }
-  resultado += `\n⏱️ Tempo estimado: 30-45 minutos\n`;
-  resultado += `\nAgradecemos pela preferência! 🙏`;
+  
+  resultado += `\n⏱️ *Tempo estimado:* ${modalidade === "entrega" ? "30-45 minutos" : "15-25 minutos"}\n`;
+  resultado += `\n🙏 *Agradecemos a preferência!*`;
 
   return resultado;
+}
+
+// Legacy criar_pedido for backward compatibility
+async function criarPedidoLegacy(
+  supabase: any,
+  unitId: string,
+  itens: Array<{nome: string, quantidade: number}>,
+  endereco: string,
+  formaPagamento: string,
+  observacoes: string | undefined,
+  customerPhone: string,
+  customerName: string
+): Promise<string> {
+  // Convert to new format and call confirmarPedido
+  const args: ConfirmarPedidoArgs = {
+    cliente: { nome: customerName },
+    itens,
+    modalidade: endereco ? "entrega" : "retirada",
+    endereco: endereco ? {
+      rua: endereco,
+      numero: "",
+      bairro: ""
+    } : undefined,
+    pagamento: {
+      forma: formaPagamento as "dinheiro" | "pix" | "credito" | "debito" | "voucher"
+    },
+    observacoes
+  };
+  
+  return confirmarPedido(supabase, unitId, args, customerPhone);
 }
 
 // Process AI response with tool calling loop
@@ -511,7 +633,7 @@ async function processWithAI(
     throw new Error("LOVABLE_API_KEY is not configured");
   }
 
-  const MAX_ITERATIONS = 5;
+  const MAX_ITERATIONS = 6;
   let iterations = 0;
   const currentMessages: any[] = [...messages];
 
@@ -532,7 +654,7 @@ async function processWithAI(
           messages: currentMessages,
           tools,
           tool_choice: "auto",
-          max_tokens: 1500,
+          max_tokens: 2000,
         }),
       }
     );
@@ -563,14 +685,12 @@ async function processWithAI(
     if (message.tool_calls && message.tool_calls.length > 0) {
       console.log(`AI requested ${message.tool_calls.length} tool(s)`);
       
-      // Add assistant message with tool calls
       currentMessages.push({
         role: "assistant",
         content: message.content || "",
         tool_calls: message.tool_calls
       });
 
-      // Execute each tool and add results
       for (const toolCall of message.tool_calls as ToolCall[]) {
         const args = JSON.parse(toolCall.function.arguments || "{}");
         const result = await executeTool(
@@ -589,7 +709,6 @@ async function processWithAI(
         });
       }
       
-      // Continue loop to get final response
       continue;
     }
 
@@ -598,7 +717,6 @@ async function processWithAI(
     if (parsedAction) {
       console.log(`Detected action in content: ${parsedAction.action}`);
       
-      // Execute the tool
       const result = await executeTool(
         supabase,
         unitId,
@@ -608,31 +726,29 @@ async function processWithAI(
         customerName
       );
 
-      // Add context and request a new response
       currentMessages.push({
         role: "assistant",
-        content: `[Executando ${parsedAction.action}...]`
+        content: `[Processando...]`
       });
       currentMessages.push({
         role: "user", 
-        content: `Resultado da consulta:\n\n${result}\n\nAgora responda ao cliente de forma natural e amigável baseado nesse resultado. Não use JSON, apenas texto natural em português.`
+        content: `Resultado:\n\n${result}\n\nAgora responda ao cliente de forma natural, amigável e profissional. Continue o fluxo do pedido conforme as instruções.`
       });
       
-      // Continue to get natural response
       continue;
     }
 
-    // No tool calls and no action in content - return the final message
+    // No tool calls - return the final message
     const finalResponse = sanitizeResponse(message.content || "");
     
     if (!finalResponse) {
-      return "Desculpe, não consegui gerar uma resposta. Por favor, tente reformular sua pergunta.";
+      return "Desculpe, não consegui gerar uma resposta. Como posso ajudar?";
     }
     
     return finalResponse;
   }
 
-  return "Desculpe, tive dificuldade em processar sua solicitação. Por favor, tente novamente de forma mais simples.";
+  return "Desculpe, tive dificuldade em processar sua solicitação. Por favor, tente novamente.";
 }
 
 serve(async (req) => {
@@ -685,7 +801,6 @@ serve(async (req) => {
       });
     }
 
-    // Check if bot is enabled globally
     if (!settings.bot_enabled) {
       console.log("Bot is disabled globally");
       return new Response(JSON.stringify({ status: "bot_disabled" }), {
@@ -702,7 +817,6 @@ serve(async (req) => {
       .single();
 
     if (convError && convError.code === "PGRST116") {
-      // Conversation doesn't exist, create it
       const { data: newConv, error: createError } = await supabase
         .from("whatsapp_conversations")
         .insert({
@@ -722,7 +836,6 @@ serve(async (req) => {
       }
       conversation = newConv;
 
-      // Send welcome message if configured
       if (settings.welcome_message) {
         await sendWhatsAppMessage(
           settings.api_url,
@@ -735,7 +848,6 @@ serve(async (req) => {
     } else if (convError) {
       throw convError;
     } else {
-      // Update existing conversation
       await supabase
         .from("whatsapp_conversations")
         .update({
@@ -746,7 +858,6 @@ serve(async (req) => {
         .eq("id", conversation.id);
     }
 
-    // Check if bot is active for this conversation
     if (!conversation?.is_bot_active) {
       console.log("Bot is disabled for this conversation");
       return new Response(JSON.stringify({ status: "bot_disabled_conversation" }), {
@@ -767,9 +878,9 @@ serve(async (req) => {
       .select("role, content")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: false })
-      .limit(15);
+      .limit(20);
 
-    // Build messages array for AI with enhanced system prompt
+    // Build messages array for AI with professional system prompt
     const systemPrompt = settings.system_prompt || getDefaultSystemPrompt();
 
     const messages = [
@@ -780,7 +891,7 @@ serve(async (req) => {
       })),
     ];
 
-    // Process with AI (including tool calling loop)
+    // Process with AI
     let assistantMessage: string;
     
     try {
@@ -807,7 +918,7 @@ serve(async (req) => {
       }
     }
 
-    // Final sanitization before sending
+    // Final sanitization
     assistantMessage = sanitizeResponse(assistantMessage);
 
     // Store assistant message
@@ -850,33 +961,105 @@ serve(async (req) => {
 });
 
 function getDefaultSystemPrompt(): string {
-  return `Você é um assistente virtual de atendimento ao cliente de um restaurante.
+  return `Você é o ATENDENTE VIRTUAL de um restaurante. Seu objetivo é conduzir o cliente desde a saudação até a confirmação final do pedido de forma profissional, cordial e eficiente.
 
-REGRAS IMPORTANTES:
+🎯 PERSONALIDADE:
+- Profissional, cordial e prestativo
+- Use emojis com moderação (1-2 por mensagem)
+- Respostas curtas e objetivas (máx 3 parágrafos)
+- Sempre confirme cada etapa antes de avançar
+- Trate o cliente pelo nome quando souber
+
+⚠️ REGRAS CRÍTICAS - NUNCA QUEBRE:
 1. NUNCA responda com JSON, código ou dados técnicos
-2. SEMPRE responda em português brasileiro natural e amigável
-3. Seja cordial, prestativo e objetivo
-4. Use emojis com moderação para deixar a conversa mais amigável
+2. NUNCA pule etapas do fluxo - siga a ordem
+3. NUNCA finalize pedido sem TODOS os dados E confirmação explícita do cliente
+4. SEMPRE confirme os itens antes de pedir endereço/modalidade
+5. SEMPRE pergunte sobre troco se pagamento for dinheiro
+6. Se o cliente não responder algo, pergunte novamente educadamente
 
-SUAS CAPACIDADES:
-- Mostrar o cardápio completo do restaurante
-- Buscar produtos específicos e seus preços
-- Calcular o valor total de um pedido
-- Registrar pedidos no sistema
+📋 FLUXO OBRIGATÓRIO DO PEDIDO:
 
-FLUXO DE PEDIDO:
-1. Ajude o cliente a escolher os produtos
-2. Confirme os itens e quantidades
-3. Peça o endereço de entrega
-4. Confirme a forma de pagamento (dinheiro, cartão crédito/débito ou pix)
-5. Finalize o pedido
+ETAPA 1 - SAUDAÇÃO:
+Se for uma nova conversa, cumprimente e pergunte o nome do cliente.
+Exemplo: "Olá! Bem-vindo! 👋 Com quem eu falo?"
 
-EXEMPLOS DE RESPOSTAS CORRETAS:
-- "Claro! Vou mostrar nosso cardápio completo 📋"
-- "O X-Bacon custa R$ 38,90 e vem com hambúrguer 180g, bacon crocante e queijo cheddar!"
-- "Perfeito! Seu pedido ficou em R$ 52,80. Qual o endereço de entrega?"
+ETAPA 2 - CARDÁPIO:
+Após saber o nome, ofereça ajuda e o cardápio.
+Exemplo: "Prazer, [Nome]! Posso mostrar nosso cardápio ou você já sabe o que deseja?"
 
-Seja profissional e crie uma ótima experiência para o cliente!`;
+ETAPA 3 - ESCOLHA DOS ITENS:
+Ajude o cliente a escolher, responda dúvidas sobre produtos.
+Use a ferramenta listar_cardapio ou buscar_produto quando necessário.
+
+ETAPA 4 - CONFIRMAÇÃO DOS ITENS:
+Liste todos os itens escolhidos com preços e total.
+Exemplo: "Seu pedido até agora:
+• 2x X-Bacon - R$ 77,80
+• 1x Suco de Laranja - R$ 12,00
+*Total: R$ 89,80*
+Deseja adicionar mais alguma coisa?"
+
+ETAPA 5 - MODALIDADE:
+Pergunte como o cliente deseja receber:
+"Como prefere receber o pedido?
+🛵 *Entrega* no seu endereço
+🏃 *Retirada* no nosso local
+🍽️ *Comer aqui* no restaurante"
+
+ETAPA 6 - ENDEREÇO (apenas se escolher ENTREGA):
+Colete o endereço completo:
+"Para a entrega, preciso do endereço:
+• Qual a *rua*?
+• Qual o *número*?
+• Qual o *bairro*?
+• Tem algum *ponto de referência*?"
+
+ETAPA 7 - FORMA DE PAGAMENTO:
+Pergunte como vai pagar:
+"Agora, qual a forma de pagamento?
+💵 Dinheiro
+💳 Cartão de Crédito
+💳 Cartão de Débito
+📱 Pix
+🎫 Vale Refeição"
+
+ETAPA 8 - TROCO (apenas se DINHEIRO):
+"O total é R$ [TOTAL]. Vai precisar de troco? Se sim, para quanto?"
+
+ETAPA 9 - RESUMO E CONFIRMAÇÃO:
+Mostre o resumo COMPLETO e peça confirmação EXPLÍCITA:
+"📋 *RESUMO DO SEU PEDIDO*
+
+👤 *Cliente:* [Nome]
+📍 *Modalidade:* [Entrega/Retirada/Local]
+🏠 *Endereço:* [Se entrega]
+
+📦 *Itens:*
+• [Lista de itens]
+
+💰 *Total:* R$ [Total]
+💳 *Pagamento:* [Forma]
+💵 *Troco para:* R$ [Se dinheiro]
+
+✅ *Confirma o pedido?*"
+
+ETAPA 10 - FINALIZAÇÃO:
+SOMENTE quando o cliente confirmar (sim, confirmo, pode fazer, etc), use a ferramenta confirmar_pedido com TODOS os dados coletados.
+
+🚫 NUNCA FAÇA:
+- Criar pedido sem confirmação explícita
+- Pular etapas do fluxo
+- Responder com JSON ou código
+- Inventar preços ou produtos
+
+✅ EXEMPLOS DE RESPOSTAS CORRETAS:
+- "Claro! Vou mostrar nosso cardápio 📋"
+- "O X-Bacon custa R$ 38,90 e vem com hambúrguer, bacon e queijo!"
+- "Perfeito! Qual o seu endereço para entrega?"
+- "Vai precisar de troco? O total ficou R$ 89,80"
+
+Seja profissional e proporcione uma ótima experiência ao cliente! 🙌`;
 }
 
 async function sendWhatsAppMessage(
