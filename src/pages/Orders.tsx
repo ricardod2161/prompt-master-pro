@@ -4,7 +4,7 @@ import { ptBR } from "date-fns/locale";
 import { 
   Search, Filter, Eye, Clock, Package, User, MapPin, 
   CreditCard, LayoutGrid, List, ChefHat, CheckCircle2, 
-  Truck, XCircle, ShoppingBag, Banknote, Printer
+  Truck, XCircle, ShoppingBag, Banknote, Printer, Bell
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useOrders, useUpdateOrderStatus, type Order, type OrderStatus, type OrderChannel } from "@/hooks/useOrders";
+import { useOrderNotification } from "@/hooks/useOrderNotification";
 import { StatusBadge, ChannelBadge } from "@/components/shared/StatusBadge";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -430,6 +431,7 @@ function OrderDetailsModal({
                     };
                     const config = statusConfig[status];
                     const isActive = order.status === status;
+                    const showNotificationHint = status === "ready" && order.status !== "ready" && order.customer_phone;
                     
                     return (
                       <Button
@@ -445,10 +447,19 @@ function OrderDetailsModal({
                       >
                         {config.icon}
                         {statusOptions.find((s) => s.value === status)?.label}
+                        {showNotificationHint && (
+                          <Bell className="h-3 w-3 ml-0.5 animate-pulse" />
+                        )}
                       </Button>
                     );
                   })}
                 </div>
+                {order.customer_phone && order.status !== "ready" && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Bell className="h-3 w-3" />
+                    Cliente será notificado via WhatsApp quando marcar como Pronto
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -512,6 +523,7 @@ export default function Orders() {
   });
 
   const updateOrderStatus = useUpdateOrderStatus();
+  const sendNotification = useOrderNotification();
   const { printKitchenTicket, printOnPreparing } = usePrintOrder();
 
   const filteredOrders = orders?.filter((order) => {
@@ -529,7 +541,17 @@ export default function Orders() {
     const order = orders?.find(o => o.id === orderId);
     const previousStatus = order?.status || null;
     
-    updateOrderStatus.mutate({ orderId, status });
+    updateOrderStatus.mutate(
+      { orderId, status },
+      {
+        onSuccess: () => {
+          // Send WhatsApp notification when order is ready
+          if (status === "ready" && previousStatus !== "ready") {
+            sendNotification.mutate({ orderId, status: "ready" });
+          }
+        },
+      }
+    );
     
     // Auto-print when status changes to preparing
     if (order && status === "preparing" && previousStatus !== "preparing") {

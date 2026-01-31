@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useRef } from "react";
-import { Clock, ChefHat, CheckCircle, AlertTriangle, Play } from "lucide-react";
+import { Clock, ChefHat, CheckCircle, AlertTriangle, Play, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useOrders, useUpdateOrderStatus, useUpdateKitchenStatus, type Order, type KitchenStatus } from "@/hooks/useOrders";
+import { useOrderNotification } from "@/hooks/useOrderNotification";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ChannelBadge } from "@/components/shared/StatusBadge";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-
 interface OrderWithKitchen extends Order {
   allReady?: boolean;
 }
@@ -115,7 +115,8 @@ function KDSOrderCard({
         {order.status === "preparing" && order.allReady && (
           <Button className="w-full bg-green-600 hover:bg-green-700" onClick={onMarkReady}>
             <CheckCircle className="h-4 w-4 mr-2" />
-            Marcar como Pronto
+            Pronto
+            <Bell className="h-3 w-3 ml-2 animate-pulse" />
           </Button>
         )}
       </CardContent>
@@ -173,6 +174,7 @@ export default function KDS() {
   const { data: orders, isLoading } = useOrders();
   const updateOrderStatus = useUpdateOrderStatus();
   const updateKitchenStatus = useUpdateKitchenStatus();
+  const sendNotification = useOrderNotification();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastOrderCount = useRef(0);
 
@@ -213,7 +215,16 @@ export default function KDS() {
   };
 
   const handleMarkReady = (orderId: string) => {
-    updateOrderStatus.mutate({ orderId, status: "ready" });
+    // Update status and send notification to customer
+    updateOrderStatus.mutate(
+      { orderId, status: "ready" },
+      {
+        onSuccess: () => {
+          // Send WhatsApp notification to customer
+          sendNotification.mutate({ orderId, status: "ready" });
+        },
+      }
+    );
   };
 
   const handleUpdateItem = (itemId: string, status: KitchenStatus) => {
