@@ -676,7 +676,7 @@ async function downloadMedia(
   }
 }
 
-// Transcribe audio using GPT-5 multimodal with Gemini fallback
+// Transcribe audio using Gemini Pro (best ogg/opus support) with multiple fallbacks
 async function transcribeAudio(audioBase64: string, mimetype: string): Promise<string> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
@@ -684,25 +684,15 @@ async function transcribeAudio(audioBase64: string, mimetype: string): Promise<s
     return "";
   }
 
-  // Determine audio format
-  const getAudioFormat = (mime: string): string => {
-    if (mime.includes("ogg")) return "ogg";
-    if (mime.includes("opus")) return "ogg";
-    if (mime.includes("mp4")) return "mp4";
-    if (mime.includes("mpeg") || mime.includes("mp3")) return "mp3";
-    if (mime.includes("wav")) return "wav";
-    if (mime.includes("webm")) return "webm";
-    return "ogg"; // WhatsApp default
-  };
+  console.log(`Transcribing audio (mimetype: ${mimetype}, size: ${audioBase64.length} chars)`);
 
-  const audioFormat = getAudioFormat(mimetype);
-  console.log(`Transcribing audio (format: ${audioFormat}, size: ${audioBase64.length} chars)`);
-
+  // Strategy 1: Use Gemini 2.5 Pro with data URL (best for ogg/opus from WhatsApp)
   try {
-    // Try with GPT-5 first (better audio understanding)
-    console.log("Attempting transcription with GPT-5...");
+    console.log("Attempting transcription with Gemini 2.5 Pro...");
     
-    const gptResponse = await fetch(
+    const dataUrl = `data:${mimetype};base64,${audioBase64}`;
+    
+    const geminiProResponse = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
       {
         method: "POST",
@@ -711,24 +701,19 @@ async function transcribeAudio(audioBase64: string, mimetype: string): Promise<s
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "openai/gpt-5",
+          model: "google/gemini-2.5-pro",
           messages: [
-            {
-              role: "system",
-              content: "Você é um transcritor profissional de áudio em português brasileiro. Transcreva o áudio com precisão. Retorne APENAS o texto transcrito, sem explicações, prefixos ou formatação adicional."
-            },
             {
               role: "user",
               content: [
                 {
                   type: "text",
-                  text: "Transcreva este áudio:"
+                  text: "Transcreva este áudio de voz em português brasileiro. Retorne APENAS o texto transcrito, sem explicações ou formatação."
                 },
                 {
-                  type: "input_audio",
-                  input_audio: {
-                    data: audioBase64,
-                    format: audioFormat
+                  type: "image_url",
+                  image_url: {
+                    url: dataUrl
                   }
                 }
               ]
@@ -739,22 +724,27 @@ async function transcribeAudio(audioBase64: string, mimetype: string): Promise<s
       }
     );
 
-    if (gptResponse.ok) {
-      const gptData = await gptResponse.json();
-      const transcription = gptData.choices?.[0]?.message?.content?.trim() || "";
-      if (transcription && transcription.length > 0) {
-        console.log(`GPT-5 transcription successful: "${transcription.substring(0, 50)}..."`);
+    if (geminiProResponse.ok) {
+      const data = await geminiProResponse.json();
+      const transcription = data.choices?.[0]?.message?.content?.trim() || "";
+      if (transcription && transcription.length > 2 && !transcription.toLowerCase().includes("não consigo")) {
+        console.log(`Gemini Pro transcription successful: "${transcription.substring(0, 80)}..."`);
         return transcription;
       }
+      console.log("Gemini Pro returned empty or invalid transcription");
     } else {
-      const errorText = await gptResponse.text();
-      console.log("GPT-5 transcription failed:", gptResponse.status, errorText.substring(0, 200));
+      const errorText = await geminiProResponse.text();
+      console.log("Gemini Pro failed:", geminiProResponse.status, errorText.substring(0, 300));
     }
+  } catch (error) {
+    console.error("Gemini Pro error:", error);
+  }
 
-    // Fallback to Gemini
-    console.log("Falling back to Gemini for transcription...");
+  // Strategy 2: Try Gemini Flash with input_audio and mp3 format hint
+  try {
+    console.log("Attempting transcription with Gemini Flash...");
     
-    const geminiResponse = await fetch(
+    const geminiFlashResponse = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
       {
         method: "POST",
@@ -770,13 +760,13 @@ async function transcribeAudio(audioBase64: string, mimetype: string): Promise<s
               content: [
                 {
                   type: "text",
-                  text: "Transcreva este áudio em português brasileiro. Retorne APENAS o texto transcrito."
+                  text: "Transcreva este áudio. Retorne APENAS o texto."
                 },
                 {
                   type: "input_audio",
                   input_audio: {
                     data: audioBase64,
-                    format: audioFormat
+                    format: "mp3"
                   }
                 }
               ]
@@ -787,24 +777,79 @@ async function transcribeAudio(audioBase64: string, mimetype: string): Promise<s
       }
     );
 
-    if (geminiResponse.ok) {
-      const geminiData = await geminiResponse.json();
-      const transcription = geminiData.choices?.[0]?.message?.content?.trim() || "";
-      if (transcription && transcription.length > 0) {
-        console.log(`Gemini transcription successful: "${transcription.substring(0, 50)}..."`);
+    if (geminiFlashResponse.ok) {
+      const data = await geminiFlashResponse.json();
+      const transcription = data.choices?.[0]?.message?.content?.trim() || "";
+      if (transcription && transcription.length > 2 && !transcription.toLowerCase().includes("não consigo")) {
+        console.log(`Gemini Flash transcription successful: "${transcription.substring(0, 80)}..."`);
         return transcription;
       }
     } else {
-      const errorText = await geminiResponse.text();
-      console.log("Gemini transcription failed:", geminiResponse.status, errorText.substring(0, 200));
+      const errorText = await geminiFlashResponse.text();
+      console.log("Gemini Flash failed:", geminiFlashResponse.status, errorText.substring(0, 200));
     }
-
-    console.log("All transcription methods failed");
-    return "";
   } catch (error) {
-    console.error("Error in transcribeAudio:", error);
-    return "";
+    console.error("Gemini Flash error:", error);
   }
+
+  // Strategy 3: Try GPT-5 with mp3 format hint
+  try {
+    console.log("Attempting transcription with GPT-5...");
+    
+    const gptResponse = await fetch(
+      "https://ai.gateway.lovable.dev/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "openai/gpt-5",
+          messages: [
+            {
+              role: "system",
+              content: "Você é um transcritor de áudio. Transcreva em português brasileiro. Retorne APENAS o texto."
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Transcreva:"
+                },
+                {
+                  type: "input_audio",
+                  input_audio: {
+                    data: audioBase64,
+                    format: "mp3"
+                  }
+                }
+              ]
+            }
+          ],
+          max_tokens: 1000,
+        }),
+      }
+    );
+
+    if (gptResponse.ok) {
+      const data = await gptResponse.json();
+      const transcription = data.choices?.[0]?.message?.content?.trim() || "";
+      if (transcription && transcription.length > 2) {
+        console.log(`GPT-5 transcription successful: "${transcription.substring(0, 80)}..."`);
+        return transcription;
+      }
+    } else {
+      const errorText = await gptResponse.text();
+      console.log("GPT-5 failed:", gptResponse.status, errorText.substring(0, 200));
+    }
+  } catch (error) {
+    console.error("GPT-5 error:", error);
+  }
+
+  console.log("All transcription methods failed");
+  return "";
 }
 
 // Analyze image using Gemini
