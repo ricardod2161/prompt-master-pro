@@ -1,15 +1,16 @@
 import { useState, useEffect } from "react";
-import { Palette, RotateCcw, Save, Moon, Sun, Loader2 } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Palette, RotateCcw, Save, Moon, Sun, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { ColorPicker } from "./ColorPicker";
 import { ColorPreviewCard } from "./ColorPreviewCard";
-import { ColorPresets, ColorPreset, COLOR_PRESETS } from "./ColorPresets";
+import { ColorPresets, ColorPreset } from "./ColorPresets";
 import { useTheme, ThemeColors } from "@/hooks/useTheme";
 import { useUnitSettings } from "@/hooks/useUnitSettings";
+import { SettingCard } from "./SettingCard";
+import { cn } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -94,113 +95,119 @@ export function AppearanceTab() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* Theme Mode */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {isDarkMode ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
-            Tema Geral
-          </CardTitle>
-          <CardDescription>Escolha entre modo claro ou escuro</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between p-3 rounded-lg border">
-            <div className="flex items-center gap-3">
-              <Sun className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="font-medium">Modo Escuro</p>
-                <p className="text-sm text-muted-foreground">
-                  Otimizado para ambientes com pouca luz
-                </p>
-              </div>
+      <SettingCard
+        icon={isDarkMode ? Moon : Sun}
+        title="Tema Geral"
+        description="Escolha entre modo claro ou escuro"
+        variant="elevated"
+      >
+        <div 
+          className={cn(
+            "flex items-center justify-between p-4 rounded-xl border transition-all duration-300",
+            localDarkMode 
+              ? "bg-gradient-to-r from-primary/5 to-transparent border-primary/20" 
+              : "bg-card/50 border-border/50"
+          )}
+        >
+          <div className="flex items-center gap-4">
+            <div className={cn(
+              "p-2.5 rounded-lg transition-all",
+              localDarkMode 
+                ? "bg-primary/15 text-primary" 
+                : "bg-muted text-muted-foreground"
+            )}>
+              {localDarkMode ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
             </div>
-            <Switch
-              checked={localDarkMode}
-              onCheckedChange={setLocalDarkMode}
-            />
+            <div>
+              <p className="font-medium">Modo Escuro</p>
+              <p className="text-sm text-muted-foreground">
+                Otimizado para ambientes com pouca luz
+              </p>
+            </div>
           </div>
-        </CardContent>
-      </Card>
+          <Switch
+            checked={localDarkMode}
+            onCheckedChange={setLocalDarkMode}
+            className="data-[state=checked]:bg-primary"
+          />
+        </div>
+      </SettingCard>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Color Configuration */}
         <div className="space-y-6">
           {/* Color Presets */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Palette className="h-5 w-5" />
-                Paletas de Cores
-              </CardTitle>
-              <CardDescription>Escolha uma paleta pronta ou personalize</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ColorPresets
-                selectedPreset={selectedPreset}
-                onSelectPreset={handlePresetSelect}
-              />
-            </CardContent>
-          </Card>
+          <SettingCard
+            icon={Sparkles}
+            title="Paletas de Cores"
+            description="Escolha uma paleta pronta ou personalize"
+            variant="glass"
+          >
+            <ColorPresets
+              selectedPreset={selectedPreset}
+              onSelectPreset={handlePresetSelect}
+            />
+          </SettingCard>
 
           {/* Custom Colors */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Personalizar Cores</CardTitle>
-              <CardDescription>Ajuste cada cor individualmente</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-6 sm:grid-cols-2">
-                <ColorPicker
-                  label="Cor Principal"
-                  description="Botões, links e destaques"
-                  value={localColors.primary_color}
-                  onChange={(v) => handleColorChange("primary_color", v)}
-                />
-                <ColorPicker
-                  label="Cor de Destaque"
-                  description="Status 'Preparando' e informações"
-                  value={localColors.accent_color}
-                  onChange={(v) => handleColorChange("accent_color", v)}
-                />
-              </div>
-              
-              <Separator />
-              
-              <div className="space-y-4">
-                <Label className="text-sm font-medium">Cores de Status</Label>
-                <div className="grid gap-6 sm:grid-cols-3">
-                  <ColorPicker
-                    label="Sucesso"
-                    description="Concluído, pronto"
-                    value={localColors.success_color}
-                    onChange={(v) => handleColorChange("success_color", v)}
-                  />
-                  <ColorPicker
-                    label="Alerta"
-                    description="Pendente, atenção"
-                    value={localColors.warning_color}
-                    onChange={(v) => handleColorChange("warning_color", v)}
-                  />
-                  <ColorPicker
-                    label="Erro"
-                    description="Cancelado, problema"
-                    value={localColors.error_color}
-                    onChange={(v) => handleColorChange("error_color", v)}
-                  />
-                </div>
-              </div>
-
-              <Separator />
-
+          <SettingCard
+            icon={Palette}
+            title="Personalizar Cores"
+            description="Ajuste cada cor individualmente"
+            variant="elevated"
+          >
+            <div className="grid gap-6 sm:grid-cols-2">
               <ColorPicker
-                label="Cor da Sidebar (opcional)"
-                description="Deixe vazio para usar padrão do tema"
-                value={localColors.sidebar_color || "222 47% 8%"}
-                onChange={(v) => handleColorChange("sidebar_color", v)}
+                label="Cor Principal"
+                description="Botões, links e destaques"
+                value={localColors.primary_color}
+                onChange={(v) => handleColorChange("primary_color", v)}
               />
-            </CardContent>
-          </Card>
+              <ColorPicker
+                label="Cor de Destaque"
+                description="Status 'Preparando' e informações"
+                value={localColors.accent_color}
+                onChange={(v) => handleColorChange("accent_color", v)}
+              />
+            </div>
+            
+            <Separator className="my-4" />
+            
+            <div className="space-y-4">
+              <Label className="text-sm font-medium">Cores de Status</Label>
+              <div className="grid gap-6 sm:grid-cols-3">
+                <ColorPicker
+                  label="Sucesso"
+                  description="Concluído, pronto"
+                  value={localColors.success_color}
+                  onChange={(v) => handleColorChange("success_color", v)}
+                />
+                <ColorPicker
+                  label="Alerta"
+                  description="Pendente, atenção"
+                  value={localColors.warning_color}
+                  onChange={(v) => handleColorChange("warning_color", v)}
+                />
+                <ColorPicker
+                  label="Erro"
+                  description="Cancelado, problema"
+                  value={localColors.error_color}
+                  onChange={(v) => handleColorChange("error_color", v)}
+                />
+              </div>
+            </div>
+
+            <Separator className="my-4" />
+
+            <ColorPicker
+              label="Cor da Sidebar (opcional)"
+              description="Deixe vazio para usar padrão do tema"
+              value={localColors.sidebar_color || "222 47% 8%"}
+              onChange={(v) => handleColorChange("sidebar_color", v)}
+            />
+          </SettingCard>
         </div>
 
         {/* Live Preview - Sticky on desktop */}
@@ -220,7 +227,7 @@ export function AppearanceTab() {
           <div className="flex flex-col sm:flex-row gap-3">
             <Button 
               onClick={handleSave} 
-              className="flex-1"
+              className="flex-1 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg shadow-primary/25 hover:shadow-xl transition-all duration-300"
               disabled={isSaving}
             >
               {isSaving ? (
@@ -233,12 +240,12 @@ export function AppearanceTab() {
             
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="outline">
+                <Button variant="outline" className="hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30">
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Resetar
                 </Button>
               </AlertDialogTrigger>
-              <AlertDialogContent>
+              <AlertDialogContent className="border-border/50 bg-card/95 backdrop-blur-xl">
                 <AlertDialogHeader>
                   <AlertDialogTitle>Resetar Cores?</AlertDialogTitle>
                   <AlertDialogDescription>
@@ -248,7 +255,7 @@ export function AppearanceTab() {
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleReset}>
+                  <AlertDialogAction onClick={handleReset} className="bg-destructive hover:bg-destructive/90">
                     Confirmar Reset
                   </AlertDialogAction>
                 </AlertDialogFooter>
