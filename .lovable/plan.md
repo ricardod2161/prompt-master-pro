@@ -1,240 +1,492 @@
 
-# Plano: Melhorias Gerais - Sistema de Assinaturas e Navegacao
+# Plano: Melhorias Avancadas do WhatsApp - Status de Entrega, Digitando, Audio e Imagens
 
-## 1. Configuracao do Stripe Customer Portal (Acao Manual)
+## Resumo das Melhorias
 
-Antes de tudo, voce precisa configurar o Customer Portal no dashboard do Stripe:
-
-1. Acesse https://dashboard.stripe.com/settings/billing/portal
-2. Configure as seguintes opcoes:
-   - **Permitir cancelamento de assinaturas**: Ativar
-   - **Permitir troca de planos**: Ativar e selecionar os 3 produtos criados (Starter, Pro, Enterprise)
-   - **Permitir atualizacao de metodo de pagamento**: Ativar
-   - **Historico de faturas**: Ativar
-   - **Branding**: Adicionar logo e cores do RestaurantOS
+Este plano implementa um sistema de WhatsApp profissional e completo com:
+- Status de entrega de mensagens (dois risquinhos azuis)
+- Indicadores de "digitando" e "gravando"
+- Processamento de mensagens de audio (transcricao via IA)
+- Processamento de imagens (analise visual via IA multimodal)
+- Interface de chat elegante estilo WhatsApp
+- Melhorias gerais de organizacao e responsividade
 
 ---
 
-## 2. Novo Componente: PageHeader com Botao Voltar
+## 1. Atualizacoes no Banco de Dados
 
-Criar um componente reutilizavel para todas as paginas com:
+### 1.1 Novos campos na tabela whatsapp_messages
 
 ```text
-PageHeader
-├── Botao Voltar (condicional, com animacao hover)
-├── Breadcrumbs (opcional)
-├── Titulo da pagina (h1)
-├── Subtitulo/descricao
-├── Acoes do lado direito (botoes, badges)
-└── Responsivo (mobile-first)
+whatsapp_messages (atualizada):
+├── id, conversation_id, role, content, created_at (existentes)
+├── message_id (TEXT) - ID da mensagem no WhatsApp
+├── status (ENUM) - sent, delivered, read
+├── media_type (TEXT) - text, audio, image, document
+├── media_url (TEXT) - URL do arquivo de midia
+├── media_duration (INTEGER) - duracao em segundos (audio)
+├── media_caption (TEXT) - legenda da imagem
+└── transcription (TEXT) - transcricao do audio
 ```
 
-### Visual
+### 1.2 Nova tabela para status de digitacao
 
 ```text
-┌─────────────────────────────────────────────────────────────────────┐
-│  ← Voltar   Dashboard > Planos                                      │
-│                                                                     │
-│  Planos e Precos                              [Status] [Atualizar]  │
-│  Escolha o plano ideal para seu restaurante                        │
-└─────────────────────────────────────────────────────────────────────┘
+whatsapp_typing_status:
+├── id (UUID)
+├── conversation_id (FK)
+├── is_typing (BOOLEAN)
+├── is_recording (BOOLEAN)
+├── updated_at (TIMESTAMP)
+└── expires_at (TIMESTAMP)
 ```
 
 ---
 
-## 3. Melhorias na Pagina de Pricing
+## 2. Novos Eventos do Webhook Evolution API
 
-### 3.1 Adicionar PageHeader
-- Botao voltar para /dashboard (ou pagina anterior)
-- Breadcrumbs: Dashboard > Planos
+### 2.1 Eventos a processar
 
-### 3.2 Design Profissional Aprimorado
-- Container maximo responsivo
-- Animacoes staggered nos cards
-- Comparativo de features entre planos
-- Indicador visual de economia anual (opcional futuro)
+```text
+Eventos atuais:
+└── messages.upsert (mensagem recebida)
 
-### 3.3 FAQ Melhorado
-- Usar componente Accordion para FAQ
-- Animacoes de abertura/fechamento
-- Icones visuais nas perguntas
-
-### 3.4 Secao CTA Final
-- Garantia de satisfacao
-- Suporte humanizado
-- Link para contato
+Novos eventos a adicionar:
+├── messages.update (status de entrega)
+│   ├── status: "delivered" (✓✓)
+│   └── status: "read" (✓✓ azul)
+├── messages.typing (digitando)
+│   └── presence: "composing" ou "recording"
+└── messages.media (audio/imagem)
+    ├── audioMessage
+    ├── imageMessage
+    └── documentMessage
+```
 
 ---
 
-## 4. Melhorias nos Cards de Preco (PricingCard)
+## 3. Componentes de UI a Criar
 
-### 4.1 Visual 3D Aprimorado
-- Adicionar icone por tier (Zap, Sparkles, Crown)
-- Animacao de entrada staggered
-- Hover effect mais pronunciado
-- Transicoes suaves
+### 3.1 ChatBubble - Bolha de mensagem estilo WhatsApp
 
-### 4.2 Estados Visuais
-- Loading skeleton durante carregamento
-- Disabled state para planos inacessiveis
-- Animacao de confirmacao ao clicar
+```text
+ChatBubble
+├── Visual diferente para sent/received
+├── Timestamp formatado
+├── Status indicators:
+│   ├── ✓ (enviado/sent)
+│   ├── ✓✓ (entregue/delivered)
+│   └── ✓✓ (azul/read)
+├── Media preview:
+│   ├── Image thumbnail com lightbox
+│   ├── Audio player com waveform
+│   └── Document icon com download
+└── Transcricao de audio (expandable)
+```
 
-### 4.3 Melhorar Responsividade
-- Stack vertical em mobile
-- Cards menores em tablet
-- Layout grid em desktop
+### 3.2 ChatInput - Campo de entrada avancado
+
+```text
+ChatInput
+├── Input de texto expandivel
+├── Botao de gravar audio
+├── Botao de anexar imagem
+├── Botao de emoji (opcional)
+└── Send button com loading state
+```
+
+### 3.3 ChatHeader - Cabecalho da conversa
+
+```text
+ChatHeader
+├── Avatar do cliente
+├── Nome do cliente
+├── Status (online/offline/digitando/gravando)
+├── Telefone
+└── Botao toggle bot on/off
+```
+
+### 3.4 ChatView - Container principal
+
+```text
+ChatView (nova pagina ou modal)
+├── ChatHeader
+├── ScrollArea com mensagens
+│   └── Agrupa mensagens por data
+├── TypingIndicator (quando cliente digitando)
+├── ChatInput
+└── Responsive: sidebar + chat em desktop, fullscreen em mobile
+```
 
 ---
 
-## 5. Melhorias na Pagina de Sucesso
+## 4. Atualizacoes no Webhook
 
-### 5.1 Adicionar PageHeader
-- Botao voltar para /pricing
+### 4.1 Suporte a Mensagens de Audio
 
-### 5.2 Animacoes de Celebracao
-- Confetti animation (opcional)
-- Icone pulsante de sucesso
-- Entrada suave dos elementos
+```text
+Fluxo de audio:
+1. Recebe audioMessage do webhook
+2. Baixa arquivo de audio da Evolution API
+3. Converte para base64
+4. Envia para Gemini multimodal (transcricao)
+5. Salva transcricao no banco
+6. Processa transcricao como texto normal para IA
+```
 
-### 5.3 Informacoes Completas
-- Resumo do plano adquirido
-- Proximos passos
-- Links uteis (dashboard, suporte)
+### 4.2 Suporte a Mensagens de Imagem
+
+```text
+Fluxo de imagem:
+1. Recebe imageMessage do webhook
+2. Baixa imagem da Evolution API
+3. Converte para base64
+4. Envia para Gemini multimodal (analise)
+5. Extrai contexto/descricao
+6. Processa com IA (ex: "Vi sua imagem, parece um comprovante de pagamento...")
+```
+
+### 4.3 Atualizacao de Status de Entrega
+
+```text
+Evento messages.update:
+1. Recebe status (delivered/read)
+2. Atualiza campo status na whatsapp_messages
+3. Emite evento realtime para UI
+```
+
+### 4.4 Envio de Indicador "Digitando"
+
+```text
+Antes de processar IA:
+1. Envia presence "composing" para cliente
+2. Processa mensagem com IA
+3. Envia resposta
+```
 
 ---
 
-## 6. Melhorias no AppLayout
+## 5. Atualizacao do Sistema Prompt da IA
 
-### 6.1 Header Aprimorado
-- Adicionar titulo da pagina atual
-- Botao voltar contextual
-- Breadcrumbs navegaveis
+### 5.1 Instrucoes para Imagens
 
-### 6.2 Mobile-First
-- Menu hamburguer otimizado
-- Gestos de swipe
-- Safe areas para iOS
+```text
+Nova instrucao:
+"Quando receber uma imagem:
+- Se for comprovante de pagamento Pix, confirme o recebimento
+- Se for foto de endereco/mapa, confirme a localizacao
+- Se for cardapio de outro local, explique que temos nosso proprio
+- Descreva brevemente o que viu e continue o atendimento"
+```
+
+### 5.2 Instrucoes para Audio
+
+```text
+Nova instrucao:
+"Quando receber audio transcrito:
+- Trate como mensagem de texto normal
+- Se a transcricao estiver confusa, peca gentilmente para repetir
+- Continue o fluxo do pedido normalmente"
+```
 
 ---
 
-## 7. Arquivos a Criar/Modificar
+## 6. Nova Pagina: Chat do WhatsApp
+
+### 6.1 Layout Desktop
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│ WhatsApp Business           [Status: Conectado]                 │
+├─────────────────┬───────────────────────────────────────────────┤
+│ CONVERSAS       │ CHAT                                          │
+│                 │                                               │
+│ ┌─────────────┐ │ ┌─────────────────────────────────────────┐  │
+│ │ 👤 Maria    │ │ │ João Silva        digitando...         │  │
+│ │ Oi, quero..│ │ ├─────────────────────────────────────────┤  │
+│ │ 10:30 ✓✓   │ │ │                                         │  │
+│ └─────────────┘ │ │   ┌──────────────────┐                  │  │
+│ ┌─────────────┐ │ │   │ Oi! Quero pedir  │ ← cliente        │  │
+│ │ 👤 João    ●│ │ │   │ delivery         │                  │  │
+│ │ Quero ped..│ │ │   │         10:30    │                  │  │
+│ │ 10:28 ✓✓   │ │ │   └──────────────────┘                  │  │
+│ └─────────────┘ │ │                                         │  │
+│                 │ │ ┌──────────────────┐                    │  │
+│                 │ │ │ Claro! 😊        │ ← bot              │  │
+│                 │ │ │ Vou mostrar o    │                    │  │
+│                 │ │ │ cardápio...      │                    │  │
+│                 │ │ │      10:30 ✓✓ 🤖│                    │  │
+│                 │ │ └──────────────────┘                    │  │
+│                 │ │                                         │  │
+│                 │ │   ┌──────────────────────┐              │  │
+│                 │ │   │ 🎵 Audio (0:15)      │              │  │
+│                 │ │   │ [▶ ▁▂▃▄▅▆▇▆▅▄▃▂▁]   │              │  │
+│                 │ │   │ "Quero um x-bacon"   │ transcricao  │  │
+│                 │ │   └──────────────────────┘              │  │
+│                 │ │                                         │  │
+│                 │ │   ┌──────────────────────┐              │  │
+│                 │ │   │ 🖼️ [Imagem]          │              │  │
+│                 │ │   │ Comprovante Pix     │              │  │
+│                 │ │   └──────────────────────┘              │  │
+│                 │ │                                         │  │
+│                 │ ├─────────────────────────────────────────┤  │
+│                 │ │ [📎] [Digite...                    ] [➤]│  │
+│                 │ └─────────────────────────────────────────┘  │
+└─────────────────┴───────────────────────────────────────────────┘
+```
+
+### 6.2 Layout Mobile
+
+```text
+┌───────────────────────┐
+│ ← João Silva      🤖 │  ← header com toggle bot
+│    digitando...       │
+├───────────────────────┤
+│                       │
+│   ┌─────────────────┐ │
+│   │ Oi! Quero pedir │ │
+│   │ delivery  10:30 │ │
+│   └─────────────────┘ │
+│                       │
+│ ┌─────────────────┐   │
+│ │ Claro! Posso    │   │
+│ │ ajudar 😊       │   │
+│ │ 10:30 ✓✓ 🤖    │   │
+│ └─────────────────┘   │
+│                       │
+├───────────────────────┤
+│ [📎] [Mensagem...] [➤]│
+└───────────────────────┘
+```
+
+---
+
+## 7. Status de Entrega - Visual
+
+### 7.1 Icones de Status
+
+```text
+Mensagens ENVIADAS (pelo bot):
+├── ✓ cinza    = enviado
+├── ✓✓ cinza   = entregue
+└── ✓✓ azul    = lido
+
+Mensagens RECEBIDAS (do cliente):
+└── Sem icone de status (apenas timestamp)
+```
+
+### 7.2 CSS para Status
+
+```css
+.message-status {
+  display: inline-flex;
+  margin-left: 4px;
+}
+
+.status-sent { color: gray; }
+.status-delivered { color: gray; }
+.status-read { color: #53bdeb; } /* WhatsApp blue */
+```
+
+---
+
+## 8. Arquivos a Criar/Modificar
 
 | Arquivo | Acao | Descricao |
 |---------|------|-----------|
-| `src/components/shared/PageHeader.tsx` | Criar | Header reutilizavel com back button |
-| `src/components/shared/Breadcrumbs.tsx` | Criar | Navegacao por breadcrumbs |
-| `src/pages/Pricing.tsx` | Modificar | Adicionar PageHeader, melhorar layout |
-| `src/pages/SubscriptionSuccess.tsx` | Modificar | Adicionar PageHeader, melhorar UX |
-| `src/components/subscription/PricingCard.tsx` | Modificar | Icones, animacoes, responsividade |
-| `src/components/layout/AppLayout.tsx` | Modificar | Header com navegacao |
-| `src/index.css` | Modificar | Novas animacoes e utilitarios |
+| `src/pages/WhatsAppChat.tsx` | Criar | Nova pagina de chat |
+| `src/components/whatsapp/ChatView.tsx` | Criar | Container principal |
+| `src/components/whatsapp/ChatBubble.tsx` | Criar | Bolha de mensagem |
+| `src/components/whatsapp/ChatInput.tsx` | Criar | Input de mensagem |
+| `src/components/whatsapp/ChatHeader.tsx` | Criar | Header da conversa |
+| `src/components/whatsapp/ConversationList.tsx` | Criar | Lista lateral |
+| `src/components/whatsapp/TypingIndicator.tsx` | Criar | Animacao digitando |
+| `src/components/whatsapp/AudioPlayer.tsx` | Criar | Player de audio |
+| `src/components/whatsapp/MessageStatus.tsx` | Criar | Icones de status |
+| `src/hooks/useWhatsAppChat.ts` | Criar | Hook para chat |
+| `supabase/functions/whatsapp-webhook/index.ts` | Modificar | Suporte audio/imagem/status |
+| `src/pages/WhatsAppSettings.tsx` | Modificar | Link para nova pagina |
+| `src/App.tsx` | Modificar | Nova rota |
+| Migration SQL | Criar | Novos campos e tabela |
 
 ---
 
-## 8. Novas Classes CSS
+## 9. Migracao SQL
 
-```css
-/* Animacoes staggered */
-.animate-stagger-1 { animation-delay: 0.1s; }
-.animate-stagger-2 { animation-delay: 0.2s; }
-.animate-stagger-3 { animation-delay: 0.3s; }
+```sql
+-- Adicionar campos a whatsapp_messages
+ALTER TABLE whatsapp_messages 
+ADD COLUMN IF NOT EXISTS message_id TEXT,
+ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'sent',
+ADD COLUMN IF NOT EXISTS media_type TEXT DEFAULT 'text',
+ADD COLUMN IF NOT EXISTS media_url TEXT,
+ADD COLUMN IF NOT EXISTS media_duration INTEGER,
+ADD COLUMN IF NOT EXISTS media_caption TEXT,
+ADD COLUMN IF NOT EXISTS transcription TEXT;
 
-/* Fade in up */
-@keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+-- Criar tabela de typing status
+CREATE TABLE IF NOT EXISTS whatsapp_typing_status (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID REFERENCES whatsapp_conversations(id) ON DELETE CASCADE,
+  is_typing BOOLEAN DEFAULT FALSE,
+  is_recording BOOLEAN DEFAULT FALSE,
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  expires_at TIMESTAMPTZ DEFAULT (now() + interval '30 seconds'),
+  UNIQUE(conversation_id)
+);
 
-.animate-fade-in-up {
-  animation: fade-in-up 0.5s ease-out forwards;
-}
-
-/* Botao voltar hover */
-.back-button:hover {
-  transform: translateX(-4px);
-}
+-- Habilitar realtime
+ALTER PUBLICATION supabase_realtime ADD TABLE whatsapp_messages;
+ALTER PUBLICATION supabase_realtime ADD TABLE whatsapp_typing_status;
 ```
 
 ---
 
-## 9. Componente PageHeader - Especificacao
+## 10. Logica do Webhook Atualizada
+
+### 10.1 Processamento de Eventos
+
+```text
+switch (payload.event):
+├── "messages.upsert":
+│   ├── Verifica tipo de mensagem
+│   ├── Se text → processa normalmente
+│   ├── Se audio → baixa, transcreve, processa
+│   └── Se image → baixa, analisa, processa
+│
+├── "messages.update":
+│   └── Atualiza status da mensagem (delivered/read)
+│
+├── "presence.update":
+│   ├── Se "composing" → salva is_typing=true
+│   ├── Se "recording" → salva is_recording=true
+│   └── Se "paused" → reseta ambos
+│
+└── "send.message":
+    └── Armazena message_id para rastreio
+```
+
+### 10.2 Transcricao de Audio
 
 ```typescript
-interface PageHeaderProps {
-  title: string;
-  description?: string;
-  showBackButton?: boolean;
-  backTo?: string; // URL ou -1 para history.back()
-  breadcrumbs?: { label: string; href?: string }[];
-  actions?: React.ReactNode;
-  badge?: React.ReactNode;
-  className?: string;
-}
+// Usar Gemini multimodal para transcrever
+const transcription = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  body: JSON.stringify({
+    model: "google/gemini-2.5-flash",
+    messages: [{
+      role: "user",
+      content: [
+        { type: "text", text: "Transcreva este audio em portugues:" },
+        { type: "audio_url", audio_url: { url: `data:audio/ogg;base64,${audioBase64}` }}
+      ]
+    }]
+  })
+});
 ```
 
-### Exemplo de Uso
+### 10.3 Analise de Imagem
 
-```tsx
-<PageHeader
-  title="Planos e Precos"
-  description="Escolha o plano ideal para seu restaurante"
-  showBackButton
-  backTo="/dashboard"
-  breadcrumbs={[
-    { label: "Dashboard", href: "/dashboard" },
-    { label: "Planos" }
-  ]}
-  badge={<SubscriptionBadge tier={subscription.tier} />}
-  actions={
-    <Button onClick={checkSubscription}>
-      <RefreshCw /> Atualizar
-    </Button>
-  }
-/>
+```typescript
+// Usar Gemini multimodal para analisar imagem
+const analysis = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  body: JSON.stringify({
+    model: "google/gemini-2.5-flash",
+    messages: [{
+      role: "user", 
+      content: [
+        { type: "text", text: "Descreva brevemente esta imagem em 1-2 frases:" },
+        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${imageBase64}` }}
+      ]
+    }]
+  })
+});
 ```
 
 ---
 
-## 10. Melhorias de Responsividade
+## 11. Indicador "Digitando" para Cliente
 
-### Mobile (< 640px)
-- Cards em coluna unica
-- Botoes full-width
-- Font sizes reduzidos
-- Padding compacto
+### 11.1 Enviar Presence antes de processar
 
-### Tablet (640px - 1024px)
-- Grid de 2 colunas
-- Cards side-by-side
-- Header compacto
+```typescript
+// Antes de chamar a IA
+await fetch(`${apiUrl}/chat/presence/${instanceName}`, {
+  method: "POST",
+  headers: { apikey: apiToken },
+  body: JSON.stringify({
+    number: phone,
+    presence: "composing" // ou "recording" se for responder audio
+  })
+});
 
-### Desktop (> 1024px)
-- Grid de 3 colunas
-- Layout espalhado
-- Hover effects completos
+// Processa com IA...
 
----
-
-## 11. Ordem de Implementacao
-
-1. Criar CSS utilities e animacoes
-2. Criar componente PageHeader
-3. Criar componente Breadcrumbs
-4. Atualizar PricingCard com melhorias visuais
-5. Atualizar pagina Pricing com PageHeader e layout
-6. Atualizar pagina SubscriptionSuccess
-7. Atualizar AppLayout com header melhorado
-8. Testar responsividade em todos os breakpoints
+// Envia resposta
+await sendWhatsAppMessage(...);
+```
 
 ---
 
-## 12. Resultado Esperado
+## 12. Componentes Adicionais
 
-| Area | Melhoria |
-|------|----------|
-| Navegacao | Botao voltar consistente em todas as paginas |
-| Visual | Cards 3D com animacoes profissionais |
-| UX | Feedback visual em todas as acoes |
-| Mobile | Layout responsivo otimizado |
-| Acessibilidade | Aria labels, focus states, keyboard nav |
-| Performance | Animacoes via CSS (GPU accelerated) |
+### 12.1 TypingIndicator
+
+```text
+Animacao de 3 pontinhos:
+┌─────────────────────┐
+│ ●  ●  ●             │  ← pulsa sequencialmente
+│ digitando...        │
+└─────────────────────┘
+```
+
+### 12.2 AudioPlayer
+
+```text
+┌──────────────────────────────┐
+│ [▶] [▁▂▃▅▇▅▃▂▁▂▃▅▇] 0:15    │
+│ "Quero um x-bacon"           │  ← transcricao
+└──────────────────────────────┘
+```
+
+### 12.3 ImagePreview
+
+```text
+┌──────────────────────────────┐
+│ ┌──────────────────────────┐ │
+│ │                          │ │
+│ │     [Thumbnail]          │ │  ← clique abre lightbox
+│ │                          │ │
+│ └──────────────────────────┘ │
+│ Comprovante de pagamento Pix │  ← caption/descricao
+└──────────────────────────────┘
+```
+
+---
+
+## 13. Ordem de Implementacao
+
+1. **Migracoes SQL** - Adicionar novos campos e tabelas
+2. **Componentes base** - MessageStatus, TypingIndicator
+3. **ChatBubble** - Com suporte a todos os tipos de midia
+4. **AudioPlayer** - Player de audio com waveform
+5. **ChatView + ChatHeader + ChatInput** - Interface completa
+6. **ConversationList** - Lista lateral de conversas
+7. **WhatsAppChat page** - Pagina principal
+8. **Webhook updates** - Audio, imagem, status
+9. **Realtime subscriptions** - Atualizacoes em tempo real
+10. **Testes e ajustes** - Responsividade, edge cases
+
+---
+
+## 14. Resultado Esperado
+
+| Feature | Descricao |
+|---------|-----------|
+| Status ✓✓ | Mostra quando mensagem foi entregue/lida |
+| Digitando | Cliente ve "digitando..." enquanto bot processa |
+| Audio | Cliente envia audio, bot transcreve e responde |
+| Imagem | Cliente envia foto, bot analisa e responde |
+| Chat UI | Interface moderna estilo WhatsApp |
+| Realtime | Mensagens aparecem instantaneamente |
+| Mobile | Layout responsivo e touch-friendly |
+| Profissional | UX elegante e inteligente |
