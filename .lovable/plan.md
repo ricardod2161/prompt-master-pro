@@ -1,235 +1,213 @@
 
-# Plano: Editor de Cores e Personalizacao Visual
+# Plano: Corrigir Erro 404 e Melhorar Pagina de Mesas
 
-## Visao Geral
+## Problema Identificado
 
-Adicionar uma nova aba "Aparencia" nas Configuracoes que permite ao restaurante personalizar as cores do sistema, criando uma identidade visual propria. O sistema aplicara as cores dinamicamente usando CSS variables.
-
----
-
-## Arquitetura da Solucao
-
-### 1. Alteracao no Banco de Dados
-
-Adicionar colunas de personalizacao na tabela `unit_settings`:
+### Erro 404 ao Abrir Link
+O QR Code gera um link para `/order/:tableId`, porem **nao existe esta rota** no App.tsx. Quando o cliente ou admin clica em "Abrir Link", recebe 404.
 
 ```text
-unit_settings (colunas adicionais)
-├── primary_color (text) - Cor principal da marca (HSL)
-├── accent_color (text) - Cor de destaque/secundaria
-├── success_color (text) - Cor para status positivos
-├── warning_color (text) - Cor para alertas
-├── error_color (text) - Cor para erros
-├── sidebar_color (text) - Cor de fundo da sidebar
-├── dark_mode_enabled (boolean) - Modo escuro ativo
-```
+Atual:
+QR Code → /order/c63dda1d-b20a-4... → 404 (rota inexistente)
 
-### 2. Estrutura da Nova Aba
-
-A aba "Aparencia" tera as seguintes secoes:
-
-```text
-Aparencia
-├── Tema Geral
-│   └── Toggle: Modo Escuro / Modo Claro
-├── Cores da Marca
-│   ├── Cor Principal (botoes, links, destaques)
-│   ├── Cor de Fundo Sidebar
-│   └── Cor de Destaque
-├── Cores de Status
-│   ├── Sucesso (verde)
-│   ├── Alerta (amarelo)
-│   └── Erro (vermelho)
-├── Preview em Tempo Real
-│   └── Mini cards mostrando como ficara
-├── Presets de Cores
-│   └── Selecionar paletas pre-definidas
-└── Reset para Padrao
+Esperado:
+QR Code → /order/c63dda1d-b20a-4... → Pagina publica de pedidos
 ```
 
 ---
 
-## Componentes de UI
+## Solucao Proposta
 
-### Color Picker Component
+### 1. Criar Pagina Publica de Pedidos para Clientes
 
-Criar um componente reutilizavel de selecao de cor:
+Nova pagina `src/pages/CustomerOrder.tsx` que sera acessada via QR Code:
 
 ```text
-ColorPicker
-├── Input de cor nativo (type="color")
-├── Preview circular da cor
-├── Campo de texto para valor HEX
-├── Conversao automatica HEX <-> HSL
+CustomerOrder.tsx (Pagina Publica)
+├── Header com logo e nome do restaurante
+├── Numero da mesa (obtido via tableId)
+├── Menu de produtos por categoria
+│   ├── Cards de produtos com imagem, nome, preco
+│   ├── Botao de adicionar ao carrinho
+│   └── Modal de detalhes do produto
+├── Carrinho lateral/inferior
+│   ├── Itens selecionados com quantidade
+│   ├── Total do pedido
+│   └── Botao "Enviar Pedido"
+├── Formulario de identificacao
+│   ├── Nome do cliente
+│   └── Telefone (opcional)
+└── Confirmacao de pedido enviado
 ```
 
-### Preview Card
+### 2. Adicionar Rota Publica no App.tsx
 
-Card que mostra em tempo real como as cores ficarao:
-
-```text
-ColorPreviewCard
-├── Header com cor principal
-├── Botoes de exemplo
-├── Badges de status coloridos
-├── Sidebar miniatura
+```typescript
+// Adicionar ANTES das rotas protegidas
+<Route path="/order/:tableId" element={<CustomerOrder />} />
 ```
 
-### Presets de Paletas
+### 3. Melhorar Layout da Pagina de Mesas
 
-Oferecer paletas prontas para escolha rapida:
+Ajustes para garantir scroll adequado e responsividade:
 
 ```text
-Presets disponiveis:
-├── Verde Padrao (atual)
-├── Azul Corporativo
-├── Laranja Energetico
-├── Roxo Moderno
-├── Vermelho Intenso
-├── Rosa Elegante
+Melhorias Tables.tsx
+├── Adicionar ScrollArea do Radix para scroll suave
+├── Garantir altura maxima nos dialogs
+├── Melhorar espacamento em mobile
+├── Adicionar animacoes sutis nos cards
+└── Otimizar grid para diferentes tamanhos de tela
 ```
 
 ---
 
-## Fluxo de Aplicacao das Cores
+## Arquitetura da Pagina CustomerOrder
+
+### Fluxo do Cliente
 
 ```text
-1. Usuario seleciona cor
-   └── State local atualizado
-       └── Preview atualiza instantaneamente
+1. Cliente escaneia QR Code
+   └── Abre /order/:tableId no celular
 
-2. Usuario clica "Salvar"
-   └── Cores salvas no banco (unit_settings)
-       └── Toast de confirmacao
+2. Sistema carrega dados
+   ├── Busca mesa pelo ID (obtem unit_id)
+   ├── Busca dados do restaurante (nome, logo)
+   └── Busca produtos ativos da unidade
 
-3. Ao carregar aplicacao
-   └── Hook useUnitSettings carrega cores
-       └── useEffect aplica CSS variables no :root
-           └── Toda interface reflete as cores
+3. Cliente navega no cardapio
+   ├── Filtra por categoria
+   ├── Ve detalhes do produto
+   └── Adiciona itens ao carrinho
+
+4. Cliente finaliza pedido
+   ├── Informa nome e telefone (opcional)
+   ├── Confirma itens
+   └── Envia pedido
+
+5. Sistema cria pedido
+   ├── Insere em orders (channel: 'qrcode')
+   ├── Insere items em order_items
+   ├── Atualiza status da mesa para 'occupied'
+   └── Exibe confirmacao ao cliente
+```
+
+### Estrutura de Componentes
+
+```text
+src/pages/CustomerOrder.tsx
+├── useCustomerOrder.ts (hook para logica)
+│   ├── fetchTable() - busca mesa e unit_id
+│   ├── fetchProducts() - lista produtos ativos
+│   ├── fetchCategories() - lista categorias
+│   └── createOrder() - cria pedido no banco
+├── CustomerHeader - header com nome restaurante
+├── CategoryTabs - abas de categorias
+├── ProductGrid - grid de produtos
+├── ProductCard - card individual
+├── CartSheet - carrinho lateral
+└── OrderConfirmation - tela de sucesso
 ```
 
 ---
 
 ## Detalhamento Tecnico
 
-### Arquivos a Criar/Modificar
+### Arquivos a Criar
 
-1. **`src/components/settings/ColorPicker.tsx`**
-   - Componente de selecao de cor
-   - Conversao HEX/HSL
-   - Preview visual
+1. **`src/pages/CustomerOrder.tsx`**
+   - Pagina publica completa
+   - Nao requer autenticacao
+   - Layout responsivo mobile-first
 
-2. **`src/components/settings/ColorPreviewCard.tsx`**
-   - Cartao de pre-visualizacao
-   - Mini interface com exemplos
+2. **`src/hooks/useCustomerOrder.ts`**
+   - Logica de busca de dados sem autenticacao
+   - Criacao de pedido via anon key
+   - Gerenciamento do carrinho
 
-3. **`src/components/settings/ColorPresets.tsx`**
-   - Grid de paletas pre-definidas
-   - Selecao com um clique
+### Arquivos a Modificar
 
-4. **`src/hooks/useTheme.ts`**
-   - Aplicar cores no CSS dinamicamente
-   - Gerenciar dark/light mode
-   - Carregar cores salvas
+1. **`src/App.tsx`**
+   - Adicionar rota `/order/:tableId`
+   - Rota FORA do AppLayout (publica)
 
-5. **`src/pages/Settings.tsx`**
-   - Adicionar aba "Aparencia"
-   - Integrar novos componentes
+2. **`src/pages/Tables.tsx`**
+   - Pequenos ajustes de scroll e responsividade
 
-6. **`src/hooks/useUnitSettings.ts`**
-   - Adicionar campos de cor no tipo
-
-### Migracao SQL
-
-```sql
-ALTER TABLE public.unit_settings 
-ADD COLUMN primary_color text DEFAULT '142 76% 36%',
-ADD COLUMN accent_color text DEFAULT '217 91% 60%',
-ADD COLUMN success_color text DEFAULT '142 76% 36%',
-ADD COLUMN warning_color text DEFAULT '38 92% 50%',
-ADD COLUMN error_color text DEFAULT '0 84% 60%',
-ADD COLUMN sidebar_color text,
-ADD COLUMN dark_mode_enabled boolean DEFAULT true;
-```
-
-### Hook useTheme
-
-```typescript
-// Logica principal
-function useTheme() {
-  const { settings } = useUnitSettings();
-  
-  useEffect(() => {
-    if (settings?.primary_color) {
-      document.documentElement.style.setProperty(
-        '--primary', 
-        settings.primary_color
-      );
-    }
-    // Aplicar demais cores...
-  }, [settings]);
-  
-  const setTheme = (mode: 'light' | 'dark') => {
-    document.documentElement.classList.toggle('dark', mode === 'dark');
-  };
-  
-  return { setTheme };
-}
-```
-
----
-
-## Interface da Aba Aparencia
-
-### Layout Responsivo
+### Consideracoes de Seguranca
 
 ```text
-Desktop (2 colunas):
-┌─────────────────────┬──────────────────┐
-│ Configuracoes       │ Preview ao Vivo  │
-│ de Cores            │ (Card fixo)      │
-└─────────────────────┴──────────────────┘
-
-Mobile (1 coluna):
-┌─────────────────────┐
-│ Preview ao Vivo     │
-├─────────────────────┤
-│ Configuracoes       │
-│ de Cores            │
-└─────────────────────┘
+Acesso Publico (sem auth)
+├── Leitura: tables, products, categories, units
+├── Escrita: orders, order_items
+└── RLS: Permitir insert em orders/order_items para anon
 ```
-
-### Elementos Visuais
-
-- **Color pickers** circulares com preview
-- **Sliders** para ajuste fino de saturacao/luminosidade
-- **Cards de preset** com gradiente de cores
-- **Toggle animado** para dark/light mode
-- **Botao "Resetar"** com confirmacao
 
 ---
 
-## Comportamento Esperado
+## Interface da Pagina de Pedidos
 
-| Acao | Resultado |
-|------|-----------|
-| Selecionar cor | Preview atualiza instantaneamente |
-| Clicar preset | Todas as cores da paleta aplicadas |
-| Toggle dark mode | Tema muda em tempo real |
-| Salvar | Cores persistidas no banco |
-| Novo login | Cores carregadas automaticamente |
-| Reset | Volta para cores padrao do sistema |
+### Layout Mobile (Prioridade)
+
+```text
+┌─────────────────────────┐
+│  🍔 RestaurantOS        │
+│  Mesa 4                 │
+├─────────────────────────┤
+│ [Todos] [Lanches] [Beb] │ ← Tabs categorias
+├─────────────────────────┤
+│ ┌─────┐ ┌─────┐        │
+│ │ 🍔  │ │ 🍕  │        │
+│ │ Burg│ │Pizza│        │ ← Grid 2 cols
+│ │R$25 │ │R$35 │        │
+│ └─────┘ └─────┘        │
+│ ┌─────┐ ┌─────┐        │
+│ │ 🥤  │ │ 🍟  │        │
+│ │Refri│ │Batata│       │
+│ │R$8  │ │R$15 │        │
+│ └─────┘ └─────┘        │
+├─────────────────────────┤
+│ 🛒 Carrinho (3)  R$68  │ ← Botao fixo inferior
+└─────────────────────────┘
+```
+
+### Carrinho (Sheet/Drawer)
+
+```text
+┌─────────────────────────┐
+│ Seu Pedido        [X]   │
+├─────────────────────────┤
+│ 2x Burger      R$ 50,00 │
+│ 1x Pizza       R$ 35,00 │
+│ 1x Refrigerante R$ 8,00 │
+├─────────────────────────┤
+│ Total          R$ 93,00 │
+├─────────────────────────┤
+│ Nome: ________________  │
+│ Tel:  ________________  │
+├─────────────────────────┤
+│  [  Enviar Pedido  ]    │
+└─────────────────────────┘
+```
 
 ---
 
 ## Sequencia de Implementacao
 
-1. Criar migracao SQL para adicionar colunas de cor
-2. Atualizar tipos em `useUnitSettings.ts`
-3. Criar componente `ColorPicker.tsx`
-4. Criar componente `ColorPreviewCard.tsx`
-5. Criar componente `ColorPresets.tsx`
-6. Criar hook `useTheme.ts`
-7. Adicionar aba "Aparencia" em `Settings.tsx`
-8. Integrar `useTheme` no `App.tsx` para aplicar cores globalmente
-9. Testar responsividade e persistencia
+1. Criar hook `useCustomerOrder.ts`
+2. Criar pagina `CustomerOrder.tsx`
+3. Adicionar rota em `App.tsx`
+4. Verificar/ajustar RLS para permitir pedidos anonimos
+5. Testar fluxo completo
+6. Ajustar detalhes de scroll na pagina Tables
+
+---
+
+## Resultado Esperado
+
+| Acao | Antes | Depois |
+|------|-------|--------|
+| Clicar "Abrir Link" | Erro 404 | Abre cardapio digital |
+| Cliente escaneia QR | Pagina inexistente | Ve menu do restaurante |
+| Cliente faz pedido | Impossivel | Pedido criado no sistema |
+| Scroll em Tables | Funciona | Mais suave e responsivo |
