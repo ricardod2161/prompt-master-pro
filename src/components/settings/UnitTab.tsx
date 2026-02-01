@@ -1,8 +1,10 @@
-import { Building2, Save, Store, Phone, MapPin, FileText } from "lucide-react";
+import { Building2, Save, Store, Phone, MapPin, FileText, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SettingCard } from "./SettingCard";
+import { LogoUpload } from "./LogoUpload";
+import { Separator } from "@/components/ui/separator";
 
 interface UnitFormData {
   name: string;
@@ -13,13 +15,38 @@ interface UnitFormData {
 
 interface UnitTabProps {
   unitForm: UnitFormData;
+  unitId: string;
+  logoUrl?: string | null;
   onFormChange: (form: UnitFormData) => void;
+  onLogoChange: (url: string | null) => void;
   onSave: () => void;
 }
 
-export function UnitTab({ unitForm, onFormChange, onSave }: UnitTabProps) {
+export function UnitTab({ 
+  unitForm, 
+  unitId, 
+  logoUrl, 
+  onFormChange, 
+  onLogoChange, 
+  onSave 
+}: UnitTabProps) {
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in space-y-6">
+      {/* Logo Section */}
+      <SettingCard
+        icon={Sparkles}
+        title="Identidade Visual"
+        description="Personalize sua marca com logo e identidade"
+        variant="elevated"
+      >
+        <LogoUpload 
+          unitId={unitId} 
+          currentLogoUrl={logoUrl} 
+          onLogoChange={onLogoChange} 
+        />
+      </SettingCard>
+
+      {/* Unit Data Section */}
       <SettingCard
         icon={Building2}
         title="Dados da Unidade"
@@ -84,7 +111,9 @@ export function UnitTab({ unitForm, onFormChange, onSave }: UnitTabProps) {
           />
         </div>
         
-        <div className="pt-4 border-t border-border/50">
+        <Separator className="my-4" />
+        
+        <div className="flex justify-end">
           <Button 
             onClick={onSave} 
             className="w-full sm:w-auto bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all duration-300"
