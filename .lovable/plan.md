@@ -1,224 +1,119 @@
 
-# Plano: Sistema de Assinaturas Stripe - Visual 3D Profissional
+# Plano: Melhorias Gerais - Sistema de Assinaturas e Navegacao
 
-## Produtos Criados no Stripe
+## 1. Configuracao do Stripe Customer Portal (Acao Manual)
 
-| Plano | Preço | Product ID | Price ID |
-|-------|-------|------------|----------|
-| Starter | R$ 99/mês | prod_Ttv3LNr32ThW8G | price_1Sw7D7KBKtRrb6BSDHI3wTSm |
-| Pro | R$ 199/mês | prod_Ttv5fsMXdkwI7k | price_1Sw7F8KBKtRrb6BSXgHeKCsG |
-| Enterprise | R$ 399/mês | prod_Ttv6ifEGhgCeOI | price_1Sw7GEKBKtRrb6BSdkqlVaLt |
+Antes de tudo, voce precisa configurar o Customer Portal no dashboard do Stripe:
 
----
-
-## Arquitetura do Sistema
-
-```text
-┌──────────────────────────────────────────────────────────────────┐
-│                    FLUXO DE ASSINATURA                           │
-├──────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   [Login] → [Dashboard] → [Pricing Page] → [Stripe Checkout]    │
-│                ↓                                  ↓               │
-│         [check-subscription]              [Pagamento OK]         │
-│                ↓                                  ↓               │
-│         [AuthContext]  ←──────────────────  [Redirect]           │
-│                ↓                                                 │
-│    [Acesso Liberado/Bloqueado]                                  │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
-```
+1. Acesse https://dashboard.stripe.com/settings/billing/portal
+2. Configure as seguintes opcoes:
+   - **Permitir cancelamento de assinaturas**: Ativar
+   - **Permitir troca de planos**: Ativar e selecionar os 3 produtos criados (Starter, Pro, Enterprise)
+   - **Permitir atualizacao de metodo de pagamento**: Ativar
+   - **Historico de faturas**: Ativar
+   - **Branding**: Adicionar logo e cores do RestaurantOS
 
 ---
 
-## 1. Edge Functions a Criar
+## 2. Novo Componente: PageHeader com Botao Voltar
 
-### 1.1 create-checkout
-Cria sessao de checkout do Stripe para assinatura.
-
-```text
-Funcionalidades:
-├── Autentica usuario via Supabase
-├── Verifica se ja existe customer no Stripe
-├── Cria checkout session com price_id
-├── Retorna URL para redirect
-└── Suporta os 3 planos (Starter, Pro, Enterprise)
-```
-
-### 1.2 check-subscription
-Verifica status da assinatura do usuario.
+Criar um componente reutilizavel para todas as paginas com:
 
 ```text
-Funcionalidades:
-├── Busca customer pelo email no Stripe
-├── Lista subscriptions ativas
-├── Identifica tier pelo product_id
-├── Retorna: subscribed, tier, subscription_end
-└── Logging detalhado para debug
+PageHeader
+├── Botao Voltar (condicional, com animacao hover)
+├── Breadcrumbs (opcional)
+├── Titulo da pagina (h1)
+├── Subtitulo/descricao
+├── Acoes do lado direito (botoes, badges)
+└── Responsivo (mobile-first)
 ```
 
-### 1.3 customer-portal
-Gerenciamento de assinatura via portal Stripe.
-
-```text
-Funcionalidades:
-├── Autentica usuario
-├── Busca customer_id no Stripe
-├── Cria billing portal session
-├── Retorna URL do portal
-└── Permite cancelar/upgrade/downgrade
-```
-
----
-
-## 2. Atualizacoes no AuthContext
-
-### Novo Estado de Assinatura
-
-```text
-AuthContextType (atualizado):
-├── user, session, loading (existentes)
-├── subscription: {
-│   ├── subscribed: boolean
-│   ├── tier: 'starter' | 'pro' | 'enterprise' | null
-│   ├── productId: string | null
-│   └── subscriptionEnd: string | null
-│ }
-├── checkSubscription: () => Promise<void>
-└── isSubscriptionLoading: boolean
-```
-
-### Verificacao Automatica
-
-```text
-Triggers de verificacao:
-├── Login bem-sucedido
-├── Carregamento inicial da pagina
-├── A cada 60 segundos (auto-refresh)
-└── Apos retorno do checkout
-```
-
----
-
-## 3. Nova Pagina: Pricing
-
-### Visual 3D Profissional
+### Visual
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
+│  ← Voltar   Dashboard > Planos                                      │
 │                                                                     │
-│    🚀  Escolha o Plano Ideal para seu Restaurante                  │
-│        Comece gratis por 14 dias. Cancele quando quiser.           │
-│                                                                     │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐     │
-│  │    STARTER      │  │      PRO        │  │   ENTERPRISE    │     │
-│  │    R$ 99/mês    │  │   R$ 199/mês    │  │   R$ 399/mês    │     │
-│  │                 │  │  ★ POPULAR ★    │  │                 │     │
-│  │ ✓ PDV           │  │ ✓ Tudo Starter  │  │ ✓ Tudo Pro      │     │
-│  │ ✓ Cardapio      │  │ ✓ Delivery      │  │ ✓ Multi-unidade │     │
-│  │ ✓ KDS basico    │  │ ✓ Relatorios    │  │ ✓ API           │     │
-│  │ ✓ 1 unidade     │  │ ✓ WhatsApp      │  │ ✓ Suporte 24/7  │     │
-│  │                 │  │ ✓ 3 unidades    │  │ ✓ Ilimitado     │     │
-│  │ [Assinar]       │  │ [Assinar]       │  │ [Contato]       │     │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘     │
-│       ↑ Card3D            ↑ Card3D + Glow      ↑ Card3D            │
-│                                                                     │
+│  Planos e Precos                              [Status] [Atualizar]  │
+│  Escolha o plano ideal para seu restaurante                        │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Caracteristicas Visuais
+---
 
-```text
-Cards 3D:
-├── Sombras em multiplas camadas
-├── Hover com lift (translateY -8px)
-├── Border gradient no plano popular
-├── Glow pulse no badge "Popular"
-├── Icones com animacao check
-└── Botao com gradiente + hover effect
+## 3. Melhorias na Pagina de Pricing
 
-Background:
-├── Gradiente radial sutil
-├── Pattern de pontos (dot grid)
-├── Glassmorphism no header
-└── Transicoes suaves
-```
+### 3.1 Adicionar PageHeader
+- Botao voltar para /dashboard (ou pagina anterior)
+- Breadcrumbs: Dashboard > Planos
+
+### 3.2 Design Profissional Aprimorado
+- Container maximo responsivo
+- Animacoes staggered nos cards
+- Comparativo de features entre planos
+- Indicador visual de economia anual (opcional futuro)
+
+### 3.3 FAQ Melhorado
+- Usar componente Accordion para FAQ
+- Animacoes de abertura/fechamento
+- Icones visuais nas perguntas
+
+### 3.4 Secao CTA Final
+- Garantia de satisfacao
+- Suporte humanizado
+- Link para contato
 
 ---
 
-## 4. Componentes a Criar
+## 4. Melhorias nos Cards de Preco (PricingCard)
 
-### 4.1 PricingCard
+### 4.1 Visual 3D Aprimorado
+- Adicionar icone por tier (Zap, Sparkles, Crown)
+- Animacao de entrada staggered
+- Hover effect mais pronunciado
+- Transicoes suaves
 
-```text
-PricingCard
-├── Props: tier, price, features, popular, currentPlan
-├── Visual 3D com hover effects
-├── Badge "Seu Plano" se ativo
-├── Badge "Popular" se destacado
-├── Botao contextual (Assinar/Gerenciar/Contato)
-└── Loading state durante checkout
-```
+### 4.2 Estados Visuais
+- Loading skeleton durante carregamento
+- Disabled state para planos inacessiveis
+- Animacao de confirmacao ao clicar
 
-### 4.2 SubscriptionBadge
-
-```text
-SubscriptionBadge (para sidebar/header)
-├── Mostra tier atual
-├── Cor por tier (verde/azul/roxo)
-├── Link para pagina de pricing
-├── Tooltip com data de renovacao
-└── Animacao pulse se proximo do vencimento
-```
-
-### 4.3 SubscriptionGate
-
-```text
-SubscriptionGate (HOC para protecao)
-├── Verifica tier minimo requerido
-├── Mostra modal de upgrade se necessario
-├── Redirect para pricing se nao assinante
-└── Loading skeleton durante verificacao
-```
+### 4.3 Melhorar Responsividade
+- Stack vertical em mobile
+- Cards menores em tablet
+- Layout grid em desktop
 
 ---
 
-## 5. Integracao na Sidebar
+## 5. Melhorias na Pagina de Sucesso
 
-### Menu de Assinatura
+### 5.1 Adicionar PageHeader
+- Botao voltar para /pricing
 
-```text
-AppSidebar (atualizado):
-├── [Existing menu items...]
-├── ───────────────────────
-├── [💳 Planos] → /pricing
-├── [👤 Minha Conta] → customer-portal
-└── [Subscription Badge] no footer
-```
+### 5.2 Animacoes de Celebracao
+- Confetti animation (opcional)
+- Icone pulsante de sucesso
+- Entrada suave dos elementos
+
+### 5.3 Informacoes Completas
+- Resumo do plano adquirido
+- Proximos passos
+- Links uteis (dashboard, suporte)
 
 ---
 
-## 6. Pagina de Sucesso
+## 6. Melhorias no AppLayout
 
-### /subscription-success
+### 6.1 Header Aprimorado
+- Adicionar titulo da pagina atual
+- Botao voltar contextual
+- Breadcrumbs navegaveis
 
-```text
-┌─────────────────────────────────────────────┐
-│                                             │
-│         ✨ Parabens! ✨                     │
-│                                             │
-│   Sua assinatura foi ativada com sucesso.  │
-│                                             │
-│   Plano: Pro                                │
-│   Proxima cobranca: 01/03/2026             │
-│                                             │
-│   [🏠 Ir para Dashboard]                    │
-│   [⚙️ Gerenciar Assinatura]                │
-│                                             │
-└─────────────────────────────────────────────┘
-```
+### 6.2 Mobile-First
+- Menu hamburguer otimizado
+- Gestos de swipe
+- Safe areas para iOS
 
 ---
 
@@ -226,127 +121,120 @@ AppSidebar (atualizado):
 
 | Arquivo | Acao | Descricao |
 |---------|------|-----------|
-| `supabase/functions/create-checkout/index.ts` | Criar | Edge function checkout |
-| `supabase/functions/check-subscription/index.ts` | Criar | Edge function verificacao |
-| `supabase/functions/customer-portal/index.ts` | Criar | Edge function portal |
-| `src/contexts/AuthContext.tsx` | Modificar | Adicionar estado de assinatura |
-| `src/pages/Pricing.tsx` | Criar | Pagina de planos 3D |
-| `src/pages/SubscriptionSuccess.tsx` | Criar | Pagina de sucesso |
-| `src/components/subscription/PricingCard.tsx` | Criar | Card de plano 3D |
-| `src/components/subscription/SubscriptionBadge.tsx` | Criar | Badge de tier |
-| `src/components/subscription/SubscriptionGate.tsx` | Criar | HOC de protecao |
-| `src/hooks/useSubscription.ts` | Criar | Hook de assinatura |
-| `src/lib/subscription-tiers.ts` | Criar | Constantes dos planos |
-| `src/App.tsx` | Modificar | Adicionar rotas |
-| `src/components/layout/AppSidebar.tsx` | Modificar | Adicionar menu assinatura |
+| `src/components/shared/PageHeader.tsx` | Criar | Header reutilizavel com back button |
+| `src/components/shared/Breadcrumbs.tsx` | Criar | Navegacao por breadcrumbs |
+| `src/pages/Pricing.tsx` | Modificar | Adicionar PageHeader, melhorar layout |
+| `src/pages/SubscriptionSuccess.tsx` | Modificar | Adicionar PageHeader, melhorar UX |
+| `src/components/subscription/PricingCard.tsx` | Modificar | Icones, animacoes, responsividade |
+| `src/components/layout/AppLayout.tsx` | Modificar | Header com navegacao |
+| `src/index.css` | Modificar | Novas animacoes e utilitarios |
 
 ---
 
-## 8. Constantes dos Planos
+## 8. Novas Classes CSS
+
+```css
+/* Animacoes staggered */
+.animate-stagger-1 { animation-delay: 0.1s; }
+.animate-stagger-2 { animation-delay: 0.2s; }
+.animate-stagger-3 { animation-delay: 0.3s; }
+
+/* Fade in up */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s ease-out forwards;
+}
+
+/* Botao voltar hover */
+.back-button:hover {
+  transform: translateX(-4px);
+}
+```
+
+---
+
+## 9. Componente PageHeader - Especificacao
 
 ```typescript
-// src/lib/subscription-tiers.ts
-export const SUBSCRIPTION_TIERS = {
-  starter: {
-    name: "Starter",
-    productId: "prod_Ttv3LNr32ThW8G",
-    priceId: "price_1Sw7D7KBKtRrb6BSDHI3wTSm",
-    price: 99,
-    features: [
-      "PDV completo",
-      "Cardapio Digital",
-      "KDS basico",
-      "1 unidade",
-      "Suporte por email"
-    ],
-    limits: { units: 1, delivery: false, whatsapp: false }
-  },
-  pro: {
-    name: "Pro",
-    productId: "prod_Ttv5fsMXdkwI7k",
-    priceId: "price_1Sw7F8KBKtRrb6BSXgHeKCsG",
-    price: 199,
-    popular: true,
-    features: [
-      "Tudo do Starter",
-      "Modulo Delivery",
-      "Relatorios avancados",
-      "Integracao WhatsApp",
-      "Ate 3 unidades",
-      "Suporte prioritario"
-    ],
-    limits: { units: 3, delivery: true, whatsapp: true }
-  },
-  enterprise: {
-    name: "Enterprise",
-    productId: "prod_Ttv6ifEGhgCeOI",
-    priceId: "price_1Sw7GEKBKtRrb6BSdkqlVaLt",
-    price: 399,
-    features: [
-      "Tudo do Pro",
-      "Unidades ilimitadas",
-      "API personalizada",
-      "Suporte 24/7",
-      "Gerente de conta dedicado",
-      "Treinamento personalizado"
-    ],
-    limits: { units: Infinity, delivery: true, whatsapp: true }
+interface PageHeaderProps {
+  title: string;
+  description?: string;
+  showBackButton?: boolean;
+  backTo?: string; // URL ou -1 para history.back()
+  breadcrumbs?: { label: string; href?: string }[];
+  actions?: React.ReactNode;
+  badge?: React.ReactNode;
+  className?: string;
+}
+```
+
+### Exemplo de Uso
+
+```tsx
+<PageHeader
+  title="Planos e Precos"
+  description="Escolha o plano ideal para seu restaurante"
+  showBackButton
+  backTo="/dashboard"
+  breadcrumbs={[
+    { label: "Dashboard", href: "/dashboard" },
+    { label: "Planos" }
+  ]}
+  badge={<SubscriptionBadge tier={subscription.tier} />}
+  actions={
+    <Button onClick={checkSubscription}>
+      <RefreshCw /> Atualizar
+    </Button>
   }
-};
+/>
 ```
 
 ---
 
-## 9. Fluxo de Usuario
+## 10. Melhorias de Responsividade
 
-```text
-1. Usuario faz login
-   └─> check-subscription automatico
-   
-2. Se nao assinante:
-   └─> Pode acessar paginas basicas
-   └─> Modal de upgrade em features premium
-   
-3. Clica em "Assinar":
-   └─> Seleciona plano
-   └─> create-checkout (edge function)
-   └─> Redirect para Stripe Checkout
-   
-4. Paga no Stripe:
-   └─> Redirect para /subscription-success
-   └─> check-subscription atualiza estado
-   
-5. Gerenciamento:
-   └─> Clica em "Gerenciar Assinatura"
-   └─> customer-portal (edge function)
-   └─> Abre Stripe Customer Portal
-```
+### Mobile (< 640px)
+- Cards em coluna unica
+- Botoes full-width
+- Font sizes reduzidos
+- Padding compacto
+
+### Tablet (640px - 1024px)
+- Grid de 2 colunas
+- Cards side-by-side
+- Header compacto
+
+### Desktop (> 1024px)
+- Grid de 3 colunas
+- Layout espalhado
+- Hover effects completos
 
 ---
 
-## 10. Ordem de Implementacao
+## 11. Ordem de Implementacao
 
-1. Criar constantes dos planos (`subscription-tiers.ts`)
-2. Criar edge functions (create-checkout, check-subscription, customer-portal)
-3. Atualizar AuthContext com estado de assinatura
-4. Criar hook useSubscription
-5. Criar componentes (PricingCard, SubscriptionBadge)
-6. Criar pagina Pricing com visual 3D
-7. Criar pagina SubscriptionSuccess
-8. Adicionar rotas no App.tsx
-9. Atualizar AppSidebar com menu de assinatura
-10. Criar SubscriptionGate para protecao de features
-11. Testar fluxo completo de assinatura
+1. Criar CSS utilities e animacoes
+2. Criar componente PageHeader
+3. Criar componente Breadcrumbs
+4. Atualizar PricingCard com melhorias visuais
+5. Atualizar pagina Pricing com PageHeader e layout
+6. Atualizar pagina SubscriptionSuccess
+7. Atualizar AppLayout com header melhorado
+8. Testar responsividade em todos os breakpoints
 
 ---
 
-## 11. Resultado Visual Esperado
+## 12. Resultado Esperado
 
-| Elemento | Descricao |
-|----------|-----------|
-| Pricing Page | Cards 3D com hover lift, gradientes, glassmorphism |
-| Card Popular | Borda luminosa, badge pulsante, destaque visual |
-| Botoes | Gradiente primario, shadow 3D, hover scale |
-| Success Page | Confetti animation, card central glass |
-| Sidebar Badge | Tier colorido, tooltip interativo |
-| Gate Modal | Blur backdrop, card 3D, CTA claro |
+| Area | Melhoria |
+|------|----------|
+| Navegacao | Botao voltar consistente em todas as paginas |
+| Visual | Cards 3D com animacoes profissionais |
+| UX | Feedback visual em todas as acoes |
+| Mobile | Layout responsivo otimizado |
+| Acessibilidade | Aria labels, focus states, keyboard nav |
+| Performance | Animacoes via CSS (GPU accelerated) |
