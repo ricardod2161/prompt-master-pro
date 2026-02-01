@@ -15,6 +15,7 @@ import Login from "./pages/Login";
 import SelectUnit from "./pages/SelectUnit";
 import Dashboard from "./pages/Dashboard";
 import Menu from "./pages/Menu";
+import CustomerOrder from "./pages/CustomerOrder";
 import POS from "./pages/POS";
 import KDS from "./pages/KDS";
 import Orders from "./pages/Orders";
@@ -50,6 +51,7 @@ const App = () => (
                 {/* Public routes */}
                 <Route path="/" element={<Login />} />
                 <Route path="/select-unit" element={<SelectUnit />} />
+                <Route path="/order/:tableId" element={<CustomerOrder />} />
 
                 {/* Protected routes with layout */}
                 <Route element={<AppLayout />}>
