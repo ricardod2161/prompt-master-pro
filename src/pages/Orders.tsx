@@ -277,193 +277,202 @@ function OrderDetailsModal({
 
   return (
     <Dialog open={!!order} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col p-0">
-        <DialogHeader className="p-4 pb-0">
-          <DialogTitle className="flex items-center gap-2">
-            <Package className="h-5 w-5 text-primary" />
-            Pedido #{order.order_number}
-          </DialogTitle>
-        </DialogHeader>
-        
-        {/* Header info */}
-        <div className="px-4 pb-3 flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Clock className="h-4 w-4" />
-            <span>
-              {format(new Date(order.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <ChannelBadge channel={order.channel} />
-            <StatusBadge status={order.status || "pending"} />
+      <DialogContent className="sm:max-w-lg w-[95vw] max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+        {/* Fixed Header */}
+        <div className="flex-shrink-0 border-b bg-card">
+          <DialogHeader className="px-4 py-3 sm:px-6 sm:py-4">
+            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
+              <Package className="h-5 w-5 text-primary" />
+              Pedido #{order.order_number}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="px-4 pb-3 sm:px-6 sm:pb-4 flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+              <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span>
+                {format(new Date(order.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <ChannelBadge channel={order.channel} />
+              <StatusBadge status={order.status || "pending"} />
+            </div>
           </div>
         </div>
         
-        <Separator />
-        
-        {/* Scrollable content */}
-        <ScrollArea className="flex-1 px-4">
-          <div className="space-y-4 py-4">
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="px-4 py-4 sm:px-6 space-y-4">
             {/* Customer info */}
             {(order.customer_name || order.customer_phone) && (
-              <div className="space-y-2">
+              <section className="space-y-2">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <User className="h-4 w-4 text-primary" />
                   <span>Cliente</span>
                 </div>
-                <Card className="bg-muted/50">
-                  <CardContent className="p-3">
+                <Card className="bg-muted/50 border-muted">
+                  <CardContent className="p-3 sm:p-4">
                     {order.customer_name && (
-                      <p className="font-medium">{order.customer_name}</p>
+                      <p className="font-medium text-sm sm:text-base">{order.customer_name}</p>
                     )}
                     {order.customer_phone && (
-                      <p className="text-sm text-muted-foreground">{order.customer_phone}</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground">{order.customer_phone}</p>
                     )}
                   </CardContent>
                 </Card>
-              </div>
+              </section>
             )}
             
             {/* Delivery address */}
             {order.delivery_order && (
-              <div className="space-y-2">
+              <section className="space-y-2">
                 <div className="flex items-center gap-2 text-sm font-medium">
-                  <MapPin className="h-4 w-4 text-primary" />
+                  <MapPin className="h-4 w-4 text-orange-500" />
                   <span>Endereço de Entrega</span>
                 </div>
-                <Card className="bg-muted/50 border-orange-500/20">
-                  <CardContent className="p-3">
-                    <p className="font-medium">{order.delivery_order.address}</p>
+                <Card className="bg-orange-500/5 border-orange-500/20">
+                  <CardContent className="p-3 sm:p-4">
+                    <p className="font-medium text-sm sm:text-base">{order.delivery_order.address}</p>
                     {order.notes && order.notes.includes("Ref:") && (
-                      <p className="text-sm text-muted-foreground mt-1">
+                      <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                         📍 {order.notes.split("Ref:")[1]?.split("|")[0]?.trim()}
                       </p>
                     )}
                   </CardContent>
                 </Card>
-              </div>
+              </section>
             )}
             
             {/* Items */}
-            <div className="space-y-2">
+            <section className="space-y-2">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <ShoppingBag className="h-4 w-4 text-primary" />
                 <span>Itens do Pedido</span>
               </div>
               <Card>
-                <CardContent className="p-3 space-y-2">
-                  {order.order_items?.map((item) => (
-                    <div key={item.id} className="flex justify-between text-sm py-1">
-                      <span className="flex items-center gap-2">
-                        <Badge variant="secondary" className="h-5 w-5 p-0 justify-center text-xs">
-                          {item.quantity}
-                        </Badge>
-                        {item.product_name}
-                      </span>
-                      <span className="font-medium">R$ {item.total_price.toFixed(2)}</span>
-                    </div>
-                  ))}
-                  <Separator className="my-2" />
-                  <div className="flex justify-between font-bold text-base">
+                <CardContent className="p-3 sm:p-4">
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                    {order.order_items?.map((item) => (
+                      <div key={item.id} className="flex justify-between items-center text-sm py-1.5 border-b border-border/50 last:border-0">
+                        <span className="flex items-center gap-2 flex-1 min-w-0">
+                          <Badge variant="secondary" className="h-5 w-5 p-0 justify-center text-xs flex-shrink-0">
+                            {item.quantity}
+                          </Badge>
+                          <span className="truncate">{item.product_name}</span>
+                        </span>
+                        <span className="font-medium flex-shrink-0 ml-2">R$ {item.total_price.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <Separator className="my-3" />
+                  <div className="flex justify-between font-bold text-base sm:text-lg">
                     <span>Total</span>
                     <span className="text-primary">R$ {order.total_price.toFixed(2)}</span>
                   </div>
                 </CardContent>
               </Card>
-            </div>
+            </section>
             
             {/* Payment */}
             {order.order_payments && order.order_payments.length > 0 && (
-              <div className="space-y-2">
+              <section className="space-y-2">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <CreditCard className="h-4 w-4 text-primary" />
                   <span>Pagamento</span>
                 </div>
-                <Card className="bg-muted/50">
-                  <CardContent className="p-3 space-y-1">
+                <Card className="bg-muted/50 border-muted">
+                  <CardContent className="p-3 sm:p-4 space-y-2">
                     {order.order_payments.map((payment) => (
                       <div key={payment.id} className="flex justify-between text-sm">
-                        <span>{paymentLabels[payment.method] || payment.method}</span>
+                        <span className="text-muted-foreground">{paymentLabels[payment.method] || payment.method}</span>
                         <span className="font-medium">R$ {payment.amount.toFixed(2)}</span>
                       </div>
                     ))}
                     {changeFor && (
-                      <div className="flex justify-between text-sm pt-1 border-t mt-1">
-                        <span className="text-muted-foreground">Troco para</span>
-                        <span className="font-medium text-orange-600">R$ {changeFor}</span>
-                      </div>
+                      <>
+                        <Separator />
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Troco para</span>
+                          <span className="font-medium text-orange-500">R$ {changeFor}</span>
+                        </div>
+                      </>
                     )}
                   </CardContent>
                 </Card>
-              </div>
+              </section>
             )}
             
             {/* Notes (only if not address-related) */}
             {order.notes && !order.notes.includes("Ref:") && !order.notes.includes("Troco") && (
-              <div className="p-3 bg-muted rounded-md">
-                <p className="text-sm">📋 {order.notes}</p>
-              </div>
+              <section className="p-3 bg-muted/50 rounded-lg border">
+                <p className="text-sm flex items-start gap-2">
+                  <span className="flex-shrink-0">📋</span>
+                  <span>{order.notes}</span>
+                </p>
+              </section>
             )}
             
-            {/* Actions */}
-            <div className="space-y-4 pt-2">
-              {/* Print button */}
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => onPrint(order)}
-              >
-                <Printer className="h-4 w-4 mr-2" />
-                Imprimir Comanda
-              </Button>
-              
-              {/* Status buttons */}
-              <div className="space-y-2">
-                <div className="text-sm font-medium">Alterar Status</div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {(["pending", "preparing", "ready", "delivered", "cancelled"] as OrderStatus[]).map((status) => {
-                    const statusConfig: Record<OrderStatus, { icon: React.ReactNode; className: string }> = {
-                      pending: { icon: <Clock className="h-3.5 w-3.5" />, className: "border-yellow-500 text-yellow-600 hover:bg-yellow-500/10" },
-                      preparing: { icon: <ChefHat className="h-3.5 w-3.5" />, className: "border-blue-500 text-blue-600 hover:bg-blue-500/10" },
-                      ready: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, className: "border-green-500 text-green-600 hover:bg-green-500/10" },
-                      delivered: { icon: <Truck className="h-3.5 w-3.5" />, className: "border-gray-500 text-gray-600 hover:bg-gray-500/10" },
-                      cancelled: { icon: <XCircle className="h-3.5 w-3.5" />, className: "border-red-500 text-red-600 hover:bg-red-500/10" },
-                    };
-                    const config = statusConfig[status];
-                    const isActive = order.status === status;
-                    const showNotificationHint = status === "ready" && order.status !== "ready" && order.customer_phone;
-                    
-                    return (
-                      <Button
-                        key={status}
-                        variant={isActive ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => onStatusChange(order.id, status)}
-                        disabled={isUpdating}
-                        className={cn(
-                          "flex items-center gap-1.5",
-                          !isActive && config.className
-                        )}
-                      >
-                        {config.icon}
+            {/* Status buttons */}
+            <section className="space-y-3 pt-2">
+              <div className="text-sm font-medium">Alterar Status</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {(["pending", "preparing", "ready", "delivered", "cancelled"] as OrderStatus[]).map((status) => {
+                  const statusConfig: Record<OrderStatus, { icon: React.ReactNode; className: string }> = {
+                    pending: { icon: <Clock className="h-3.5 w-3.5" />, className: "border-yellow-500/50 text-yellow-600 hover:bg-yellow-500/10 hover:border-yellow-500" },
+                    preparing: { icon: <ChefHat className="h-3.5 w-3.5" />, className: "border-blue-500/50 text-blue-600 hover:bg-blue-500/10 hover:border-blue-500" },
+                    ready: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, className: "border-green-500/50 text-green-600 hover:bg-green-500/10 hover:border-green-500" },
+                    delivered: { icon: <Truck className="h-3.5 w-3.5" />, className: "border-gray-500/50 text-gray-600 hover:bg-gray-500/10 hover:border-gray-500" },
+                    cancelled: { icon: <XCircle className="h-3.5 w-3.5" />, className: "border-red-500/50 text-red-600 hover:bg-red-500/10 hover:border-red-500" },
+                  };
+                  const config = statusConfig[status];
+                  const isActive = order.status === status;
+                  const showNotificationHint = status === "ready" && order.status !== "ready" && order.customer_phone;
+                  
+                  return (
+                    <Button
+                      key={status}
+                      variant={isActive ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => onStatusChange(order.id, status)}
+                      disabled={isUpdating}
+                      className={cn(
+                        "flex items-center gap-1.5 h-9 text-xs sm:text-sm",
+                        !isActive && config.className
+                      )}
+                    >
+                      {config.icon}
+                      <span className="hidden xs:inline sm:inline">
                         {statusOptions.find((s) => s.value === status)?.label}
-                        {showNotificationHint && (
-                          <Bell className="h-3 w-3 ml-0.5 animate-pulse" />
-                        )}
-                      </Button>
-                    );
-                  })}
-                </div>
-                {order.customer_phone && order.status !== "ready" && (
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Bell className="h-3 w-3" />
-                    Cliente será notificado via WhatsApp quando marcar como Pronto
-                  </p>
-                )}
+                      </span>
+                      {showNotificationHint && (
+                        <Bell className="h-3 w-3 ml-0.5 animate-pulse" />
+                      )}
+                    </Button>
+                  );
+                })}
               </div>
-            </div>
+              {order.customer_phone && order.status !== "ready" && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5 bg-muted/50 p-2 rounded-md">
+                  <Bell className="h-3 w-3 flex-shrink-0" />
+                  <span>Cliente será notificado via WhatsApp quando marcar como Pronto</span>
+                </p>
+              )}
+            </section>
           </div>
-        </ScrollArea>
+        </div>
+        
+        {/* Fixed Footer */}
+        <div className="flex-shrink-0 border-t bg-card px-4 py-3 sm:px-6 sm:py-4">
+          <Button
+            variant="outline"
+            className="w-full h-10 sm:h-11"
+            onClick={() => onPrint(order)}
+          >
+            <Printer className="h-4 w-4 mr-2" />
+            Imprimir Comanda
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );
