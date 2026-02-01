@@ -3,6 +3,7 @@ import { toast } from "@/hooks/use-toast";
 import type { Order } from "@/hooks/useOrders";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useUnitSettings } from "@/hooks/useUnitSettings";
 
 // Thermal printer bridge URL (local service)
 const PRINTER_API_URL = "http://localhost:3001";
@@ -150,6 +151,8 @@ function printViaBrowser(ticketText: string, orderNumber: number): void {
 }
 
 export function usePrintOrder() {
+  const { settings } = useUnitSettings();
+  
   const printKitchenTicket = useCallback(async (order: Order, showToast = true) => {
     const ticketData: PrintTicketData = {
       orderNumber: order.order_number,
@@ -185,12 +188,19 @@ export function usePrintOrder() {
     return true;
   }, []);
   
-  // Auto-print when status changes to preparing
+  // Auto-print when status changes to preparing (if enabled in settings)
   const printOnPreparing = useCallback(async (order: Order, newStatus: string, previousStatus: string | null) => {
+    // Check if auto-print is enabled (default to true for backwards compatibility)
+    const autoPrintEnabled = settings?.auto_print_enabled ?? true;
+    
+    if (!autoPrintEnabled) {
+      return; // Auto-print disabled, skip silently
+    }
+    
     if (newStatus === "preparing" && previousStatus !== "preparing") {
       await printKitchenTicket(order, true);
     }
-  }, [printKitchenTicket]);
+  }, [printKitchenTicket, settings?.auto_print_enabled]);
   
   return {
     printKitchenTicket,
