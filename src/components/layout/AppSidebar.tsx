@@ -70,11 +70,11 @@ export function AppSidebar() {
   const { selectedUnit } = useUnit();
 
   return (
-    <Sidebar>
-      <SidebarHeader className="border-b border-sidebar-border">
+    <Sidebar className="border-r border-sidebar-border/50">
+      <SidebarHeader className="border-b border-sidebar-border/50">
         <div className="flex items-center gap-3 px-2 py-3">
-          <div className="w-10 h-10 rounded-xl bg-sidebar-primary/10 flex items-center justify-center">
-            <Utensils className="w-5 h-5 text-sidebar-primary" />
+          <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-lg">
+            <Utensils className="w-5 h-5 text-primary-foreground" />
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="font-semibold text-sm truncate">RestaurantOS</h2>
@@ -87,37 +87,49 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent className="px-2">
         {menuItems.map((group) => (
           <SidebarGroup key={group.group}>
-            <SidebarGroupLabel>{group.group}</SidebarGroupLabel>
+            <SidebarGroupLabel className="text-xs text-sidebar-foreground/50 uppercase tracking-wider">
+              {group.group}
+            </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {group.items.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={location.pathname === item.url}
-                    >
-                      <NavLink to={item.url}>
-                        <item.icon className="w-4 h-4" />
-                        <span>{item.title}</span>
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+                {group.items.map((item) => {
+                  const isActive = location.pathname === item.url;
+                  return (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                        className={cn(
+                          "transition-all duration-200",
+                          isActive && "bg-sidebar-primary/10 text-sidebar-primary shadow-sm"
+                        )}
+                      >
+                        <NavLink to={item.url} className="group">
+                          <item.icon className={cn(
+                            "w-4 h-4 transition-transform group-hover:scale-110",
+                            isActive && "text-sidebar-primary"
+                          )} />
+                          <span>{item.title}</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border">
+      <SidebarFooter className="border-t border-sidebar-border/50">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild>
-              <NavLink to="/select-unit">
-                <Building2 className="w-4 h-4" />
+            <SidebarMenuButton asChild className="hover:bg-sidebar-accent">
+              <NavLink to="/select-unit" className="group">
+                <Building2 className="w-4 h-4 transition-transform group-hover:scale-110" />
                 <span>Trocar Unidade</span>
               </NavLink>
             </SidebarMenuButton>

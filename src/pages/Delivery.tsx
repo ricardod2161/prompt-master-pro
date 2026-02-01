@@ -1,18 +1,18 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Truck, Plus, User, Phone, Car, CheckCircle, Clock, MapPin } from "lucide-react";
+import { Truck, Plus, User, Phone, CheckCircle, Clock, MapPin } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card3D, Card3DContent, Card3DHeader, Card3DTitle, Card3DDescription } from "@/components/ui/card-3d";
+import { GlassCard } from "@/components/ui/glass-card";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOrders, type Order } from "@/hooks/useOrders";
-import { useDeliveryDrivers, useCreateDriver, useAssignDriver, useMarkDelivered, type DeliveryDriver } from "@/hooks/useDelivery";
+import { useDeliveryDrivers, useCreateDriver, useAssignDriver, useMarkDelivered } from "@/hooks/useDelivery";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -78,33 +78,39 @@ export default function Delivery() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between animate-fade-in-up">
         <div>
           <h1 className="text-2xl font-bold">Delivery</h1>
           <p className="text-muted-foreground">
             Gerencie entregas e entregadores
           </p>
         </div>
-        <Button onClick={() => setCreateDriverOpen(true)}>
+        <Button onClick={() => setCreateDriverOpen(true)} className="gradient-primary hover-lift">
           <Plus className="h-4 w-4 mr-2" />
           Novo Entregador
         </Button>
       </div>
 
       {/* Drivers */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
-            Entregadores ({drivers?.length || 0})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      <GlassCard className="animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
+        <div className="p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <User className="h-5 w-5 text-primary" />
+            </div>
+            <span className="font-semibold">Entregadores ({drivers?.length || 0})</span>
+          </div>
           {drivers && drivers.length > 0 ? (
             <div className="flex flex-wrap gap-3">
               {drivers.map((driver) => (
-                <Badge key={driver.id} variant="secondary" className="py-2 px-3">
-                  <User className="h-3 w-3 mr-1" />
+                <Badge 
+                  key={driver.id} 
+                  variant="secondary" 
+                  className="py-2.5 px-4 bg-background/50 hover:bg-background/80 transition-colors cursor-default"
+                >
+                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center mr-2">
+                    <User className="h-3 w-3 text-primary" />
+                  </div>
                   {driver.name}
                   {driver.vehicle && (
                     <span className="ml-2 text-muted-foreground">
@@ -119,19 +125,19 @@ export default function Delivery() {
               Nenhum entregador cadastrado
             </p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </GlassCard>
 
       {/* Orders Tabs */}
-      <Tabs defaultValue="pending">
-        <TabsList>
-          <TabsTrigger value="pending">
+      <Tabs defaultValue="pending" className="animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
+        <TabsList className="bg-muted/50">
+          <TabsTrigger value="pending" className="data-[state=active]:bg-background">
             Preparando ({pendingOrders.length})
           </TabsTrigger>
-          <TabsTrigger value="ready">
+          <TabsTrigger value="ready" className="data-[state=active]:bg-background">
             Prontos ({readyOrders.length})
           </TabsTrigger>
-          <TabsTrigger value="delivered">
+          <TabsTrigger value="delivered" className="data-[state=active]:bg-background">
             Entregues ({deliveredOrders.length})
           </TabsTrigger>
         </TabsList>
@@ -139,8 +145,12 @@ export default function Delivery() {
         <TabsContent value="pending" className="mt-4">
           {pendingOrders.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {pendingOrders.map((order) => (
-                <OrderCard key={order.id} order={order} />
+              {pendingOrders.map((order, index) => (
+                <OrderCard 
+                  key={order.id} 
+                  order={order} 
+                  style={{ animationDelay: `${0.1 * (index + 1)}s` }}
+                />
               ))}
             </div>
           ) : (
@@ -155,12 +165,13 @@ export default function Delivery() {
         <TabsContent value="ready" className="mt-4">
           {readyOrders.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {readyOrders.map((order) => (
+              {readyOrders.map((order, index) => (
                 <OrderCard
                   key={order.id}
                   order={order}
                   onAssign={() => openAssignDialog(order)}
                   onDeliver={() => markDelivered.mutate(order.id)}
+                  style={{ animationDelay: `${0.1 * (index + 1)}s` }}
                 />
               ))}
             </div>
@@ -176,8 +187,12 @@ export default function Delivery() {
         <TabsContent value="delivered" className="mt-4">
           {deliveredOrders.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {deliveredOrders.map((order) => (
-                <OrderCard key={order.id} order={order} />
+              {deliveredOrders.map((order, index) => (
+                <OrderCard 
+                  key={order.id} 
+                  order={order} 
+                  style={{ animationDelay: `${0.1 * (index + 1)}s` }}
+                />
               ))}
             </div>
           ) : (
@@ -192,7 +207,7 @@ export default function Delivery() {
 
       {/* Create Driver Dialog */}
       <Dialog open={createDriverOpen} onOpenChange={setCreateDriverOpen}>
-        <DialogContent>
+        <DialogContent className="glass">
           <DialogHeader>
             <DialogTitle>Novo Entregador</DialogTitle>
           </DialogHeader>
@@ -203,6 +218,7 @@ export default function Delivery() {
                 placeholder="Nome do entregador"
                 value={driverName}
                 onChange={(e) => setDriverName(e.target.value)}
+                className="bg-background/50"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -212,6 +228,7 @@ export default function Delivery() {
                   placeholder="(opcional)"
                   value={driverPhone}
                   onChange={(e) => setDriverPhone(e.target.value)}
+                  className="bg-background/50"
                 />
               </div>
               <div className="space-y-2">
@@ -220,6 +237,7 @@ export default function Delivery() {
                   placeholder="Ex: Moto, Bicicleta"
                   value={driverVehicle}
                   onChange={(e) => setDriverVehicle(e.target.value)}
+                  className="bg-background/50"
                 />
               </div>
             </div>
@@ -228,7 +246,11 @@ export default function Delivery() {
             <Button variant="outline" onClick={() => setCreateDriverOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleCreateDriver} disabled={createDriver.isPending || !driverName}>
+            <Button 
+              onClick={handleCreateDriver} 
+              disabled={createDriver.isPending || !driverName}
+              className="gradient-primary"
+            >
               {createDriver.isPending ? "Salvando..." : "Cadastrar"}
             </Button>
           </DialogFooter>
@@ -237,12 +259,12 @@ export default function Delivery() {
 
       {/* Assign Driver Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-        <DialogContent>
+        <DialogContent className="glass">
           <DialogHeader>
             <DialogTitle>Atribuir Entregador</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="p-4 bg-muted rounded-lg">
+            <div className="p-4 bg-background/50 rounded-lg">
               <p className="font-medium">Pedido #{selectedOrder?.order_number}</p>
               <p className="text-sm text-muted-foreground">
                 R$ {selectedOrder?.total_price.toFixed(2)}
@@ -251,7 +273,7 @@ export default function Delivery() {
             <div className="space-y-2">
               <Label>Entregador</Label>
               <Select value={selectedDriver} onValueChange={setSelectedDriver}>
-                <SelectTrigger>
+                <SelectTrigger className="bg-background/50">
                   <SelectValue placeholder="Selecione o entregador" />
                 </SelectTrigger>
                 <SelectContent>
@@ -269,6 +291,7 @@ export default function Delivery() {
                 placeholder="Endereço completo"
                 value={deliveryAddress}
                 onChange={(e) => setDeliveryAddress(e.target.value)}
+                className="bg-background/50"
               />
             </div>
           </div>
@@ -279,6 +302,7 @@ export default function Delivery() {
             <Button
               onClick={handleAssignDriver}
               disabled={assignDriver.isPending || !selectedDriver || !deliveryAddress}
+              className="gradient-primary"
             >
               {assignDriver.isPending ? "Atribuindo..." : "Confirmar"}
             </Button>
@@ -293,23 +317,32 @@ function OrderCard({
   order,
   onAssign,
   onDeliver,
+  style,
 }: {
   order: Order;
   onAssign?: () => void;
   onDeliver?: () => void;
+  style?: React.CSSProperties;
 }) {
   return (
-    <Card>
-      <CardHeader className="pb-2">
+    <Card3D 
+      variant="subtle" 
+      className={cn(
+        "animate-fade-in-up",
+        order.status === "ready" && "border-status-success/30 glow-success"
+      )}
+      style={style}
+    >
+      <Card3DHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg">#{order.order_number}</CardTitle>
+          <Card3DTitle className="text-lg">#{order.order_number}</Card3DTitle>
           <StatusBadge status={order.status || "pending"} />
         </div>
-        <CardDescription>
+        <Card3DDescription>
           {format(new Date(order.created_at), "dd/MM 'às' HH:mm", { locale: ptBR })}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
+        </Card3DDescription>
+      </Card3DHeader>
+      <Card3DContent className="space-y-3">
         {order.customer_name && (
           <div className="flex items-center gap-2 text-sm">
             <User className="h-4 w-4 text-muted-foreground" />
@@ -329,8 +362,8 @@ function OrderCard({
           </div>
         )}
 
-        <div className="pt-2 border-t">
-          <p className="text-sm text-muted-foreground mb-1">Itens:</p>
+        <div className="pt-2 border-t border-border/50">
+          <p className="text-xs text-muted-foreground mb-1">Itens:</p>
           {order.order_items?.slice(0, 3).map((item) => (
             <p key={item.id} className="text-sm">
               {item.quantity}x {item.product_name}
@@ -344,23 +377,23 @@ function OrderCard({
         </div>
 
         <div className="flex justify-between items-center pt-2">
-          <span className="font-semibold">R$ {order.total_price.toFixed(2)}</span>
+          <span className="font-bold text-lg">R$ {order.total_price.toFixed(2)}</span>
           <div className="flex gap-2">
             {onAssign && (
-              <Button size="sm" variant="outline" onClick={onAssign}>
+              <Button size="sm" variant="outline" onClick={onAssign} className="hover-lift">
                 <Truck className="h-4 w-4 mr-1" />
                 Despachar
               </Button>
             )}
             {onDeliver && (
-              <Button size="sm" onClick={onDeliver}>
+              <Button size="sm" onClick={onDeliver} className="gradient-success text-white hover-lift">
                 <CheckCircle className="h-4 w-4 mr-1" />
                 Entregue
               </Button>
             )}
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </Card3DContent>
+    </Card3D>
   );
 }

@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { GlassCard } from "@/components/ui/glass-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
@@ -97,32 +97,43 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md space-y-6">
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Animated background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-primary/5" />
+      <div className="absolute inset-0 opacity-30">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-3xl animate-float" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-float" style={{ animationDelay: "1.5s" }} />
+      </div>
+
+      <div className="w-full max-w-md space-y-6 relative z-10 animate-fade-in-up">
         {/* Logo */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-4">
-            <Utensils className="w-8 h-8 text-primary" />
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl gradient-primary shadow-lg animate-float">
+            <Utensils className="w-10 h-10 text-primary-foreground" />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">RestaurantOS</h1>
+          <h1 className="text-3xl font-bold tracking-tight mt-6">RestaurantOS</h1>
           <p className="text-muted-foreground">
             Sistema de Gestão para Restaurantes
           </p>
         </div>
 
         {/* Auth Card */}
-        <Card className="border-border/50">
+        <GlassCard glow glowColor="primary" className="animate-scale-in" style={{ animationDelay: "0.2s" }}>
           <Tabs defaultValue="login" className="w-full">
-            <CardHeader className="pb-4">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="login">Entrar</TabsTrigger>
-                <TabsTrigger value="signup">Criar Conta</TabsTrigger>
+            <div className="p-6 pb-4">
+              <TabsList className="grid w-full grid-cols-2 bg-muted/50">
+                <TabsTrigger value="login" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                  Entrar
+                </TabsTrigger>
+                <TabsTrigger value="signup" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                  Criar Conta
+                </TabsTrigger>
               </TabsList>
-            </CardHeader>
+            </div>
 
-            <TabsContent value="login">
+            <TabsContent value="login" className="mt-0">
               <form onSubmit={handleLogin}>
-                <CardContent className="space-y-4">
+                <div className="px-6 space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="login-email">Email</Label>
                     <Input
@@ -133,6 +144,7 @@ export default function Login() {
                       onChange={(e) => setLoginEmail(e.target.value)}
                       required
                       disabled={loading}
+                      className="bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
                     />
                   </div>
                   <div className="space-y-2">
@@ -144,7 +156,7 @@ export default function Login() {
                             Esqueceu a senha?
                           </Button>
                         </DialogTrigger>
-                        <DialogContent>
+                        <DialogContent className="glass">
                           <form onSubmit={handleResetPassword}>
                             <DialogHeader>
                               <DialogTitle>Recuperar Senha</DialogTitle>
@@ -166,7 +178,7 @@ export default function Login() {
                               />
                             </div>
                             <DialogFooter>
-                              <Button type="submit" disabled={resetLoading}>
+                              <Button type="submit" disabled={resetLoading} className="gradient-primary">
                                 {resetLoading ? (
                                   <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -189,11 +201,17 @@ export default function Login() {
                       onChange={(e) => setLoginPassword(e.target.value)}
                       required
                       disabled={loading}
+                      className="bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
                     />
                   </div>
-                </CardContent>
-                <CardFooter>
-                  <Button type="submit" className="w-full" disabled={loading}>
+                </div>
+                <div className="p-6 pt-4">
+                  <Button 
+                    type="submit" 
+                    className="w-full gradient-primary hover:opacity-90 transition-opacity shadow-lg hover:shadow-xl hover:shadow-primary/20" 
+                    size="lg"
+                    disabled={loading}
+                  >
                     {loading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -203,13 +221,13 @@ export default function Login() {
                       "Entrar"
                     )}
                   </Button>
-                </CardFooter>
+                </div>
               </form>
             </TabsContent>
 
-            <TabsContent value="signup">
+            <TabsContent value="signup" className="mt-0">
               <form onSubmit={handleSignup}>
-                <CardContent className="space-y-4">
+                <div className="px-6 space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="signup-name">Nome Completo</Label>
                     <Input
@@ -220,6 +238,7 @@ export default function Login() {
                       onChange={(e) => setSignupName(e.target.value)}
                       required
                       disabled={loading}
+                      className="bg-background/50 border-border/50 focus:border-primary"
                     />
                   </div>
                   <div className="space-y-2">
@@ -232,6 +251,7 @@ export default function Login() {
                       onChange={(e) => setSignupEmail(e.target.value)}
                       required
                       disabled={loading}
+                      className="bg-background/50 border-border/50 focus:border-primary"
                     />
                   </div>
                   <div className="space-y-2">
@@ -244,6 +264,7 @@ export default function Login() {
                       onChange={(e) => setSignupPassword(e.target.value)}
                       required
                       disabled={loading}
+                      className="bg-background/50 border-border/50 focus:border-primary"
                     />
                   </div>
                   <div className="space-y-2">
@@ -256,11 +277,17 @@ export default function Login() {
                       onChange={(e) => setSignupConfirmPassword(e.target.value)}
                       required
                       disabled={loading}
+                      className="bg-background/50 border-border/50 focus:border-primary"
                     />
                   </div>
-                </CardContent>
-                <CardFooter>
-                  <Button type="submit" className="w-full" disabled={loading}>
+                </div>
+                <div className="p-6 pt-4">
+                  <Button 
+                    type="submit" 
+                    className="w-full gradient-primary hover:opacity-90 transition-opacity shadow-lg" 
+                    size="lg"
+                    disabled={loading}
+                  >
                     {loading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -270,11 +297,11 @@ export default function Login() {
                       "Criar Conta"
                     )}
                   </Button>
-                </CardFooter>
+                </div>
               </form>
             </TabsContent>
           </Tabs>
-        </Card>
+        </GlassCard>
 
         <p className="text-center text-sm text-muted-foreground">
           © 2026 RestaurantOS. Todos os direitos reservados.

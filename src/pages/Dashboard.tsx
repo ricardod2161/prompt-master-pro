@@ -1,20 +1,18 @@
 import { useDashboard } from "@/hooks/useDashboard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatCard } from "@/components/ui/stat-card";
+import { GlassCard } from "@/components/ui/glass-card";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   DollarSign,
   ShoppingBag,
   TrendingUp,
-  TrendingDown,
   Clock,
   MessageSquare,
   UtensilsCrossed,
   Store,
   Truck,
   Wallet,
-  ArrowUpRight,
-  ArrowDownRight,
   Package,
   RefreshCw,
 } from "lucide-react";
@@ -72,69 +70,6 @@ const formatCurrency = (value: number) => {
   }).format(value);
 };
 
-function KpiCard({
-  title,
-  value,
-  change,
-  icon: Icon,
-  loading,
-  suffix = "vs ontem",
-}: {
-  title: string;
-  value: string | number;
-  change?: number;
-  icon: React.ComponentType<{ className?: string }>;
-  loading?: boolean;
-  suffix?: string;
-}) {
-  const isPositive = change !== undefined && change >= 0;
-
-  if (loading) {
-    return (
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-4 w-4" />
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-8 w-32 mb-1" />
-          <Skeleton className="h-3 w-20" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="relative overflow-hidden">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        {change !== undefined && (
-          <div className="flex items-center gap-1 mt-1">
-            {isPositive ? (
-              <ArrowUpRight className="h-3 w-3 text-status-success" />
-            ) : (
-              <ArrowDownRight className="h-3 w-3 text-status-error" />
-            )}
-            <span
-              className={cn(
-                "text-xs font-medium",
-                isPositive ? "text-status-success" : "text-status-error"
-              )}
-            >
-              {Math.abs(change).toFixed(1)}%
-            </span>
-            <span className="text-xs text-muted-foreground">{suffix}</span>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 function CashRegisterCard({
   isOpen,
   initialAmount,
@@ -152,47 +87,59 @@ function CashRegisterCard({
 }) {
   if (loading) {
     return (
-      <Card>
-        <CardHeader>
-          <Skeleton className="h-5 w-32" />
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-24 w-full" />
-        </CardContent>
-      </Card>
+      <GlassCard className="h-full">
+        <div className="p-6">
+          <div className="h-5 w-32 rounded shimmer mb-4" />
+          <div className="h-24 w-full rounded shimmer" />
+        </div>
+      </GlassCard>
     );
   }
 
   return (
-    <Card className={cn(!isOpen && "border-dashed opacity-60")}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Wallet className="h-4 w-4" />
-            Status do Caixa
-          </CardTitle>
-          <Badge variant={isOpen ? "default" : "secondary"} className={isOpen ? "bg-status-success text-status-success-foreground" : ""}>
+    <GlassCard 
+      glow={isOpen} 
+      glowColor="success" 
+      className={cn("h-full", !isOpen && "opacity-60")}
+    >
+      <div className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className={cn(
+              "p-2 rounded-lg",
+              isOpen ? "bg-status-success/10" : "bg-muted"
+            )}>
+              <Wallet className={cn(
+                "h-4 w-4",
+                isOpen ? "text-status-success" : "text-muted-foreground"
+              )} />
+            </div>
+            <span className="font-semibold">Status do Caixa</span>
+          </div>
+          <Badge 
+            variant={isOpen ? "default" : "secondary"} 
+            className={isOpen ? "bg-status-success text-white animate-pulse-glow" : ""}
+          >
             {isOpen ? "Aberto" : "Fechado"}
           </Badge>
         </div>
-      </CardHeader>
-      <CardContent>
+        
         {isOpen ? (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground">Abertura</p>
-                <p className="text-sm font-medium">{formatCurrency(initialAmount)}</p>
+              <div className="p-3 rounded-lg bg-background/50">
+                <p className="text-xs text-muted-foreground mb-1">Abertura</p>
+                <p className="text-sm font-semibold">{formatCurrency(initialAmount)}</p>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Vendas</p>
-                <p className="text-sm font-medium text-status-success">{formatCurrency(salesTotal)}</p>
+              <div className="p-3 rounded-lg bg-status-success/10">
+                <p className="text-xs text-muted-foreground mb-1">Vendas</p>
+                <p className="text-sm font-semibold text-status-success">{formatCurrency(salesTotal)}</p>
               </div>
             </div>
-            <div className="pt-2 border-t border-border">
+            <div className="pt-3 border-t border-border/50">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Saldo atual</span>
-                <span className="text-lg font-bold">{formatCurrency(currentAmount)}</span>
+                <span className="text-xl font-bold">{formatCurrency(currentAmount)}</span>
               </div>
               {openedAt && (
                 <p className="text-xs text-muted-foreground mt-1">
@@ -202,12 +149,12 @@ function CashRegisterCard({
             </div>
           </div>
         ) : (
-          <div className="text-center py-4">
+          <div className="text-center py-6">
             <p className="text-sm text-muted-foreground">Nenhum caixa aberto</p>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </GlassCard>
   );
 }
 
@@ -227,13 +174,19 @@ export default function Dashboard() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+        <div className="animate-fade-in-up">
           <h1 className="text-2xl sm:text-3xl font-bold">Dashboard</h1>
           <p className="text-muted-foreground text-sm sm:text-base">
             {format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={refetch} 
+          disabled={loading}
+          className="hover-lift"
+        >
           <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
           Atualizar
         </Button>
@@ -241,52 +194,63 @@ export default function Dashboard() {
 
       {/* KPI Cards */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <KpiCard
+        <StatCard
           title="Faturamento"
           value={formatCurrency(stats.totalRevenue)}
           change={stats.revenueChange}
           icon={DollarSign}
+          iconColor="success"
           loading={loading}
+          className="animate-fade-in-up"
+          style={{ animationDelay: "0.1s" }}
         />
-        <KpiCard
+        <StatCard
           title="Pedidos"
           value={stats.totalOrders}
           change={stats.ordersChange}
           icon={ShoppingBag}
+          iconColor="info"
           loading={loading}
+          className="animate-fade-in-up"
+          style={{ animationDelay: "0.2s" }}
         />
-        <KpiCard
+        <StatCard
           title="Ticket Médio"
           value={formatCurrency(stats.averageTicket)}
           change={stats.ticketChange}
           icon={TrendingUp}
+          iconColor="primary"
           loading={loading}
+          className="animate-fade-in-up"
+          style={{ animationDelay: "0.3s" }}
         />
-        <KpiCard
+        <StatCard
           title="Em Preparo"
           value={stats.pendingOrders}
           icon={Clock}
+          iconColor="warning"
           loading={loading}
-          suffix="pedidos ativos"
+          changeLabel="pedidos ativos"
+          className="animate-fade-in-up"
+          style={{ animationDelay: "0.4s" }}
         />
       </div>
 
       {/* Main Grid */}
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Hourly Chart - Takes 2 columns */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Vendas por Hora</CardTitle>
-            <CardDescription>Distribuição de pedidos ao longo do dia</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <GlassCard className="lg:col-span-2 animate-fade-in-up" style={{ animationDelay: "0.5s" }}>
+          <div className="p-6">
+            <h3 className="text-lg font-semibold mb-1">Vendas por Hora</h3>
+            <p className="text-sm text-muted-foreground mb-4">Distribuição de pedidos ao longo do dia</p>
+            
             {loading ? (
-              <Skeleton className="h-[250px] w-full" />
+              <div className="h-[250px] rounded shimmer" />
             ) : hourlyData.some((d) => d.orders > 0) ? (
               <div className="h-[250px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={hourlyData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
                     <XAxis
                       dataKey="hour"
                       tick={{ fontSize: 11 }}
@@ -305,6 +269,7 @@ export default function Dashboard() {
                         backgroundColor: "hsl(var(--card))",
                         border: "1px solid hsl(var(--border))",
                         borderRadius: "var(--radius)",
+                        boxShadow: "var(--shadow-3d-md)",
                       }}
                       formatter={(value: number, name: string) => [
                         name === "orders" ? `${value} pedidos` : formatCurrency(value),
@@ -315,7 +280,7 @@ export default function Dashboard() {
                     <Bar
                       dataKey="orders"
                       fill="hsl(var(--primary))"
-                      radius={[4, 4, 0, 0]}
+                      radius={[6, 6, 0, 0]}
                     />
                   </BarChart>
                 </ResponsiveContainer>
@@ -325,24 +290,25 @@ export default function Dashboard() {
                 Nenhum pedido hoje
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </GlassCard>
 
         {/* Cash Register Status */}
-        <CashRegisterCard {...cashRegister} loading={loading} />
+        <div className="animate-fade-in-up" style={{ animationDelay: "0.6s" }}>
+          <CashRegisterCard {...cashRegister} loading={loading} />
+        </div>
       </div>
 
       {/* Second Row */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {/* Channel Distribution */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Pedidos por Canal</CardTitle>
-            <CardDescription>Distribuição do dia</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <GlassCard className="animate-fade-in-up" style={{ animationDelay: "0.7s" }}>
+          <div className="p-6">
+            <h3 className="text-lg font-semibold mb-1">Pedidos por Canal</h3>
+            <p className="text-sm text-muted-foreground mb-4">Distribuição do dia</p>
+            
             {loading ? (
-              <Skeleton className="h-[200px] w-full" />
+              <div className="h-[200px] rounded shimmer" />
             ) : channelData.length > 0 ? (
               <>
                 <div className="h-[180px]">
@@ -390,34 +356,33 @@ export default function Dashboard() {
                 Nenhum pedido hoje
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </GlassCard>
 
         {/* Top Products */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Package className="h-4 w-4" />
-              Top 5 Produtos
-            </CardTitle>
-            <CardDescription>Mais vendidos do dia</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <GlassCard className="animate-fade-in-up" style={{ animationDelay: "0.8s" }}>
+          <div className="p-6">
+            <div className="flex items-center gap-2 mb-1">
+              <Package className="h-4 w-4 text-primary" />
+              <h3 className="text-lg font-semibold">Top 5 Produtos</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">Mais vendidos do dia</p>
+            
             {loading ? (
               <div className="space-y-3">
                 {[...Array(5)].map((_, i) => (
-                  <Skeleton key={i} className="h-10 w-full" />
+                  <div key={i} className="h-10 rounded shimmer" />
                 ))}
               </div>
             ) : topProducts.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {topProducts.map((product, index) => (
                   <div
                     key={product.name}
-                    className="flex items-center justify-between py-2 border-b border-border last:border-0"
+                    className="flex items-center justify-between p-2.5 rounded-lg bg-background/50 hover:bg-background/80 transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <span className="text-xs font-bold text-muted-foreground w-5">
+                      <span className="text-xs font-bold text-primary w-5">
                         #{index + 1}
                       </span>
                       <div>
@@ -429,7 +394,7 @@ export default function Dashboard() {
                         </p>
                       </div>
                     </div>
-                    <span className="text-sm font-medium">{formatCurrency(product.revenue)}</span>
+                    <span className="text-sm font-semibold">{formatCurrency(product.revenue)}</span>
                   </div>
                 ))}
               </div>
@@ -438,30 +403,29 @@ export default function Dashboard() {
                 Nenhuma venda hoje
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </GlassCard>
 
         {/* Recent Orders */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Pedidos Recentes</CardTitle>
-            <CardDescription>Últimos 5 pedidos</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <GlassCard className="animate-fade-in-up" style={{ animationDelay: "0.9s" }}>
+          <div className="p-6">
+            <h3 className="text-lg font-semibold mb-1">Pedidos Recentes</h3>
+            <p className="text-sm text-muted-foreground mb-4">Últimos 5 pedidos</p>
+            
             {loading ? (
               <div className="space-y-3">
                 {[...Array(5)].map((_, i) => (
-                  <Skeleton key={i} className="h-14 w-full" />
+                  <div key={i} className="h-14 rounded shimmer" />
                 ))}
               </div>
             ) : recentOrders.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {recentOrders.map((order) => {
                   const ChannelIcon = channelIcons[order.channel] || Store;
                   return (
                     <div
                       key={order.id}
-                      className="flex items-center justify-between p-2 rounded-lg bg-muted/50"
+                      className="flex items-center justify-between p-2.5 rounded-lg bg-background/50 hover:bg-background/80 transition-colors"
                     >
                       <div className="flex items-center gap-2">
                         <div
@@ -485,7 +449,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-sm font-medium">
+                        <p className="text-sm font-semibold">
                           {formatCurrency(Number(order.total_price))}
                         </p>
                         <Badge
@@ -504,8 +468,8 @@ export default function Dashboard() {
                 Nenhum pedido hoje
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </GlassCard>
       </div>
     </div>
   );
