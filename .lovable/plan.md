@@ -1,239 +1,352 @@
 
-# Plano: Configuracoes - Redesign 3D Profissional
+# Plano: Sistema de Assinaturas Stripe - Visual 3D Profissional
 
-## Analise do Estado Atual
+## Produtos Criados no Stripe
 
-A pagina de Configuracoes atual tem 852 linhas em um unico arquivo monolitico com:
-- Cards planos sem efeitos 3D
-- Tabs basicos sem animacoes
-- Switches simples sem destaque visual
-- Secao de horarios repetitiva e verbosa
-- Formularios sem hierarquia visual clara
-- Sem glassmorphism ou gradientes
+| Plano | Preço | Product ID | Price ID |
+|-------|-------|------------|----------|
+| Starter | R$ 99/mês | prod_Ttv3LNr32ThW8G | price_1Sw7D7KBKtRrb6BSDHI3wTSm |
+| Pro | R$ 199/mês | prod_Ttv5fsMXdkwI7k | price_1Sw7F8KBKtRrb6BSXgHeKCsG |
+| Enterprise | R$ 399/mês | prod_Ttv6ifEGhgCeOI | price_1Sw7GEKBKtRrb6BSdkqlVaLt |
 
 ---
 
-## Melhorias Propostas
-
-### 1. Arquitetura Modular
-
-Dividir em componentes menores para melhor manutencao:
+## Arquitetura do Sistema
 
 ```text
-src/components/settings/
-├── SettingsHeader.tsx         (header com gradiente 3D)
-├── SettingsTabs.tsx           (tabs animados)
-├── UnitTab.tsx                (dados da unidade)
-├── OperationalTab.tsx         (canais e automacoes)
-├── FinancialTab.tsx           (taxas e pagamentos)
-├── HoursTab.tsx               (horarios compactos)
-├── ProfileTab.tsx             (perfil e senha)
-├── AppearanceTab.tsx          (existente - aprimorar)
-├── SettingCard.tsx            (card 3D reutilizavel)
-└── SettingToggleItem.tsx      (toggle com visual premium)
-```
-
-### 2. Sistema Visual 3D
-
-#### Header Premium
-```text
-┌─────────────────────────────────────────────────────┐
-│  [⚙️ Icon 3D]   Configuracoes                      │
-│                 Restaurante Sao Francisco           │
-│                 [Badge: Unidade Ativa]              │
-└─────────────────────────────────────────────────────┘
- ↑ Gradiente sutil + sombra 3D + icone com glow
-```
-
-#### Tabs Redesenhados
-```text
-┌────────────────────────────────────────────────────────────┐
-│ [🏢 Unidade] [⚙️ Operacional] [💰 Financeiro] [🕐 Horarios] [👤 Perfil] [🎨 Aparencia] │
-│     ╰────────── Indicador animado deslizante ──────────╯    │
-└────────────────────────────────────────────────────────────┘
- ↑ Fundo glassmorphism + tabs com hover glow + transicao suave
-```
-
-### 3. SettingToggleItem Component
-
-Novo componente reutilizavel para switches:
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│ [🚚]  Delivery                                    [═════○]  │
-│       Pedidos para entrega                                  │
-│       ─────────────────────────────────────────────────────│
-│       ↑ Borda com gradiente quando ativo                    │
-└─────────────────────────────────────────────────────────────┘
-```
-
-Caracteristicas:
-- Icone com background gradiente
-- Titulo em bold, descricao em muted
-- Switch com feedback visual
-- Borda luminosa quando ativo
-- Hover com lift sutil
-
-### 4. Secao de Horarios Compacta
-
-Antes (repetitivo):
-```text
-Segunda-feira    [Toggle]  [08:00] ate [22:00]
-Terca-feira      [Toggle]  [08:00] ate [22:00]
-Quarta-feira     [Toggle]  [08:00] ate [22:00]
-... (7 linhas identicas)
-```
-
-Depois (inteligente):
-```text
-┌────────────────────────────────────────────────────────────┐
-│ 📅 Horario de Funcionamento                                │
-│ ┌──────────────────────────────────────────────────────┐  │
-│ │ Copiar horario:  [Seg-Sex ▼]  →  Aplicar a todos     │  │
-│ └──────────────────────────────────────────────────────┘  │
-│                                                            │
-│ ┌─────────┬─────────────────────────────────┬──────────┐  │
-│ │ Segunda │ ○ Aberto   08:00 - 22:00        │ [Editar] │  │
-│ │ Terca   │ ○ Aberto   08:00 - 22:00        │ [Editar] │  │
-│ │ ...     │ ...                              │ ...      │  │
-│ │ Domingo │ ● Fechado                        │ [Editar] │  │
-│ └─────────┴─────────────────────────────────┴──────────┘  │
-│                                                            │
-│ [💾 Salvar Horarios]                                       │
-└────────────────────────────────────────────────────────────┘
-```
-
-Features:
-- Copiar horarios entre dias
-- Tabela visual compacta
-- Dialog para edicao detalhada
-- Indicador visual de aberto/fechado
-
-### 5. Cards de Configuracao 3D
-
-Aplicar Card3D com variantes:
-
-```text
-UnitTab:
-├── Card3D variant="elevated" (dados principais)
-└── Gradiente sutil no fundo
-
-OperationalTab:
-├── Card3D "Canais de Venda" com grid de toggles
-└── Card3D "Automacoes" com toggles de sistema
-
-FinancialTab:
-├── GlassCard para taxas (destaque visual)
-└── Card3D para metodos de pagamento
-
-ProfileTab:
-├── Card3D para dados pessoais
-├── Card3D para alterar senha
-└── Card com borda destructive para logout
-```
-
-### 6. Formularios Aprimorados
-
-Inputs com visual premium:
-```text
-┌─────────────────────────────────────┐
-│ Nome do Estabelecimento             │
-│ ┌─────────────────────────────────┐ │
-│ │ [🏪] Restaurante São Francisco  │ │  ← Icone no input
-│ └─────────────────────────────────┘ │
-│                                     │
-│ CNPJ                    Telefone    │
-│ ┌──────────────┐  ┌──────────────┐  │
-│ │ 00.000.000/00│  │ (00) 00000-00│  │  ← Mascaras automaticas
-│ └──────────────┘  └──────────────┘  │
-└─────────────────────────────────────┘
-```
-
-### 7. Animacoes e Transicoes
-
-```text
-Tab Changes:
-├── Fade in/out suave (200ms)
-├── Slide horizontal para conteudo
-└── Indicador animado no tab ativo
-
-Card Interactions:
-├── Hover lift (translateY -4px)
-├── Scale sutil (1.01)
-└── Shadow expansion
-
-Toggle Activation:
-├── Glow pulse quando ativa
-├── Background color transition
-└── Checkmark icon animation
-```
-
-### 8. Responsividade Aprimorada
-
-Mobile (< 640px):
-```text
-- Tabs em scroll horizontal
-- Cards full-width
-- Toggles em lista vertical
-- Forms em coluna unica
-- Botoes full-width
-- Bottom sheet para dialogs
-```
-
-Tablet (640-1024px):
-```text
-- Grid 2 colunas para toggles
-- Tabs visiveis com icones
-- Forms em 2 colunas
-```
-
-Desktop (> 1024px):
-```text
-- Grid 3 colunas para toggles
-- Sidebar opcional de navegacao rapida
-- Preview sticky no AppearanceTab
+┌──────────────────────────────────────────────────────────────────┐
+│                    FLUXO DE ASSINATURA                           │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   [Login] → [Dashboard] → [Pricing Page] → [Stripe Checkout]    │
+│                ↓                                  ↓               │
+│         [check-subscription]              [Pagamento OK]         │
+│                ↓                                  ↓               │
+│         [AuthContext]  ←──────────────────  [Redirect]           │
+│                ↓                                                 │
+│    [Acesso Liberado/Bloqueado]                                  │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Arquivos a Criar/Modificar
+## 1. Edge Functions a Criar
+
+### 1.1 create-checkout
+Cria sessao de checkout do Stripe para assinatura.
+
+```text
+Funcionalidades:
+├── Autentica usuario via Supabase
+├── Verifica se ja existe customer no Stripe
+├── Cria checkout session com price_id
+├── Retorna URL para redirect
+└── Suporta os 3 planos (Starter, Pro, Enterprise)
+```
+
+### 1.2 check-subscription
+Verifica status da assinatura do usuario.
+
+```text
+Funcionalidades:
+├── Busca customer pelo email no Stripe
+├── Lista subscriptions ativas
+├── Identifica tier pelo product_id
+├── Retorna: subscribed, tier, subscription_end
+└── Logging detalhado para debug
+```
+
+### 1.3 customer-portal
+Gerenciamento de assinatura via portal Stripe.
+
+```text
+Funcionalidades:
+├── Autentica usuario
+├── Busca customer_id no Stripe
+├── Cria billing portal session
+├── Retorna URL do portal
+└── Permite cancelar/upgrade/downgrade
+```
+
+---
+
+## 2. Atualizacoes no AuthContext
+
+### Novo Estado de Assinatura
+
+```text
+AuthContextType (atualizado):
+├── user, session, loading (existentes)
+├── subscription: {
+│   ├── subscribed: boolean
+│   ├── tier: 'starter' | 'pro' | 'enterprise' | null
+│   ├── productId: string | null
+│   └── subscriptionEnd: string | null
+│ }
+├── checkSubscription: () => Promise<void>
+└── isSubscriptionLoading: boolean
+```
+
+### Verificacao Automatica
+
+```text
+Triggers de verificacao:
+├── Login bem-sucedido
+├── Carregamento inicial da pagina
+├── A cada 60 segundos (auto-refresh)
+└── Apos retorno do checkout
+```
+
+---
+
+## 3. Nova Pagina: Pricing
+
+### Visual 3D Profissional
+
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│    🚀  Escolha o Plano Ideal para seu Restaurante                  │
+│        Comece gratis por 14 dias. Cancele quando quiser.           │
+│                                                                     │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐     │
+│  │    STARTER      │  │      PRO        │  │   ENTERPRISE    │     │
+│  │    R$ 99/mês    │  │   R$ 199/mês    │  │   R$ 399/mês    │     │
+│  │                 │  │  ★ POPULAR ★    │  │                 │     │
+│  │ ✓ PDV           │  │ ✓ Tudo Starter  │  │ ✓ Tudo Pro      │     │
+│  │ ✓ Cardapio      │  │ ✓ Delivery      │  │ ✓ Multi-unidade │     │
+│  │ ✓ KDS basico    │  │ ✓ Relatorios    │  │ ✓ API           │     │
+│  │ ✓ 1 unidade     │  │ ✓ WhatsApp      │  │ ✓ Suporte 24/7  │     │
+│  │                 │  │ ✓ 3 unidades    │  │ ✓ Ilimitado     │     │
+│  │ [Assinar]       │  │ [Assinar]       │  │ [Contato]       │     │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘     │
+│       ↑ Card3D            ↑ Card3D + Glow      ↑ Card3D            │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Caracteristicas Visuais
+
+```text
+Cards 3D:
+├── Sombras em multiplas camadas
+├── Hover com lift (translateY -8px)
+├── Border gradient no plano popular
+├── Glow pulse no badge "Popular"
+├── Icones com animacao check
+└── Botao com gradiente + hover effect
+
+Background:
+├── Gradiente radial sutil
+├── Pattern de pontos (dot grid)
+├── Glassmorphism no header
+└── Transicoes suaves
+```
+
+---
+
+## 4. Componentes a Criar
+
+### 4.1 PricingCard
+
+```text
+PricingCard
+├── Props: tier, price, features, popular, currentPlan
+├── Visual 3D com hover effects
+├── Badge "Seu Plano" se ativo
+├── Badge "Popular" se destacado
+├── Botao contextual (Assinar/Gerenciar/Contato)
+└── Loading state durante checkout
+```
+
+### 4.2 SubscriptionBadge
+
+```text
+SubscriptionBadge (para sidebar/header)
+├── Mostra tier atual
+├── Cor por tier (verde/azul/roxo)
+├── Link para pagina de pricing
+├── Tooltip com data de renovacao
+└── Animacao pulse se proximo do vencimento
+```
+
+### 4.3 SubscriptionGate
+
+```text
+SubscriptionGate (HOC para protecao)
+├── Verifica tier minimo requerido
+├── Mostra modal de upgrade se necessario
+├── Redirect para pricing se nao assinante
+└── Loading skeleton durante verificacao
+```
+
+---
+
+## 5. Integracao na Sidebar
+
+### Menu de Assinatura
+
+```text
+AppSidebar (atualizado):
+├── [Existing menu items...]
+├── ───────────────────────
+├── [💳 Planos] → /pricing
+├── [👤 Minha Conta] → customer-portal
+└── [Subscription Badge] no footer
+```
+
+---
+
+## 6. Pagina de Sucesso
+
+### /subscription-success
+
+```text
+┌─────────────────────────────────────────────┐
+│                                             │
+│         ✨ Parabens! ✨                     │
+│                                             │
+│   Sua assinatura foi ativada com sucesso.  │
+│                                             │
+│   Plano: Pro                                │
+│   Proxima cobranca: 01/03/2026             │
+│                                             │
+│   [🏠 Ir para Dashboard]                    │
+│   [⚙️ Gerenciar Assinatura]                │
+│                                             │
+└─────────────────────────────────────────────┘
+```
+
+---
+
+## 7. Arquivos a Criar/Modificar
 
 | Arquivo | Acao | Descricao |
 |---------|------|-----------|
-| `src/components/settings/SettingsHeader.tsx` | Criar | Header 3D com gradiente |
-| `src/components/settings/SettingToggleItem.tsx` | Criar | Toggle premium reutilizavel |
-| `src/components/settings/SettingCard.tsx` | Criar | Wrapper Card3D para settings |
-| `src/components/settings/UnitTab.tsx` | Criar | Tab dados da unidade |
-| `src/components/settings/OperationalTab.tsx` | Criar | Tab operacional |
-| `src/components/settings/FinancialTab.tsx` | Criar | Tab financeiro |
-| `src/components/settings/HoursTab.tsx` | Criar | Tab horarios compacto |
-| `src/components/settings/ProfileTab.tsx` | Criar | Tab perfil |
-| `src/components/settings/AppearanceTab.tsx` | Modificar | Aprimorar com 3D |
-| `src/pages/Settings.tsx` | Modificar | Refatorar para usar componentes |
+| `supabase/functions/create-checkout/index.ts` | Criar | Edge function checkout |
+| `supabase/functions/check-subscription/index.ts` | Criar | Edge function verificacao |
+| `supabase/functions/customer-portal/index.ts` | Criar | Edge function portal |
+| `src/contexts/AuthContext.tsx` | Modificar | Adicionar estado de assinatura |
+| `src/pages/Pricing.tsx` | Criar | Pagina de planos 3D |
+| `src/pages/SubscriptionSuccess.tsx` | Criar | Pagina de sucesso |
+| `src/components/subscription/PricingCard.tsx` | Criar | Card de plano 3D |
+| `src/components/subscription/SubscriptionBadge.tsx` | Criar | Badge de tier |
+| `src/components/subscription/SubscriptionGate.tsx` | Criar | HOC de protecao |
+| `src/hooks/useSubscription.ts` | Criar | Hook de assinatura |
+| `src/lib/subscription-tiers.ts` | Criar | Constantes dos planos |
+| `src/App.tsx` | Modificar | Adicionar rotas |
+| `src/components/layout/AppSidebar.tsx` | Modificar | Adicionar menu assinatura |
 
 ---
 
-## Resultado Visual Esperado
+## 8. Constantes dos Planos
 
-| Elemento | Antes | Depois |
-|----------|-------|--------|
-| Header | Texto simples | Gradiente 3D com glow |
-| Tabs | Basicos | Animados com indicador |
-| Cards | Flat | 3D com sombras em camadas |
-| Toggles | Switch simples | Item completo com icone/desc |
-| Horarios | 7 linhas identicas | Tabela compacta + copy |
-| Forms | Inputs basicos | Icones + mascaras + focus glow |
-| Responsivo | Funcional | Otimizado por breakpoint |
-| Animacoes | Nenhuma | Transicoes suaves em tudo |
+```typescript
+// src/lib/subscription-tiers.ts
+export const SUBSCRIPTION_TIERS = {
+  starter: {
+    name: "Starter",
+    productId: "prod_Ttv3LNr32ThW8G",
+    priceId: "price_1Sw7D7KBKtRrb6BSDHI3wTSm",
+    price: 99,
+    features: [
+      "PDV completo",
+      "Cardapio Digital",
+      "KDS basico",
+      "1 unidade",
+      "Suporte por email"
+    ],
+    limits: { units: 1, delivery: false, whatsapp: false }
+  },
+  pro: {
+    name: "Pro",
+    productId: "prod_Ttv5fsMXdkwI7k",
+    priceId: "price_1Sw7F8KBKtRrb6BSXgHeKCsG",
+    price: 199,
+    popular: true,
+    features: [
+      "Tudo do Starter",
+      "Modulo Delivery",
+      "Relatorios avancados",
+      "Integracao WhatsApp",
+      "Ate 3 unidades",
+      "Suporte prioritario"
+    ],
+    limits: { units: 3, delivery: true, whatsapp: true }
+  },
+  enterprise: {
+    name: "Enterprise",
+    productId: "prod_Ttv6ifEGhgCeOI",
+    priceId: "price_1Sw7GEKBKtRrb6BSdkqlVaLt",
+    price: 399,
+    features: [
+      "Tudo do Pro",
+      "Unidades ilimitadas",
+      "API personalizada",
+      "Suporte 24/7",
+      "Gerente de conta dedicado",
+      "Treinamento personalizado"
+    ],
+    limits: { units: Infinity, delivery: true, whatsapp: true }
+  }
+};
+```
 
 ---
 
-## Ordem de Implementacao
+## 9. Fluxo de Usuario
 
-1. Criar componentes base (SettingToggleItem, SettingCard, SettingsHeader)
-2. Criar tabs individuais (UnitTab, OperationalTab, FinancialTab, HoursTab, ProfileTab)
-3. Refatorar Settings.tsx para usar novos componentes
-4. Aprimorar AppearanceTab com visual 3D
-5. Adicionar animacoes e transicoes
-6. Testar responsividade em todos breakpoints
-7. Polish final e micro-interacoes
+```text
+1. Usuario faz login
+   └─> check-subscription automatico
+   
+2. Se nao assinante:
+   └─> Pode acessar paginas basicas
+   └─> Modal de upgrade em features premium
+   
+3. Clica em "Assinar":
+   └─> Seleciona plano
+   └─> create-checkout (edge function)
+   └─> Redirect para Stripe Checkout
+   
+4. Paga no Stripe:
+   └─> Redirect para /subscription-success
+   └─> check-subscription atualiza estado
+   
+5. Gerenciamento:
+   └─> Clica em "Gerenciar Assinatura"
+   └─> customer-portal (edge function)
+   └─> Abre Stripe Customer Portal
+```
+
+---
+
+## 10. Ordem de Implementacao
+
+1. Criar constantes dos planos (`subscription-tiers.ts`)
+2. Criar edge functions (create-checkout, check-subscription, customer-portal)
+3. Atualizar AuthContext com estado de assinatura
+4. Criar hook useSubscription
+5. Criar componentes (PricingCard, SubscriptionBadge)
+6. Criar pagina Pricing com visual 3D
+7. Criar pagina SubscriptionSuccess
+8. Adicionar rotas no App.tsx
+9. Atualizar AppSidebar com menu de assinatura
+10. Criar SubscriptionGate para protecao de features
+11. Testar fluxo completo de assinatura
+
+---
+
+## 11. Resultado Visual Esperado
+
+| Elemento | Descricao |
+|----------|-----------|
+| Pricing Page | Cards 3D com hover lift, gradientes, glassmorphism |
+| Card Popular | Borda luminosa, badge pulsante, destaque visual |
+| Botoes | Gradiente primario, shadow 3D, hover scale |
+| Success Page | Confetti animation, card central glass |
+| Sidebar Badge | Tier colorido, tooltip interativo |
+| Gate Modal | Blur backdrop, card 3D, CTA claro |
