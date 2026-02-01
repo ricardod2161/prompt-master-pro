@@ -128,7 +128,7 @@ export function ChatBubble({ message, showAvatar = true }: ChatBubbleProps) {
             {timestamp}
           </span>
 
-          {/* Status icon only for assistant messages */}
+          {/* Status icon for sent messages (from bot/assistant) */}
           {isAssistant && message.status && (
             <MessageStatus status={message.status} />
           )}

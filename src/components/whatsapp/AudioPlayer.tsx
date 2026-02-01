@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { Play, Pause } from "lucide-react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { Play, Pause, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +16,16 @@ export function AudioPlayer({ src, duration, transcription, className }: AudioPl
   const [audioDuration, setAudioDuration] = useState(duration || 0);
   const [showTranscription, setShowTranscription] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  // Generate stable waveform bars (memoized to prevent re-renders)
+  const bars = useMemo(() => {
+    return Array.from({ length: 28 }, (_, i) => {
+      // Create a pseudo-random but deterministic pattern based on index
+      const seed = i * 7 + 13;
+      const height = 20 + ((seed * 37) % 60);
+      return height;
+    });
+  }, []);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -59,21 +69,16 @@ export function AudioPlayer({ src, duration, transcription, className }: AudioPl
 
   const progress = audioDuration > 0 ? (currentTime / audioDuration) * 100 : 0;
 
-  // Generate waveform bars
-  const bars = Array.from({ length: 20 }, (_, i) => {
-    const height = Math.random() * 100;
-    return height;
-  });
-
   return (
     <div className={cn("space-y-2", className)}>
       <audio ref={audioRef} src={src} preload="metadata" />
       
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 min-w-[220px]">
+        {/* Play/Pause Button */}
         <Button
           variant="ghost"
           size="icon"
-          className="h-10 w-10 rounded-full bg-primary/10 hover:bg-primary/20"
+          className="h-10 w-10 rounded-full bg-primary/10 hover:bg-primary/20 flex-shrink-0"
           onClick={togglePlayPause}
         >
           {isPlaying ? (
@@ -83,8 +88,8 @@ export function AudioPlayer({ src, duration, transcription, className }: AudioPl
           )}
         </Button>
 
-        {/* Waveform */}
-        <div className="flex-1 flex items-center gap-0.5 h-8">
+        {/* Waveform Visualization */}
+        <div className="flex-1 flex items-center gap-[2px] h-8">
           {bars.map((height, i) => {
             const barProgress = (i / bars.length) * 100;
             const isActive = barProgress <= progress;
@@ -92,32 +97,39 @@ export function AudioPlayer({ src, duration, transcription, className }: AudioPl
               <div
                 key={i}
                 className={cn(
-                  "w-1 rounded-full transition-colors",
-                  isActive ? "bg-primary" : "bg-muted-foreground/30"
+                  "w-[3px] rounded-full transition-all duration-150",
+                  isActive ? "bg-primary" : "bg-muted-foreground/30",
+                  isPlaying && isActive && "animate-pulse"
                 )}
                 style={{ 
-                  height: `${Math.max(15, height)}%`,
+                  height: `${height}%`,
+                  minHeight: "4px"
                 }}
               />
             );
           })}
         </div>
 
-        <span className="text-xs text-muted-foreground font-mono min-w-[40px] text-right">
+        {/* Duration Display */}
+        <span className="text-xs text-muted-foreground font-mono min-w-[40px] text-right flex-shrink-0">
           {formatTime(isPlaying ? currentTime : audioDuration)}
         </span>
+
+        {/* Mic icon indicator */}
+        <Mic className="h-4 w-4 text-muted-foreground/50 flex-shrink-0" />
       </div>
 
+      {/* Transcription Toggle */}
       {transcription && (
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           <button
             onClick={() => setShowTranscription(!showTranscription)}
-            className="text-xs text-primary hover:underline"
+            className="text-xs text-primary hover:underline flex items-center gap-1"
           >
-            {showTranscription ? "Ocultar transcrição" : "Ver transcrição"}
+            {showTranscription ? "▼ Ocultar transcrição" : "▶ Ver transcrição"}
           </button>
           {showTranscription && (
-            <p className="text-sm text-muted-foreground italic bg-muted/50 rounded-lg px-3 py-2">
+            <p className="text-sm text-muted-foreground italic bg-muted/50 rounded-lg px-3 py-2 border-l-2 border-primary/30">
               "{transcription}"
             </p>
           )}

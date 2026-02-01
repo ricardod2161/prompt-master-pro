@@ -34,9 +34,13 @@ interface EvolutionWebhookPayload {
       };
     };
     messageTimestamp?: number;
-    status?: number;
+    status?: number | string;
     // For presence events
     presence?: "composing" | "recording" | "paused";
+    // Alternative formats from Evolution API
+    remoteJid?: string;
+    messageId?: string;
+    keyId?: string;
   };
 }
 
@@ -672,15 +676,85 @@ async function downloadMedia(
   }
 }
 
-// Transcribe audio using Gemini
+// Transcribe audio using GPT-5 multimodal with Gemini fallback
 async function transcribeAudio(audioBase64: string, mimetype: string): Promise<string> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
-    throw new Error("LOVABLE_API_KEY not configured");
+    console.error("LOVABLE_API_KEY not configured for transcription");
+    return "";
   }
 
+  // Determine audio format
+  const getAudioFormat = (mime: string): string => {
+    if (mime.includes("ogg")) return "ogg";
+    if (mime.includes("opus")) return "ogg";
+    if (mime.includes("mp4")) return "mp4";
+    if (mime.includes("mpeg") || mime.includes("mp3")) return "mp3";
+    if (mime.includes("wav")) return "wav";
+    if (mime.includes("webm")) return "webm";
+    return "ogg"; // WhatsApp default
+  };
+
+  const audioFormat = getAudioFormat(mimetype);
+  console.log(`Transcribing audio (format: ${audioFormat}, size: ${audioBase64.length} chars)`);
+
   try {
-    const response = await fetch(
+    // Try with GPT-5 first (better audio understanding)
+    console.log("Attempting transcription with GPT-5...");
+    
+    const gptResponse = await fetch(
+      "https://ai.gateway.lovable.dev/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "openai/gpt-5",
+          messages: [
+            {
+              role: "system",
+              content: "Você é um transcritor profissional de áudio em português brasileiro. Transcreva o áudio com precisão. Retorne APENAS o texto transcrito, sem explicações, prefixos ou formatação adicional."
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Transcreva este áudio:"
+                },
+                {
+                  type: "input_audio",
+                  input_audio: {
+                    data: audioBase64,
+                    format: audioFormat
+                  }
+                }
+              ]
+            }
+          ],
+          max_tokens: 1000,
+        }),
+      }
+    );
+
+    if (gptResponse.ok) {
+      const gptData = await gptResponse.json();
+      const transcription = gptData.choices?.[0]?.message?.content?.trim() || "";
+      if (transcription && transcription.length > 0) {
+        console.log(`GPT-5 transcription successful: "${transcription.substring(0, 50)}..."`);
+        return transcription;
+      }
+    } else {
+      const errorText = await gptResponse.text();
+      console.log("GPT-5 transcription failed:", gptResponse.status, errorText.substring(0, 200));
+    }
+
+    // Fallback to Gemini
+    console.log("Falling back to Gemini for transcription...");
+    
+    const geminiResponse = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
       {
         method: "POST",
@@ -696,32 +770,39 @@ async function transcribeAudio(audioBase64: string, mimetype: string): Promise<s
               content: [
                 {
                   type: "text",
-                  text: "Transcreva este áudio em português brasileiro. Retorne APENAS o texto transcrito, sem explicações ou formatação adicional.",
+                  text: "Transcreva este áudio em português brasileiro. Retorne APENAS o texto transcrito."
                 },
                 {
                   type: "input_audio",
                   input_audio: {
                     data: audioBase64,
-                    format: mimetype.includes("ogg") ? "ogg" : "mp3",
-                  },
-                },
-              ],
-            },
+                    format: audioFormat
+                  }
+                }
+              ]
+            }
           ],
           max_tokens: 1000,
         }),
       }
     );
 
-    if (!response.ok) {
-      console.error("Transcription error:", response.status);
-      return "";
+    if (geminiResponse.ok) {
+      const geminiData = await geminiResponse.json();
+      const transcription = geminiData.choices?.[0]?.message?.content?.trim() || "";
+      if (transcription && transcription.length > 0) {
+        console.log(`Gemini transcription successful: "${transcription.substring(0, 50)}..."`);
+        return transcription;
+      }
+    } else {
+      const errorText = await geminiResponse.text();
+      console.log("Gemini transcription failed:", geminiResponse.status, errorText.substring(0, 200));
     }
 
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || "";
+    console.log("All transcription methods failed");
+    return "";
   } catch (error) {
-    console.error("Error transcribing audio:", error);
+    console.error("Error in transcribeAudio:", error);
     return "";
   }
 }
@@ -989,26 +1070,60 @@ serve(async (req) => {
 
     // Handle message status updates (delivered/read)
     if (payload.event === "messages.update") {
-      const messageId = payload.data.key.id;
-      const status = payload.data.status;
+      // Support multiple Evolution API payload formats
+      const messageId = (payload.data as any).messageId || 
+                        (payload.data as any).keyId || 
+                        payload.data.key?.id;
+      const statusRaw = payload.data.status;
       
-      // Status: 2 = delivered, 3 = read
-      if (status === 2) {
-        await updateMessageStatus(supabase, messageId, "delivered");
-      } else if (status === 3) {
-        await updateMessageStatus(supabase, messageId, "read");
+      console.log(`Message status update - ID: ${messageId}, Status: ${statusRaw}`);
+      
+      if (!messageId) {
+        console.log("No message ID found in status update payload");
+        return new Response(JSON.stringify({ status: "no_message_id" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
       
-      return new Response(JSON.stringify({ status: "status_updated" }), {
+      // Map status (supports both string and numeric formats)
+      let status: "delivered" | "read" | null = null;
+      if (statusRaw === "DELIVERY_ACK" || statusRaw === 2 || statusRaw === "delivered") {
+        status = "delivered";
+      } else if (statusRaw === "READ" || statusRaw === 3 || statusRaw === "read") {
+        status = "read";
+      }
+      
+      if (status) {
+        await updateMessageStatus(supabase, messageId, status);
+        console.log(`Message ${messageId} status updated to: ${status}`);
+      } else {
+        console.log(`Unknown status value: ${statusRaw}`);
+      }
+      
+      return new Response(JSON.stringify({ status: "status_updated", newStatus: status }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     // Handle presence updates (typing/recording)
     if (payload.event === "presence.update") {
-      const phone = payload.data.key.remoteJid.replace("@s.whatsapp.net", "");
-      const presence = payload.data.presence;
+      // Support multiple Evolution API payload formats
+      const remoteJid = (payload.data as any).remoteJid || 
+                        (payload.data as any).key?.remoteJid ||
+                        (payload.data as any).participant;
+      
+      if (!remoteJid) {
+        console.log("No remoteJid found in presence update");
+        return new Response(JSON.stringify({ status: "no_remote_jid" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      
+      const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@lid", "");
+      const presence = payload.data.presence || (payload.data as any).action;
       const instanceName = payload.instance;
+      
+      console.log(`Presence update - Phone: ${phone}, Presence: ${presence}`);
       
       // Find the conversation
       const { data: settings } = await supabase
@@ -1026,12 +1141,11 @@ serve(async (req) => {
           .single();
         
         if (conversation) {
-          await updateTypingStatus(
-            supabase,
-            conversation.id,
-            presence === "composing",
-            presence === "recording"
-          );
+          const isTyping = presence === "composing" || presence === "typing";
+          const isRecording = presence === "recording";
+          
+          await updateTypingStatus(supabase, conversation.id, isTyping, isRecording);
+          console.log(`Typing status updated for ${phone}: typing=${isTyping}, recording=${isRecording}`);
         }
       }
       
@@ -1324,10 +1438,12 @@ function getDefaultSystemPrompt(): string {
 5. SEMPRE pergunte sobre troco se pagamento for dinheiro
 6. Se o cliente não responder algo, pergunte novamente educadamente
 
-🎤 MENSAGENS DE ÁUDIO:
-- Quando receber áudio transcrito, trate o texto como uma mensagem normal
-- Se a transcrição parecer confusa, peça educadamente para repetir
-- Continue o fluxo normalmente
+🎤 MENSAGENS DE ÁUDIO - IMPORTANTE:
+- Se receber "[Áudio transcrito]: texto", trate o texto como uma mensagem normal do cliente
+- Se receber "[O cliente enviou um áudio que não pôde ser transcrito]":
+  → Responda: "Recebi seu áudio! 🎤 Infelizmente não consegui entender completamente. Poderia repetir por texto, por favor?"
+- NUNCA diga que "não consegue processar áudio" ou "não tenho capacidade de ouvir"
+- SEMPRE seja gentil e peça para repetir quando não entender
 
 🖼️ MENSAGENS COM IMAGEM:
 - Quando receber uma imagem, você verá a análise entre colchetes
@@ -1409,12 +1525,14 @@ SOMENTE quando o cliente confirmar (sim, confirmo, pode fazer, etc), use a ferra
 - Pular etapas do fluxo
 - Responder com JSON ou código
 - Inventar preços ou produtos
+- Dizer que não pode processar áudio
 
 ✅ EXEMPLOS DE RESPOSTAS CORRETAS:
 - "Claro! Vou mostrar nosso cardápio 📋"
 - "O X-Bacon custa R$ 38,90 e vem com hambúrguer, bacon e queijo!"
 - "Perfeito! Qual o seu endereço para entrega?"
 - "Vai precisar de troco? O total ficou R$ 89,80"
+- "Recebi seu áudio! 🎤 Poderia repetir por texto?"
 
 Seja profissional e proporcione uma ótima experiência ao cliente! 🙌`;
 }
