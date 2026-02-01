@@ -367,6 +367,56 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          action_url: string | null
+          category: string
+          created_at: string
+          id: string
+          message: string
+          metadata: Json | null
+          read: boolean
+          title: string
+          type: string
+          unit_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action_url?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          message: string
+          metadata?: Json | null
+          read?: boolean
+          title: string
+          type?: string
+          unit_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action_url?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          message?: string
+          metadata?: Json | null
+          read?: boolean
+          title?: string
+          type?: string
+          unit_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           created_at: string
@@ -1078,6 +1128,19 @@ export type Database = {
           _description?: string
           _metadata?: Json
           _severity?: string
+          _unit_id?: string
+          _user_id?: string
+        }
+        Returns: string
+      }
+      create_notification: {
+        Args: {
+          _action_url?: string
+          _category?: string
+          _message: string
+          _metadata?: Json
+          _title: string
+          _type?: string
           _unit_id?: string
           _user_id?: string
         }

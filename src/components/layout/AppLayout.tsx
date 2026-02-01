@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUnit } from "@/contexts/UnitContext";
@@ -7,6 +7,9 @@ import { AppSidebar } from "./AppSidebar";
 import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
 import { SubscriptionBadge } from "@/components/subscription/SubscriptionBadge";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { NotificationCenter } from "@/components/notifications/NotificationCenter";
+import { useNotifications } from "@/hooks/useNotifications";
 
 // Page titles mapping
 const pageTitles: Record<string, string> = {
@@ -32,6 +35,16 @@ export function AppLayout() {
   const location = useLocation();
   const { user, loading: authLoading, subscription } = useAuth();
   const { selectedUnit, loading: unitLoading } = useUnit();
+  const [notificationCenterOpen, setNotificationCenterOpen] = useState(false);
+
+  const {
+    notifications,
+    unreadCount,
+    isLoading: notificationsLoading,
+    markAsRead,
+    markAllAsRead,
+    deleteNotification,
+  } = useNotifications();
 
   const currentPageTitle = pageTitles[location.pathname] || "";
 
@@ -72,6 +85,12 @@ export function AppLayout() {
           
           <div className="flex-1" />
           
+          {/* Notification Bell */}
+          <NotificationBell
+            unreadCount={unreadCount}
+            onClick={() => setNotificationCenterOpen(true)}
+          />
+          
           {/* Subscription Badge in Header */}
           <div className="hidden sm:block">
             <SubscriptionBadge 
@@ -84,6 +103,18 @@ export function AppLayout() {
           <Outlet />
         </main>
       </SidebarInset>
+
+      {/* Notification Center */}
+      <NotificationCenter
+        open={notificationCenterOpen}
+        onOpenChange={setNotificationCenterOpen}
+        notifications={notifications}
+        unreadCount={unreadCount}
+        onMarkAsRead={markAsRead}
+        onMarkAllAsRead={markAllAsRead}
+        onDelete={deleteNotification}
+        isLoading={notificationsLoading}
+      />
     </SidebarProvider>
   );
 }
