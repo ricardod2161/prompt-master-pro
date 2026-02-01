@@ -1,278 +1,255 @@
 
-# Documentacao Completa do Sistema na Pagina de Configuracoes
+# Landing Page Profissional para RestaurantOS
 
 ## Visao Geral
 
-Sera criada uma nova aba "Documentacao" na pagina de Configuracoes contendo toda a documentacao do sistema de forma interativa, organizada e profissional, permitindo que os usuarios acessem guias, tutoriais e informacoes tecnicas diretamente da interface.
+Sera criada uma landing page completa e profissional que apresenta o sistema RestaurantOS de forma elegante, utilizando o design system 3D com glassmorphismo ja existente, animacoes fluidas e layout totalmente responsivo.
 
 ---
 
-## Estrutura da Documentacao
+## Estrutura da Landing Page
 
-A documentacao sera dividida em secoes acessiveis por acordeoes (accordions) para facilitar a navegacao:
+A pagina sera dividida nas seguintes secoes:
 
-### 1. Introducao ao Sistema
-- O que e o GastroHub
-- Principais funcionalidades
-- Diferenciais do sistema
+### 1. Hero Section
+- Headline impactante com gradiente
+- Subtitulo explicativo
+- Botoes CTA (Comecar Gratis / Ver Demo)
+- Animacao de fundo com blobs flutuantes
+- Badge "Sistema #1 para Restaurantes"
+- Preview do dashboard em mockup 3D
 
-### 2. Guia de Inicio Rapido
-- Primeiro acesso
-- Criando sua conta
-- Configurando sua unidade
-- Upload de logo
+### 2. Logos de Parceiros/Clientes
+- Barra com logos de restaurantes parceiros
+- Animacao de scroll infinito
+- "Mais de X restaurantes confiam no RestaurantOS"
 
-### 3. Modulos do Sistema
+### 3. Features Principais
+- Grid responsivo com cards 3D
+- Icones animados
+- 6 features principais:
+  - Gestao de Pedidos Multicanal
+  - KDS (Kitchen Display)
+  - PDV Completo
+  - Controle de Estoque
+  - Integracao WhatsApp
+  - Analise com IA
 
-#### 3.1 Gestao de Pedidos
-- Canais de recebimento (balcao, mesa, delivery, WhatsApp)
-- Fluxo de status dos pedidos
-- Acompanhamento em tempo real
+### 4. Como Funciona
+- Timeline visual em 3 passos
+- Ilustracoes para cada etapa
+- Animacoes de entrada sequenciais
 
-#### 3.2 KDS (Kitchen Display System)
-- Como funciona a tela da cozinha
-- Gerenciamento de filas
-- Alertas sonoros
+### 5. Diferenciais
+- Cards comparativos
+- Numeros/estatisticas
+- "Por que escolher o RestaurantOS"
 
-#### 3.3 Caixa (PDV)
-- Abrindo e fechando o caixa
-- Formas de pagamento
-- Sangria e suprimentos
-- Relatorios de caixa
+### 6. Depoimentos
+- Carousel de testimonials
+- Foto, nome, cargo e restaurante
+- Estrelas de avaliacao
 
-#### 3.4 Gestao de Mesas
-- Mapa visual
-- QR Code para cardapio
-- Status das mesas
+### 7. Preview de Precos
+- Cards de planos resumidos
+- Link para pagina completa de pricing
+- Badge "Teste gratis por 14 dias"
 
-#### 3.5 Delivery
-- Cadastro de entregadores
-- Despacho de pedidos
-- Taxas de entrega
+### 8. FAQ Resumido
+- Accordions com perguntas frequentes
+- 5-6 perguntas principais
 
-#### 3.6 Estoque
-- Cadastro de itens
-- Movimentacoes
-- Alertas automaticos de estoque baixo
+### 9. CTA Final
+- Secao de conversao
+- Formulario simples ou botao grande
+- Garantias (sem cartao, cancele quando quiser)
 
-#### 3.7 WhatsApp
-- Configuracao da Evolution API
-- Chat em tempo real
-- Bot automatico
-
-### 4. Configuracoes do Sistema
-- Dados da unidade
-- Configuracoes operacionais
-- Configuracoes financeiras
-- Horarios de funcionamento
-- Personalizacao de aparencia
-
-### 5. Sistema de Notificacoes
-- Como funcionam as notificacoes automaticas
-- Tipos de alertas
-- Central de notificacoes
-
-### 6. Analise com IA
-- Analise de logs
-- Identificacao de problemas
-- Sugestoes de correcao
-
-### 7. Instalacao e Deploy
-- Pre-requisitos
-- Passo a passo de instalacao
-- Deploy via Lovable
-- Configuracao de dominio customizado
-
-### 8. FAQ e Solucao de Problemas
-- Perguntas frequentes
-- Erros comuns e solucoes
-- Contato de suporte
+### 10. Footer
+- Links de navegacao
+- Redes sociais
+- Informacoes de contato
+- Copyright
 
 ---
 
 ## Arquivos a Criar
 
-### 1. `src/components/settings/DocumentationTab.tsx`
+### 1. `src/pages/Landing.tsx`
 
-Novo componente com a documentacao completa contendo:
-- Interface com accordions expansiveis
-- Icones ilustrativos para cada secao
-- Codigo de exemplo quando necessario
-- Links de navegacao rapida
-- Cards informativos com dicas
-- Barra de busca para filtrar conteudo
-- Botao de copiar codigo
+Pagina principal da landing com todas as secoes, incluindo:
+- Hero com animacoes
+- Navegacao fixa no topo
+- Todas as secoes listadas acima
+- Responsividade completa
 
-### 2. `src/components/settings/DocSection.tsx`
+### 2. `src/components/landing/HeroSection.tsx`
 
-Componente auxiliar para secoes de documentacao com:
-- Icone da secao
-- Titulo e descricao
-- Conteudo expansivel
-- Estilizacao consistente
+Secao hero com:
+- Headline animado
+- Botoes CTA
+- Background animado
+- Preview do sistema
 
-### 3. `src/components/settings/CodeBlock.tsx`
+### 3. `src/components/landing/FeaturesSection.tsx`
 
-Componente para exibir blocos de codigo com:
-- Syntax highlighting basico
-- Botao de copiar
-- Label do tipo de codigo
+Grid de features com:
+- Cards 3D com hover
+- Icones de cada modulo
+- Descricoes curtas
+
+### 4. `src/components/landing/HowItWorks.tsx`
+
+Timeline visual:
+- 3 etapas simples
+- Animacoes staggered
+- Ilustracoes
+
+### 5. `src/components/landing/TestimonialsSection.tsx`
+
+Carousel de depoimentos:
+- Cards glassmorphism
+- Navegacao por dots
+- Auto-play
+
+### 6. `src/components/landing/LandingNavbar.tsx`
+
+Navegacao fixa:
+- Logo
+- Links de ancoras
+- Botao Login/Comecar
+
+### 7. `src/components/landing/LandingFooter.tsx`
+
+Footer completo:
+- Logo e descricao
+- Links organizados
+- Redes sociais
 
 ---
 
 ## Arquivos a Modificar
 
-### 1. `src/pages/Settings.tsx`
+### 1. `src/App.tsx`
 
-Adicionar nova aba "Documentacao" ao TAB_ITEMS:
-```typescript
-const TAB_ITEMS = [
-  { value: "unit", label: "Unidade", icon: Building2 },
-  { value: "operational", label: "Operacional", icon: Cog },
-  { value: "financial", label: "Financeiro", icon: DollarSign },
-  { value: "hours", label: "Horários", icon: Clock },
-  { value: "profile", label: "Perfil", icon: User },
-  { value: "appearance", label: "Aparência", icon: Palette },
-  { value: "docs", label: "Ajuda", icon: BookOpen }, // Nova aba
-];
-```
-
-Adicionar novo TabsContent para DocumentationTab.
+Atualizar rotas:
+- Rota "/" apontando para Landing
+- Rota "/login" para pagina de Login
+- Manter demais rotas
 
 ---
 
-## Design da Interface
+## Design Visual
 
-### Layout Principal
+### Cores e Gradientes
 
 ```text
-+--------------------------------------------------+
-|  [Icone] Documentacao & Ajuda                     |
-|  Guias completos de uso do sistema                |
-+--------------------------------------------------+
-|                                                   |
-|  [Buscar na documentacao...]              [Busca] |
-|                                                   |
-+--------------------------------------------------+
-|                                                   |
-|  [v] Introducao ao Sistema                        |
-|      +----------------------------------------+   |
-|      | O GastroHub e um sistema completo...   |   |
-|      +----------------------------------------+   |
-|                                                   |
-|  [>] Guia de Inicio Rapido                        |
-|                                                   |
-|  [>] Gestao de Pedidos                            |
-|                                                   |
-|  [>] KDS - Tela da Cozinha                        |
-|                                                   |
-|  [>] Caixa (PDV)                                  |
-|                                                   |
-|  [>] Gestao de Mesas                              |
-|                                                   |
-|  [>] Delivery                                     |
-|                                                   |
-|  [>] Estoque                                      |
-|                                                   |
-|  [>] Integracao WhatsApp                          |
-|                                                   |
-|  [>] Configuracoes                                |
-|                                                   |
-|  [>] Notificacoes Automaticas                     |
-|                                                   |
-|  [>] Analise com IA                               |
-|                                                   |
-|  [>] Instalacao e Deploy                          |
-|                                                   |
-|  [>] FAQ e Suporte                                |
-|                                                   |
-+--------------------------------------------------+
+Hero Background:
+- Gradiente principal: from-background via-background to-primary/5
+- Blobs animados com primary/20 e primary/10
+
+Cards:
+- Background glassmorphism
+- Borda sutil com border-border/50
+- Sombras 3D em hover
 ```
 
-### Elementos de UI
+### Animacoes
 
-- **Accordions**: Usados para cada secao principal
-- **Cards informativos**: Dicas e alertas importantes
-- **Blocos de codigo**: Para exemplos tecnicos
-- **Badges**: Para indicar nivel (Basico, Intermediario, Avancado)
-- **Links de navegacao**: Para pular entre secoes
-- **Icones**: lucide-react para cada modulo
+- `animate-float` - Elementos flutuantes
+- `animate-fade-in-up` - Entrada de secoes
+- `animate-stagger-*` - Delays sequenciais
+- `card-hover-lift` - Hover em cards
+- Scroll reveal para secoes
 
 ### Responsividade
 
-- Mobile: Accordions em coluna unica, texto ajustado
-- Tablet: Layout adaptado com margens adequadas
-- Desktop: Layout completo com sidebar de navegacao rapida
+```text
+Mobile (< 768px):
+- Hero com texto centralizado
+- Cards em coluna unica
+- Menu hamburger
+- Footer simplificado
+
+Tablet (768px - 1024px):
+- Grid de 2 colunas
+- Espacamentos ajustados
+
+Desktop (> 1024px):
+- Layout completo
+- Grid de 3 colunas
+- Animacoes completas
+```
 
 ---
 
-## Conteudo Detalhado
+## Conteudo das Secoes
 
-### Introducao
-
+### Hero
 ```text
-O GastroHub e um sistema de gestao completo para restaurantes, 
-desenvolvido com tecnologias modernas como React, TypeScript e 
-Supabase. Ele oferece uma solucao integrada para:
-
-- Gerenciar pedidos de multiplos canais
-- Controlar estoque com alertas automaticos
-- Gerenciar caixa e pagamentos
-- Integrar com WhatsApp para atendimento
-- Analisar logs com inteligencia artificial
+Titulo: "Transforme seu Restaurante com Tecnologia Inteligente"
+Subtitulo: "Sistema completo de gestao que integra pedidos, cozinha, 
+           estoque e delivery em uma unica plataforma poderosa"
+CTA Primario: "Comecar Gratuitamente"
+CTA Secundario: "Ver Demonstracao"
 ```
 
-### Guia de Status dos Pedidos
-
+### Features
 ```text
-Fluxo de Status:
-1. Pendente    -> Pedido recebido, aguardando preparo
-2. Preparando  -> Cozinha iniciou o preparo
-3. Pronto      -> Pedido finalizado, aguardando entrega/retirada
-4. Entregue    -> Pedido entregue ao cliente
-5. Cancelado   -> Pedido cancelado (em qualquer etapa)
+1. Pedidos Multicanal
+   "Receba pedidos do balcao, mesas, delivery e WhatsApp em um so lugar"
+
+2. KDS Inteligente
+   "Tela da cozinha com filas organizadas e alertas sonoros"
+
+3. PDV Completo
+   "Caixa com multiplas formas de pagamento e controle de sangria"
+
+4. Estoque Automatico
+   "Alertas de estoque baixo e rastreamento de movimentacoes"
+
+5. WhatsApp Integrado
+   "Chat em tempo real e bot automatico para pedidos"
+
+6. IA para Analise
+   "Identificacao automatica de problemas e sugestoes de correcao"
 ```
 
-### Instalacao
+### Como Funciona
+```text
+Passo 1: Cadastre seu Restaurante
+"Configure sua unidade em minutos com dados basicos"
 
-```bash
-# 1. Clone o repositorio
-git clone <URL_DO_REPOSITORIO>
-cd gastrohub
+Passo 2: Adicione seus Produtos
+"Importe ou cadastre seu cardapio completo"
 
-# 2. Instale as dependencias
-npm install
-# ou com Bun
-bun install
+Passo 3: Comece a Vender
+"Receba pedidos e gerencie tudo em tempo real"
+```
 
-# 3. Configure as variaveis de ambiente
-# O arquivo .env e gerado automaticamente pelo Lovable
-
-# 4. Inicie o servidor de desenvolvimento
-npm run dev
-# ou
-bun dev
-
-# 5. Acesse no navegador
-# http://localhost:5173
+### Numeros
+```text
+- "+500 restaurantes ativos"
+- "+1 milhao de pedidos processados"
+- "99.9% de uptime"
+- "Suporte em portugues"
 ```
 
 ---
 
 ## Beneficios
 
-1. **Acessibilidade**: Documentacao sempre disponivel na interface
-2. **Contexto**: Usuario aprende sem sair do sistema
-3. **Organizacao**: Informacoes estruturadas e navegaveis
-4. **Busca**: Encontrar informacoes rapidamente
-5. **Profissionalismo**: Sistema completo e bem documentado
+1. **Primeira Impressao**: Landing profissional gera credibilidade
+2. **Conversao**: CTAs estrategicos aumentam cadastros
+3. **Informacao**: Usuario entende o produto antes de entrar
+4. **SEO**: Pagina otimizada para buscadores
+5. **Responsividade**: Funciona em qualquer dispositivo
 
 ---
 
 ## Proximos Passos
 
-1. Criar componente `CodeBlock.tsx` para blocos de codigo
-2. Criar componente `DocSection.tsx` para secoes
-3. Criar componente `DocumentationTab.tsx` principal
-4. Atualizar `Settings.tsx` com nova aba
-5. Testar responsividade e navegacao
+1. Criar componentes de Landing (Navbar, Hero, Features, etc)
+2. Criar pagina Landing.tsx principal
+3. Atualizar rotas no App.tsx
+4. Testar responsividade em todos dispositivos
+5. Verificar animacoes e performance
