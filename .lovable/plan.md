@@ -1,186 +1,210 @@
 
-# Plano: Painel Admin do Desenvolvedor + Melhorias Gerais
+# Fase 4: Triggers Automaticos e IA nos Logs
 
-## Resumo Executivo
-Criar um sistema de **Super Admin (Developer)** exclusivo para você, com painel completo de gestão de usuários, unidades e métricas do sistema. Além disso, melhorar a organização, robustez e elegância de toda a aplicação.
+## Visao Geral
 
----
-
-## Fase 1: Role de Desenvolvedor + Painel Admin
-
-### 1.1 Criar Role "developer" no Banco de Dados
-- Adicionar novo valor `developer` ao enum `app_role`
-- Atribuir role `developer` ao seu usuário (ricardodelima1988@gmail.com)
-- Esta role terá privilégios superiores a `admin`
-
-### 1.2 Nova Página: `/admin` (Painel do Desenvolvedor)
-Página exclusiva com abas:
-
-**Tab: Dashboard do Sistema**
-- Total de usuários ativos
-- Total de unidades cadastradas
-- Assinaturas ativas por tier (Starter/Pro/Enterprise)
-- Receita mensal estimada (MRR)
-- Gráfico de crescimento de usuários
-
-**Tab: Gestão de Usuários**
-- Listar todos os usuários do sistema
-- Ver roles de cada usuário
-- Atribuir/remover roles
-- Ver unidades associadas
-- Desativar/ativar contas
-
-**Tab: Gestão de Unidades**
-- Listar todas as unidades
-- Ver proprietário de cada unidade
-- Estatísticas por unidade (pedidos, faturamento)
-
-**Tab: Logs de Sistema**
-- Ações administrativas recentes
-- Erros de pagamento
-- Falhas de integração WhatsApp
-
-### 1.3 Proteção de Acesso
-- Rota `/admin` visível apenas para role `developer`
-- RLS policies específicas para developer acessar todos os dados
-- Funções SQL `is_developer()` para verificação rápida
+Esta fase implementara automacao inteligente no sistema atraves de:
+1. **Triggers de banco** para notificacoes automaticas
+2. **Sistema de IA** para analise e resolucao de problemas nos logs
 
 ---
 
-## Fase 2: Melhorias de Organização e Robustez
+## Parte 1: Triggers de Notificacoes Automaticas
 
-### 2.1 Reestruturação do Sidebar
-- Agrupar melhor os itens por função
-- Adicionar indicadores visuais de status (ex: pedidos pendentes)
-- Item "Admin" visível apenas para developer
+### 1.1 Trigger para Novos Pedidos
 
-### 2.2 Melhorias na Página de Settings
-- Adicionar aba "Usuários da Unidade" para admins
-- Permitir convidar novos colaboradores
-- Gerenciar permissões por unidade
+Sera criada uma funcao de trigger que dispara automaticamente quando um pedido e inserido:
 
-### 2.3 Melhorias Visuais Globais
-- Micro-animações mais suaves em transições
-- Feedback visual em todas as ações
-- Estados de loading consistentes
-- Tooltips informativos em botões importantes
+```text
+[Pedido Criado] --> [Trigger AFTER INSERT] --> [Notificacao Criada]
+                                           --> [Log Admin Criado]
+```
+
+**Logica:**
+- Detecta canal do pedido (delivery, counter, table, whatsapp)
+- Cria notificacao com tipo "order" e categoria apropriada
+- Registra log na tabela admin_logs
+
+### 1.2 Trigger para Estoque Baixo
+
+Funcao de trigger monitorando atualizacoes na tabela `inventory_items`:
+
+```text
+[Estoque Atualizado] --> [Verifica current_stock <= min_stock]
+                              |
+                    [SIM] --> [Cria Notificacao de Alerta]
+                              [Registra Log de Warning]
+```
+
+**Logica:**
+- Compara `current_stock` com `min_stock`
+- Evita duplicatas com verificacao de notificacao recente (24h)
+- Severidade baseada no nivel de estoque (warning vs error)
+
+### 1.3 Trigger para Mudanca de Status do Pedido
+
+Monitora transicoes de status importantes:
+- `pending` -> `preparing` (em preparo)
+- `preparing` -> `ready` (pronto)
+- `ready` -> `delivering` (saiu para entrega)
+- `*` -> `cancelled` (cancelado)
 
 ---
 
-## Fase 3: Funcionalidades Inteligentes
+## Parte 2: Sistema de IA para Analise de Logs
 
-### 3.1 Notificações em Tempo Real
-- Badge de notificação no sidebar
-- Centro de notificações (ícone de sino no header)
-- Alertas de:
-  - Novos pedidos
-  - Estoque baixo
-  - Pagamentos recebidos
-  - Assinaturas próximas do vencimento
+### 2.1 Edge Function: `analyze-logs`
 
-### 3.2 Quick Actions no Dashboard
-- Botões rápidos: "Novo Pedido", "Abrir Caixa", "Ver KDS"
-- Atalhos de teclado para ações frequentes
+Nova funcao serverless usando Lovable AI (google/gemini-3-flash-preview):
 
-### 3.3 Busca Global (Cmd+K)
-- Buscar em pedidos, produtos, clientes
-- Navegar rapidamente entre páginas
-- Executar ações rápidas
+**Funcionalidades:**
+- Analisa ultimos N logs com erros/warnings
+- Identifica padroes e causas raiz
+- Sugere correcoes especificas
+- Gera relatorio de saude do sistema
+
+### 2.2 Interface de Analise no Admin
+
+Novo componente `AILogAnalyzer` com:
+- Botao "Analisar com IA"
+- Visualizacao de insights
+- Sugestoes de correcao acionaveis
+- Historico de analises
+
+### 2.3 Fluxo de Analise
+
+```text
+[Admin clica Analisar] --> [Frontend busca logs recentes]
+                               |
+                       [Envia para Edge Function]
+                               |
+                       [IA processa e classifica]
+                               |
+                       [Retorna insights + sugestoes]
+                               |
+                       [Exibe no painel com acoes]
+```
 
 ---
 
-## Detalhes Técnicos
+## Detalhes Tecnicos
 
-### Migração SQL
+### Migracao SQL
+
 ```sql
--- Adicionar role developer
-ALTER TYPE app_role ADD VALUE 'developer';
-
--- Criar função is_developer
-CREATE OR REPLACE FUNCTION is_developer(_user_id uuid)
-RETURNS boolean AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM user_roles 
-    WHERE user_id = _user_id AND role = 'developer'
+-- Trigger para novos pedidos
+CREATE FUNCTION notify_new_order()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO notifications (unit_id, title, message, type, category, metadata)
+  VALUES (
+    NEW.unit_id,
+    'Novo pedido #' || NEW.order_number,
+    'Pedido de ' || COALESCE(NEW.customer_name, 'Cliente') || ' - R$ ' || NEW.total_price,
+    'info',
+    'order',
+    jsonb_build_object('order_id', NEW.id, 'channel', NEW.channel)
   );
-$$ LANGUAGE sql SECURITY DEFINER;
+  
+  INSERT INTO admin_logs (action, category, unit_id, metadata, severity)
+  VALUES (
+    'Novo pedido criado',
+    'order',
+    NEW.unit_id,
+    jsonb_build_object('order_id', NEW.id, 'order_number', NEW.order_number),
+    'info'
+  );
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
--- Atribuir role ao desenvolvedor
-INSERT INTO user_roles (user_id, role)
-SELECT id, 'developer' FROM auth.users 
-WHERE email = 'ricardodelima1988@gmail.com';
-
--- RLS: Developer pode ver tudo
-CREATE POLICY "Developer full access" ON units
-FOR ALL TO authenticated
-USING (is_developer(auth.uid()));
+-- Trigger para estoque baixo
+CREATE FUNCTION check_low_stock()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.current_stock <= COALESCE(NEW.min_stock, 0) THEN
+    -- Verificar se ja existe notificacao recente
+    IF NOT EXISTS (
+      SELECT 1 FROM notifications
+      WHERE category = 'stock'
+      AND metadata->>'item_id' = NEW.id::text
+      AND created_at > NOW() - INTERVAL '24 hours'
+    ) THEN
+      INSERT INTO notifications (...)
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 ```
 
-### Novos Componentes
-```
-src/
-├── pages/
-│   └── Admin.tsx                    # Painel principal
-├── components/admin/
-│   ├── AdminDashboard.tsx           # Métricas do sistema
-│   ├── AdminUsersList.tsx           # Gestão de usuários
-│   ├── AdminUnitsManager.tsx        # Gestão de unidades
-│   └── AdminActivityLogs.tsx        # Logs do sistema
-├── hooks/
-│   ├── useAdminStats.ts             # Estatísticas do sistema
-│   ├── useUserManagement.ts         # CRUD de usuários/roles
-│   └── useIsDeveloper.ts            # Verificar se é developer
+### Edge Function: analyze-logs
+
+```typescript
+// Estrutura basica
+serve(async (req) => {
+  const { logs, analysisType } = await req.json();
+  
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "google/gemini-3-flash-preview",
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: JSON.stringify(logs) }
+      ],
+      tools: [{ type: "function", function: analyzeLogsSchema }]
+    })
+  });
+  
+  return Response.json(result);
+});
 ```
 
-### Proteção de Rotas
-```tsx
-// Em AppLayout.tsx ou rota específica
-const { isDeveloper } = useIsDeveloper();
+### Componente AILogAnalyzer
 
-// Rota protegida
-<Route path="/admin" element={
-  <DeveloperOnly>
-    <Admin />
-  </DeveloperOnly>
-} />
-```
+- Card de "Analise Inteligente" no topo dos logs
+- Indicadores de saude: OK/Warning/Critical
+- Lista de problemas detectados com severidade
+- Botoes de acao rapida para cada sugestao
+- Loading state com animacao durante analise
 
 ---
 
-## Cronograma de Implementação
+## Arquivos a Criar/Modificar
 
-| Fase | Descrição | Estimativa |
-|------|-----------|------------|
-| 1.1 | Role developer + atribuição | 1 mensagem |
-| 1.2 | Página Admin básica | 2-3 mensagens |
-| 1.3 | RLS e proteção | 1 mensagem |
-| 2.1 | Melhorias Sidebar | 1 mensagem |
-| 2.2 | Melhorias Settings | 1-2 mensagens |
-| 2.3 | Melhorias visuais | 1 mensagem |
-| 3.1 | Notificações | 2 mensagens |
-| 3.2 | Quick Actions | 1 mensagem |
-| 3.3 | Busca Global | 2 mensagens |
+### Novos Arquivos:
+1. `supabase/migrations/xxx_notification_triggers.sql` - Triggers SQL
+2. `supabase/functions/analyze-logs/index.ts` - Edge function IA
+3. `src/components/admin/AILogAnalyzer.tsx` - Componente de analise
+4. `src/hooks/useLogAnalysis.ts` - Hook para chamar a IA
 
-**Total estimado: 12-15 mensagens**
+### Arquivos a Modificar:
+1. `src/components/admin/AdminActivityLogs.tsx` - Integrar AILogAnalyzer
+2. `supabase/config.toml` - Registrar nova edge function
+3. `src/hooks/useAdminLogs.ts` - Adicionar funcao de analise
 
 ---
 
-## Benefícios
+## Beneficios
 
-1. **Controle Total**: Você terá visibilidade completa do sistema
-2. **Gestão de Usuários**: Adicionar/remover usuários sem SQL manual
-3. **Métricas de Negócio**: Acompanhar MRR, churn, crescimento
-4. **Segurança**: Role separada impede conflitos com admins de unidades
-5. **Escalabilidade**: Preparado para múltiplos clientes
+1. **Automacao Total**: Notificacoes criadas sem intervencao manual
+2. **Proatividade**: Alertas de estoque antes de acabar
+3. **Inteligencia**: IA identifica problemas antes de escalar
+4. **Rastreabilidade**: Todos eventos logados automaticamente
+5. **Acoes Rapidas**: Sugestoes da IA com um clique
 
 ---
 
-## Próximos Passos
+## Proximos Passos Apos Aprovacao
 
-Após aprovação, começarei pela **Fase 1.1**:
-1. Adicionar role `developer` ao enum
-2. Atribuir role ao seu email
-3. Criar função `is_developer()`
-4. Adicionar policies para acesso total
-
-Deseja que eu prossiga com a implementação?
+1. Criar migracao SQL com triggers
+2. Implementar edge function de analise
+3. Desenvolver interface do AILogAnalyzer
+4. Integrar no painel de administracao
+5. Testar fluxo completo
