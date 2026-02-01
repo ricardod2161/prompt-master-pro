@@ -22,8 +22,21 @@ interface EvolutionWebhookPayload {
       extendedTextMessage?: {
         text: string;
       };
+      audioMessage?: {
+        url?: string;
+        mimetype?: string;
+        seconds?: number;
+      };
+      imageMessage?: {
+        url?: string;
+        mimetype?: string;
+        caption?: string;
+      };
     };
     messageTimestamp?: number;
+    status?: number;
+    // For presence events
+    presence?: "composing" | "recording" | "paused";
   };
 }
 
@@ -620,6 +633,215 @@ async function criarPedidoLegacy(
   return confirmarPedido(supabase, unitId, args, customerPhone);
 }
 
+// Download media from Evolution API
+async function downloadMedia(
+  apiUrl: string,
+  apiToken: string,
+  instanceName: string,
+  messageId: string
+): Promise<{ base64: string; mimetype: string } | null> {
+  try {
+    const response = await fetch(
+      `${apiUrl}/chat/getBase64FromMediaMessage/${instanceName}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: apiToken,
+        },
+        body: JSON.stringify({
+          message: { key: { id: messageId } },
+          convertToMp4: false,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      console.error("Error downloading media:", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    return {
+      base64: data.base64,
+      mimetype: data.mimetype,
+    };
+  } catch (error) {
+    console.error("Error downloading media:", error);
+    return null;
+  }
+}
+
+// Transcribe audio using Gemini
+async function transcribeAudio(audioBase64: string, mimetype: string): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    throw new Error("LOVABLE_API_KEY not configured");
+  }
+
+  try {
+    const response = await fetch(
+      "https://ai.gateway.lovable.dev/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Transcreva este áudio em português brasileiro. Retorne APENAS o texto transcrito, sem explicações ou formatação adicional.",
+                },
+                {
+                  type: "input_audio",
+                  input_audio: {
+                    data: audioBase64,
+                    format: mimetype.includes("ogg") ? "ogg" : "mp3",
+                  },
+                },
+              ],
+            },
+          ],
+          max_tokens: 1000,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      console.error("Transcription error:", response.status);
+      return "";
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || "";
+  } catch (error) {
+    console.error("Error transcribing audio:", error);
+    return "";
+  }
+}
+
+// Analyze image using Gemini
+async function analyzeImage(imageBase64: string, mimetype: string): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    throw new Error("LOVABLE_API_KEY not configured");
+  }
+
+  try {
+    const response = await fetch(
+      "https://ai.gateway.lovable.dev/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Descreva brevemente esta imagem em 1-2 frases em português. Se for um comprovante de pagamento (Pix, transferência), identifique. Se for um endereço/localização, identifique. Se for outra coisa, descreva o conteúdo principal.",
+                },
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: `data:${mimetype};base64,${imageBase64}`,
+                  },
+                },
+              ],
+            },
+          ],
+          max_tokens: 200,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      console.error("Image analysis error:", response.status);
+      return "";
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || "";
+  } catch (error) {
+    console.error("Error analyzing image:", error);
+    return "";
+  }
+}
+
+// Send typing/presence indicator
+async function sendPresence(
+  apiUrl: string,
+  apiToken: string,
+  instanceName: string,
+  phone: string,
+  presence: "composing" | "recording" | "paused"
+): Promise<void> {
+  try {
+    await fetch(`${apiUrl}/chat/presence/${instanceName}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: apiToken,
+      },
+      body: JSON.stringify({
+        number: phone,
+        presence,
+      }),
+    });
+  } catch (error) {
+    console.error("Error sending presence:", error);
+  }
+}
+
+// Update or insert typing status
+async function updateTypingStatus(
+  supabase: any,
+  conversationId: string,
+  isTyping: boolean,
+  isRecording: boolean
+): Promise<void> {
+  try {
+    await supabase
+      .from("whatsapp_typing_status")
+      .upsert({
+        conversation_id: conversationId,
+        is_typing: isTyping,
+        is_recording: isRecording,
+      }, {
+        onConflict: "conversation_id",
+      });
+  } catch (error) {
+    console.error("Error updating typing status:", error);
+  }
+}
+
+// Update message status
+async function updateMessageStatus(
+  supabase: any,
+  messageId: string,
+  status: "delivered" | "read"
+): Promise<void> {
+  try {
+    await supabase
+      .from("whatsapp_messages")
+      .update({ status })
+      .eq("message_id", messageId);
+  } catch (error) {
+    console.error("Error updating message status:", error);
+  }
+}
+
 // Process AI response with tool calling loop
 async function processWithAI(
   supabase: any,
@@ -765,6 +987,59 @@ serve(async (req) => {
     const payload: EvolutionWebhookPayload = await req.json();
     console.log("Webhook received:", JSON.stringify(payload, null, 2));
 
+    // Handle message status updates (delivered/read)
+    if (payload.event === "messages.update") {
+      const messageId = payload.data.key.id;
+      const status = payload.data.status;
+      
+      // Status: 2 = delivered, 3 = read
+      if (status === 2) {
+        await updateMessageStatus(supabase, messageId, "delivered");
+      } else if (status === 3) {
+        await updateMessageStatus(supabase, messageId, "read");
+      }
+      
+      return new Response(JSON.stringify({ status: "status_updated" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Handle presence updates (typing/recording)
+    if (payload.event === "presence.update") {
+      const phone = payload.data.key.remoteJid.replace("@s.whatsapp.net", "");
+      const presence = payload.data.presence;
+      const instanceName = payload.instance;
+      
+      // Find the conversation
+      const { data: settings } = await supabase
+        .from("whatsapp_settings")
+        .select("unit_id")
+        .eq("instance_name", instanceName)
+        .single();
+      
+      if (settings) {
+        const { data: conversation } = await supabase
+          .from("whatsapp_conversations")
+          .select("id")
+          .eq("unit_id", settings.unit_id)
+          .eq("phone", phone)
+          .single();
+        
+        if (conversation) {
+          await updateTypingStatus(
+            supabase,
+            conversation.id,
+            presence === "composing",
+            presence === "recording"
+          );
+        }
+      }
+      
+      return new Response(JSON.stringify({ status: "presence_updated" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Only process incoming messages (not from us)
     if (payload.event !== "messages.upsert" || payload.data.key.fromMe) {
       return new Response(JSON.stringify({ status: "ignored" }), {
@@ -774,16 +1049,30 @@ serve(async (req) => {
 
     const instanceName = payload.instance;
     const phone = payload.data.key.remoteJid.replace("@s.whatsapp.net", "");
+    const messageKey = payload.data.key.id;
     const customerName = payload.data.pushName || "Cliente";
-    const messageText =
-      payload.data.message?.conversation ||
-      payload.data.message?.extendedTextMessage?.text ||
-      "";
+    
+    // Determine message type and extract content
+    let messageText = "";
+    let mediaType: "text" | "audio" | "image" | "document" = "text";
+    let mediaUrl: string | null = null;
+    let mediaDuration: number | null = null;
+    let mediaCaption: string | null = null;
+    let transcription: string | null = null;
+    let imageAnalysis: string | null = null;
 
-    if (!messageText) {
-      return new Response(JSON.stringify({ status: "no_text" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // Check for different message types
+    if (payload.data.message?.audioMessage) {
+      mediaType = "audio";
+      mediaDuration = payload.data.message.audioMessage.seconds || 0;
+    } else if (payload.data.message?.imageMessage) {
+      mediaType = "image";
+      mediaCaption = payload.data.message.imageMessage.caption || null;
+    } else {
+      messageText =
+        payload.data.message?.conversation ||
+        payload.data.message?.extendedTextMessage?.text ||
+        "";
     }
 
     // Find WhatsApp settings by instance name
@@ -804,6 +1093,46 @@ serve(async (req) => {
     if (!settings.bot_enabled) {
       console.log("Bot is disabled globally");
       return new Response(JSON.stringify({ status: "bot_disabled" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Handle audio message - download and transcribe
+    if (mediaType === "audio") {
+      console.log("Processing audio message...");
+      const media = await downloadMedia(settings.api_url, settings.api_token, instanceName, messageKey);
+      if (media) {
+        mediaUrl = `data:${media.mimetype};base64,${media.base64.substring(0, 100)}...`; // Store reference
+        transcription = await transcribeAudio(media.base64, media.mimetype);
+        if (transcription) {
+          messageText = `[Áudio transcrito]: ${transcription}`;
+        } else {
+          messageText = "[O cliente enviou um áudio que não pôde ser transcrito]";
+        }
+      } else {
+        messageText = "[O cliente enviou um áudio]";
+      }
+    }
+
+    // Handle image message - download and analyze
+    if (mediaType === "image") {
+      console.log("Processing image message...");
+      const media = await downloadMedia(settings.api_url, settings.api_token, instanceName, messageKey);
+      if (media) {
+        mediaUrl = `data:${media.mimetype};base64,${media.base64.substring(0, 100)}...`;
+        imageAnalysis = await analyzeImage(media.base64, media.mimetype);
+        if (imageAnalysis) {
+          messageText = `[Imagem recebida - análise: ${imageAnalysis}]${mediaCaption ? ` Legenda: "${mediaCaption}"` : ""}`;
+        } else {
+          messageText = `[O cliente enviou uma imagem]${mediaCaption ? ` com legenda: "${mediaCaption}"` : ""}`;
+        }
+      } else {
+        messageText = `[O cliente enviou uma imagem]${mediaCaption ? ` com legenda: "${mediaCaption}"` : ""}`;
+      }
+    }
+
+    if (!messageText) {
+      return new Response(JSON.stringify({ status: "no_text" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -865,12 +1194,24 @@ serve(async (req) => {
       });
     }
 
-    // Store user message
+    // Store user message with media info
     await supabase.from("whatsapp_messages").insert({
       conversation_id: conversation.id,
       role: "user",
       content: messageText,
+      message_id: messageKey,
+      media_type: mediaType,
+      media_url: mediaUrl,
+      media_duration: mediaDuration,
+      media_caption: mediaCaption,
+      transcription: transcription,
     });
+
+    // Send typing indicator to client
+    await sendPresence(settings.api_url, settings.api_token, instanceName, phone, "composing");
+    
+    // Update typing status in database
+    await updateTypingStatus(supabase, conversation.id, true, false);
 
     // Get recent conversation history for context
     const { data: recentMessages } = await supabase
@@ -918,24 +1259,29 @@ serve(async (req) => {
       }
     }
 
+    // Clear typing status
+    await updateTypingStatus(supabase, conversation.id, false, false);
+
     // Final sanitization
     assistantMessage = sanitizeResponse(assistantMessage);
 
-    // Store assistant message
-    await supabase.from("whatsapp_messages").insert({
-      conversation_id: conversation.id,
-      role: "assistant",
-      content: assistantMessage,
-    });
-
-    // Send response via Evolution API
-    await sendWhatsAppMessage(
+    // Send response via Evolution API and get message ID
+    const sentMessageId = await sendWhatsAppMessage(
       settings.api_url,
       settings.api_token,
       instanceName,
       phone,
       assistantMessage
     );
+
+    // Store assistant message with message ID for status tracking
+    await supabase.from("whatsapp_messages").insert({
+      conversation_id: conversation.id,
+      role: "assistant",
+      content: assistantMessage,
+      message_id: sentMessageId,
+      status: "sent",
+    });
 
     return new Response(
       JSON.stringify({
@@ -977,6 +1323,17 @@ function getDefaultSystemPrompt(): string {
 4. SEMPRE confirme os itens antes de pedir endereço/modalidade
 5. SEMPRE pergunte sobre troco se pagamento for dinheiro
 6. Se o cliente não responder algo, pergunte novamente educadamente
+
+🎤 MENSAGENS DE ÁUDIO:
+- Quando receber áudio transcrito, trate o texto como uma mensagem normal
+- Se a transcrição parecer confusa, peça educadamente para repetir
+- Continue o fluxo normalmente
+
+🖼️ MENSAGENS COM IMAGEM:
+- Quando receber uma imagem, você verá a análise entre colchetes
+- Se for comprovante de pagamento Pix: confirme o recebimento e agradeça
+- Se for foto de endereço/mapa: confirme a localização
+- Se for outra coisa: descreva brevemente o que entendeu e continue o atendimento
 
 📋 FLUXO OBRIGATÓRIO DO PEDIDO:
 
@@ -1068,7 +1425,7 @@ async function sendWhatsAppMessage(
   instanceName: string,
   phone: string,
   message: string
-): Promise<void> {
+): Promise<string> {
   const response = await fetch(
     `${apiUrl}/message/sendText/${instanceName}`,
     {
@@ -1090,5 +1447,9 @@ async function sendWhatsAppMessage(
     throw new Error(`Failed to send WhatsApp message: ${response.status}`);
   }
 
+  const data = await response.json();
   console.log("WhatsApp message sent successfully to:", phone);
+  
+  // Return the message ID for status tracking
+  return data.key?.id || "";
 }
