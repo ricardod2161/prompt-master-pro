@@ -67,6 +67,11 @@ export default function Settings() {
     phone: selectedUnit?.phone || "",
   });
   
+  // Logo state
+  const [logoUrl, setLogoUrl] = useState<string | null>(
+    (selectedUnit as any)?.logo_url || null
+  );
+  
   // Operational settings state
   const [operationalSettings, setOperationalSettings] = useState({
     auto_print_enabled: settings?.auto_print_enabled ?? true,
@@ -125,6 +130,7 @@ export default function Settings() {
         address: selectedUnit.address || "",
         phone: selectedUnit.phone || "",
       });
+      setLogoUrl((selectedUnit as any)?.logo_url || null);
     }
   }, [selectedUnit]);
 
@@ -253,7 +259,10 @@ export default function Settings() {
         <TabsContent value="unit" className="mt-0">
           <UnitTab
             unitForm={unitForm}
+            unitId={selectedUnit.id}
+            logoUrl={logoUrl}
             onFormChange={setUnitForm}
+            onLogoChange={setLogoUrl}
             onSave={handleSaveUnit}
           />
         </TabsContent>
