@@ -24,6 +24,7 @@ const pageTitles: Record<string, string> = {
   "/reports": "Relatórios",
   "/settings": "Configurações",
   "/pricing": "Planos",
+  "/admin": "Painel Admin",
 };
 
 export function AppLayout() {

@@ -29,6 +29,7 @@ import WhatsAppChat from "./pages/WhatsAppChat";
 import Settings from "./pages/Settings";
 import Pricing from "./pages/Pricing";
 import SubscriptionSuccess from "./pages/SubscriptionSuccess";
+import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -73,6 +74,7 @@ const App = () => (
                   <Route path="/whatsapp/chat" element={<WhatsAppChat />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/pricing" element={<Pricing />} />
+                  <Route path="/admin" element={<Admin />} />
                 </Route>
 
                 {/* Catch-all */}

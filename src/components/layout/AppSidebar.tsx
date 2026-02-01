@@ -1,6 +1,7 @@
 import { NavLink, useLocation } from "react-router-dom";
 import { useUnit } from "@/contexts/UnitContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIsDeveloper } from "@/hooks/useIsDeveloper";
 import {
   Sidebar,
   SidebarContent,
@@ -29,6 +30,7 @@ import {
   Building2,
   Utensils,
   CreditCard,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SubscriptionBadge } from "@/components/subscription/SubscriptionBadge";
@@ -72,6 +74,7 @@ export function AppSidebar() {
   const location = useLocation();
   const { selectedUnit } = useUnit();
   const { subscription } = useAuth();
+  const { isDeveloper } = useIsDeveloper();
 
   return (
     <Sidebar className="border-r border-sidebar-border/50">
@@ -138,6 +141,28 @@ export function AppSidebar() {
         </div>
         
         <SidebarMenu>
+          {isDeveloper && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={location.pathname === "/admin"}
+                className={cn(
+                  "hover:bg-red-500/10",
+                  location.pathname === "/admin" && "bg-red-500/10 text-red-500"
+                )}
+              >
+                <NavLink to="/admin" className="group">
+                  <ShieldAlert className={cn(
+                    "w-4 h-4 transition-transform group-hover:scale-110",
+                    location.pathname === "/admin" && "text-red-500"
+                  )} />
+                  <span className={location.pathname === "/admin" ? "text-red-500 font-medium" : ""}>
+                    Admin
+                  </span>
+                </NavLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
           <SidebarMenuItem>
             <SidebarMenuButton asChild className="hover:bg-sidebar-accent">
               <NavLink to="/pricing" className="group">
