@@ -1,213 +1,163 @@
 
-# Plano: Corrigir Erro 404 e Melhorar Pagina de Mesas
+# Plano: Corrigir Scroll e Melhorar Carrinho do Pedido Digital
 
 ## Problema Identificado
 
-### Erro 404 ao Abrir Link
-O QR Code gera um link para `/order/:tableId`, porem **nao existe esta rota** no App.tsx. Quando o cliente ou admin clica em "Abrir Link", recebe 404.
+O Sheet "Seu Pedido" tem problemas de layout onde:
+1. O conteudo aparece fixo e nao rola adequadamente
+2. A estrutura flexbox nao esta configurada corretamente para permitir scroll
+3. O `ScrollArea` precisa de `min-h-0` para funcionar em contexto flex
+
+## Solucao Tecnica
+
+### Estrutura Atual (Problema)
 
 ```text
-Atual:
-QR Code → /order/c63dda1d-b20a-4... → 404 (rota inexistente)
+SheetContent (h-[85vh] flex flex-col)
+├── SheetHeader (flex-shrink-0) ✓
+├── ScrollArea (flex-1)         ✗ Falta min-h-0 e overflow
+└── SheetFooter (flex-shrink-0) ✓
+```
 
-Esperado:
-QR Code → /order/c63dda1d-b20a-4... → Pagina publica de pedidos
+### Estrutura Corrigida
+
+```text
+SheetContent (h-[85vh] flex flex-col overflow-hidden)
+├── SheetHeader (flex-shrink-0) 
+├── ScrollArea (flex-1 min-h-0 overflow-hidden)
+│   └── Content with proper padding
+└── SheetFooter (flex-shrink-0)
 ```
 
 ---
 
-## Solucao Proposta
+## Melhorias Adicionais
 
-### 1. Criar Pagina Publica de Pedidos para Clientes
+### 1. Layout Responsivo Aprimorado
 
-Nova pagina `src/pages/CustomerOrder.tsx` que sera acessada via QR Code:
+- Usar altura responsiva `h-[90vh] sm:h-[85vh]` para melhor uso do espaco em mobile
+- Adicionar `rounded-t-xl` para visual mais elegante
+- Safe area padding para dispositivos com notch
 
-```text
-CustomerOrder.tsx (Pagina Publica)
-├── Header com logo e nome do restaurante
-├── Numero da mesa (obtido via tableId)
-├── Menu de produtos por categoria
-│   ├── Cards de produtos com imagem, nome, preco
-│   ├── Botao de adicionar ao carrinho
-│   └── Modal de detalhes do produto
-├── Carrinho lateral/inferior
-│   ├── Itens selecionados com quantidade
-│   ├── Total do pedido
-│   └── Botao "Enviar Pedido"
-├── Formulario de identificacao
-│   ├── Nome do cliente
-│   └── Telefone (opcional)
-└── Confirmacao de pedido enviado
-```
+### 2. Cart Item Melhorado
 
-### 2. Adicionar Rota Publica no App.tsx
+- Imagem miniatura do produto no carrinho
+- Preco unitario e subtotal separados
+- Animacao suave ao adicionar/remover itens
+- Feedback visual ao alterar quantidade
+
+### 3. Secao de Identificacao Aprimorada
+
+- Icones nos campos de input
+- Validacao visual do telefone
+- Texto explicativo mais claro
+- Background sutil para destaque
+
+### 4. Footer Otimizado
+
+- Resumo expandido (subtotal + quantidade de itens)
+- Botao com estado de hover melhorado
+- Indicador de pedido minimo (se aplicavel)
+
+### 5. Empty State Melhorado
+
+- Animacao sutil
+- Call-to-action para voltar ao menu
+- Ilustracao mais atraente
+
+---
+
+## Arquivos a Modificar
+
+### `src/pages/CustomerOrder.tsx`
+
+Alteracoes principais:
+1. Adicionar `overflow-hidden` no SheetContent
+2. Adicionar `min-h-0` no ScrollArea
+3. Melhorar CartItemRow com imagem e layout
+4. Aprimorar secao de identificacao
+5. Melhorar empty state do carrinho
+6. Adicionar badge de quantidade no header do sheet
+
+### `src/components/ui/scroll-area.tsx` (opcional)
+
+Garantir que o Viewport tenha overflow correto
+
+---
+
+## Codigo da Correcao Principal
 
 ```typescript
-// Adicionar ANTES das rotas protegidas
-<Route path="/order/:tableId" element={<CustomerOrder />} />
-```
+// SheetContent com overflow correto
+<SheetContent 
+  side="bottom" 
+  className="h-[90vh] sm:h-[85vh] flex flex-col p-0 rounded-t-2xl overflow-hidden"
+>
+  {/* Header fixo */}
+  <SheetHeader className="px-4 py-4 border-b flex-shrink-0">
+    ...
+  </SheetHeader>
 
-### 3. Melhorar Layout da Pagina de Mesas
+  {/* Area rolavel - CORRECAO PRINCIPAL */}
+  <ScrollArea className="flex-1 min-h-0 overflow-hidden">
+    <div className="px-4 py-2">
+      {/* Cart items */}
+    </div>
+  </ScrollArea>
 
-Ajustes para garantir scroll adequado e responsividade:
-
-```text
-Melhorias Tables.tsx
-├── Adicionar ScrollArea do Radix para scroll suave
-├── Garantir altura maxima nos dialogs
-├── Melhorar espacamento em mobile
-├── Adicionar animacoes sutis nos cards
-└── Otimizar grid para diferentes tamanhos de tela
-```
-
----
-
-## Arquitetura da Pagina CustomerOrder
-
-### Fluxo do Cliente
-
-```text
-1. Cliente escaneia QR Code
-   └── Abre /order/:tableId no celular
-
-2. Sistema carrega dados
-   ├── Busca mesa pelo ID (obtem unit_id)
-   ├── Busca dados do restaurante (nome, logo)
-   └── Busca produtos ativos da unidade
-
-3. Cliente navega no cardapio
-   ├── Filtra por categoria
-   ├── Ve detalhes do produto
-   └── Adiciona itens ao carrinho
-
-4. Cliente finaliza pedido
-   ├── Informa nome e telefone (opcional)
-   ├── Confirma itens
-   └── Envia pedido
-
-5. Sistema cria pedido
-   ├── Insere em orders (channel: 'qrcode')
-   ├── Insere items em order_items
-   ├── Atualiza status da mesa para 'occupied'
-   └── Exibe confirmacao ao cliente
-```
-
-### Estrutura de Componentes
-
-```text
-src/pages/CustomerOrder.tsx
-├── useCustomerOrder.ts (hook para logica)
-│   ├── fetchTable() - busca mesa e unit_id
-│   ├── fetchProducts() - lista produtos ativos
-│   ├── fetchCategories() - lista categorias
-│   └── createOrder() - cria pedido no banco
-├── CustomerHeader - header com nome restaurante
-├── CategoryTabs - abas de categorias
-├── ProductGrid - grid de produtos
-├── ProductCard - card individual
-├── CartSheet - carrinho lateral
-└── OrderConfirmation - tela de sucesso
+  {/* Footer fixo */}
+  <SheetFooter className="flex-shrink-0 px-4 py-4 border-t">
+    ...
+  </SheetFooter>
+</SheetContent>
 ```
 
 ---
 
-## Detalhamento Tecnico
+## Melhorias Visuais
 
-### Arquivos a Criar
-
-1. **`src/pages/CustomerOrder.tsx`**
-   - Pagina publica completa
-   - Nao requer autenticacao
-   - Layout responsivo mobile-first
-
-2. **`src/hooks/useCustomerOrder.ts`**
-   - Logica de busca de dados sem autenticacao
-   - Criacao de pedido via anon key
-   - Gerenciamento do carrinho
-
-### Arquivos a Modificar
-
-1. **`src/App.tsx`**
-   - Adicionar rota `/order/:tableId`
-   - Rota FORA do AppLayout (publica)
-
-2. **`src/pages/Tables.tsx`**
-   - Pequenos ajustes de scroll e responsividade
-
-### Consideracoes de Seguranca
+### Cart Item Redesenhado
 
 ```text
-Acesso Publico (sem auth)
-├── Leitura: tables, products, categories, units
-├── Escrita: orders, order_items
-└── RLS: Permitir insert em orders/order_items para anon
+┌──────────────────────────────────────────┐
+│ [IMG] Acai 300ml                    [-] 1 [+] │
+│       R$ 16,90 cada                  [🗑]    │
+│       Subtotal: R$ 16,90                    │
+└──────────────────────────────────────────┘
 ```
 
----
-
-## Interface da Pagina de Pedidos
-
-### Layout Mobile (Prioridade)
+### Identificacao Aprimorada
 
 ```text
-┌─────────────────────────┐
-│  🍔 RestaurantOS        │
-│  Mesa 4                 │
-├─────────────────────────┤
-│ [Todos] [Lanches] [Beb] │ ← Tabs categorias
-├─────────────────────────┤
-│ ┌─────┐ ┌─────┐        │
-│ │ 🍔  │ │ 🍕  │        │
-│ │ Burg│ │Pizza│        │ ← Grid 2 cols
-│ │R$25 │ │R$35 │        │
-│ └─────┘ └─────┘        │
-│ ┌─────┐ ┌─────┐        │
-│ │ 🥤  │ │ 🍟  │        │
-│ │Refri│ │Batata│       │
-│ │R$8  │ │R$15 │        │
-│ └─────┘ └─────┘        │
-├─────────────────────────┤
-│ 🛒 Carrinho (3)  R$68  │ ← Botao fixo inferior
-└─────────────────────────┘
+┌──────────────────────────────────────────┐
+│ 👤 Identificacao (opcional)              │
+│    Para chamarmos quando estiver pronto  │
+├──────────────────────────────────────────┤
+│ [👤] Seu nome                            │
+│ [📱] (00) 00000-0000                     │
+└──────────────────────────────────────────┘
 ```
 
-### Carrinho (Sheet/Drawer)
+### Footer Expandido
 
 ```text
-┌─────────────────────────┐
-│ Seu Pedido        [X]   │
-├─────────────────────────┤
-│ 2x Burger      R$ 50,00 │
-│ 1x Pizza       R$ 35,00 │
-│ 1x Refrigerante R$ 8,00 │
-├─────────────────────────┤
-│ Total          R$ 93,00 │
-├─────────────────────────┤
-│ Nome: ________________  │
-│ Tel:  ________________  │
-├─────────────────────────┤
-│  [  Enviar Pedido  ]    │
-└─────────────────────────┘
+┌──────────────────────────────────────────┐
+│ 1 item no carrinho                       │
+│ ─────────────────────────────────────── │
+│ Total                       R$ 16,90    │
+│                                          │
+│ [    ✓ Enviar Pedido para Cozinha    ]  │
+└──────────────────────────────────────────┘
 ```
-
----
-
-## Sequencia de Implementacao
-
-1. Criar hook `useCustomerOrder.ts`
-2. Criar pagina `CustomerOrder.tsx`
-3. Adicionar rota em `App.tsx`
-4. Verificar/ajustar RLS para permitir pedidos anonimos
-5. Testar fluxo completo
-6. Ajustar detalhes de scroll na pagina Tables
 
 ---
 
 ## Resultado Esperado
 
-| Acao | Antes | Depois |
-|------|-------|--------|
-| Clicar "Abrir Link" | Erro 404 | Abre cardapio digital |
-| Cliente escaneia QR | Pagina inexistente | Ve menu do restaurante |
-| Cliente faz pedido | Impossivel | Pedido criado no sistema |
-| Scroll em Tables | Funciona | Mais suave e responsivo |
+| Aspecto | Antes | Depois |
+|---------|-------|--------|
+| Scroll do carrinho | Fixo/travado | Rola suavemente |
+| Layout em mobile | Corta conteudo | Responsivo perfeito |
+| Visual dos itens | Basico | Profissional com imagens |
+| Identificacao | Campos simples | Secao destacada |
+| Feedback visual | Minimo | Animacoes suaves |
