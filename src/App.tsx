@@ -26,6 +26,8 @@ import Reports from "./pages/Reports";
 import Delivery from "./pages/Delivery";
 import WhatsAppSettings from "./pages/WhatsAppSettings";
 import Settings from "./pages/Settings";
+import Pricing from "./pages/Pricing";
+import SubscriptionSuccess from "./pages/SubscriptionSuccess";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -52,6 +54,8 @@ const App = () => (
                 <Route path="/" element={<Login />} />
                 <Route path="/select-unit" element={<SelectUnit />} />
                 <Route path="/order/:tableId" element={<CustomerOrder />} />
+                <Route path="/pricing" element={<Pricing />} />
+                <Route path="/subscription-success" element={<SubscriptionSuccess />} />
 
                 {/* Protected routes with layout */}
                 <Route element={<AppLayout />}>
