@@ -905,7 +905,8 @@ async function analyzeImage(imageBase64: string, mimetype: string): Promise<stri
   }
 }
 
-// Send typing/presence indicator
+// Send typing/presence indicator to WhatsApp client
+// Uses Evolution API sendPresence endpoint with correct format
 async function sendPresence(
   apiUrl: string,
   apiToken: string,
@@ -914,19 +915,34 @@ async function sendPresence(
   presence: "composing" | "recording" | "paused"
 ): Promise<void> {
   try {
-    await fetch(`${apiUrl}/chat/presence/${instanceName}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: apiToken,
-      },
-      body: JSON.stringify({
-        number: phone,
-        presence,
-      }),
-    });
+    console.log(`[PRESENCE] Sending ${presence} to ${phone}...`);
+    
+    const response = await fetch(
+      `${apiUrl}/chat/sendPresence/${instanceName}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: apiToken,
+        },
+        body: JSON.stringify({
+          number: phone,
+          options: {
+            delay: 1200,
+            presence: presence,
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[PRESENCE] Error: ${response.status}`, errorText);
+    } else {
+      console.log(`[PRESENCE] ${presence} sent successfully to ${phone}`);
+    }
   } catch (error) {
-    console.error("Error sending presence:", error);
+    console.error("[PRESENCE] Error sending presence:", error);
   }
 }
 
@@ -1366,11 +1382,18 @@ serve(async (req) => {
       transcription: transcription,
     });
 
-    // Send typing indicator to client
+    // Send initial typing indicator to client
+    console.log(`[PRESENCE] Starting composing indicator for ${phone}`);
     await sendPresence(settings.api_url, settings.api_token, instanceName, phone, "composing");
     
     // Update typing status in database
     await updateTypingStatus(supabase, conversation.id, true, false);
+
+    // Start interval to keep presence active during AI processing (expires after a few seconds)
+    const presenceInterval = setInterval(async () => {
+      console.log(`[PRESENCE] Refreshing composing for ${phone}`);
+      await sendPresence(settings.api_url, settings.api_token, instanceName, phone, "composing");
+    }, 8000); // Refresh every 8 seconds
 
     // Get recent conversation history for context
     const { data: recentMessages } = await supabase
@@ -1416,10 +1439,17 @@ serve(async (req) => {
       } else {
         assistantMessage = "Desculpe, ocorreu um erro. Por favor, tente novamente.";
       }
+    } finally {
+      // Always clear the presence interval
+      clearInterval(presenceInterval);
     }
 
-    // Clear typing status
+    // Clear typing status in database
     await updateTypingStatus(supabase, conversation.id, false, false);
+
+    // Send paused presence to clear the typing indicator on client
+    console.log(`[PRESENCE] Clearing composing indicator for ${phone}`);
+    await sendPresence(settings.api_url, settings.api_token, instanceName, phone, "paused");
 
     // Final sanitization
     assistantMessage = sanitizeResponse(assistantMessage);
