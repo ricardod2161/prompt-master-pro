@@ -671,6 +671,77 @@ export type Database = {
           },
         ]
       }
+      unit_settings: {
+        Row: {
+          auto_notify_enabled: boolean | null
+          auto_print_enabled: boolean | null
+          counter_ordering_enabled: boolean | null
+          created_at: string | null
+          currency: string | null
+          default_preparation_time: number | null
+          delivery_enabled: boolean | null
+          delivery_fee: number | null
+          id: string
+          min_delivery_order: number | null
+          opening_hours: Json | null
+          payment_methods: Json | null
+          service_fee_percentage: number | null
+          table_ordering_enabled: boolean | null
+          timezone: string | null
+          unit_id: string
+          updated_at: string | null
+          whatsapp_ordering_enabled: boolean | null
+        }
+        Insert: {
+          auto_notify_enabled?: boolean | null
+          auto_print_enabled?: boolean | null
+          counter_ordering_enabled?: boolean | null
+          created_at?: string | null
+          currency?: string | null
+          default_preparation_time?: number | null
+          delivery_enabled?: boolean | null
+          delivery_fee?: number | null
+          id?: string
+          min_delivery_order?: number | null
+          opening_hours?: Json | null
+          payment_methods?: Json | null
+          service_fee_percentage?: number | null
+          table_ordering_enabled?: boolean | null
+          timezone?: string | null
+          unit_id: string
+          updated_at?: string | null
+          whatsapp_ordering_enabled?: boolean | null
+        }
+        Update: {
+          auto_notify_enabled?: boolean | null
+          auto_print_enabled?: boolean | null
+          counter_ordering_enabled?: boolean | null
+          created_at?: string | null
+          currency?: string | null
+          default_preparation_time?: number | null
+          delivery_enabled?: boolean | null
+          delivery_fee?: number | null
+          id?: string
+          min_delivery_order?: number | null
+          opening_hours?: Json | null
+          payment_methods?: Json | null
+          service_fee_percentage?: number | null
+          table_ordering_enabled?: boolean | null
+          timezone?: string | null
+          unit_id?: string
+          updated_at?: string | null
+          whatsapp_ordering_enabled?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "unit_settings_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: true
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       units: {
         Row: {
           address: string | null

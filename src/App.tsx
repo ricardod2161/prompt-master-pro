@@ -22,6 +22,7 @@ import Inventory from "./pages/Inventory";
 import Reports from "./pages/Reports";
 import Delivery from "./pages/Delivery";
 import WhatsAppSettings from "./pages/WhatsAppSettings";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -53,7 +54,7 @@ const App = () => (
                   <Route path="/reports" element={<Reports />} />
                   <Route path="/delivery" element={<Delivery />} />
                   <Route path="/whatsapp/settings" element={<WhatsAppSettings />} />
-                  <Route path="/settings" element={<ComingSoon title="Configurações" />} />
+                  <Route path="/settings" element={<Settings />} />
                 </Route>
 
                 {/* Catch-all */}
@@ -66,15 +67,5 @@ const App = () => (
     </ThemeProvider>
   </QueryClientProvider>
 );
-
-// Temporary placeholder for modules not yet implemented
-function ComingSoon({ title }: { title: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center h-[60vh] text-center">
-      <h1 className="text-2xl font-bold mb-2">{title}</h1>
-      <p className="text-muted-foreground">Este módulo será implementado na próxima fase.</p>
-    </div>
-  );
-}
 
 export default App;
