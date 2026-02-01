@@ -7,6 +7,7 @@ import {
   Clock,
   User,
   Palette,
+  BookOpen,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,6 +27,7 @@ import { FinancialTab } from "@/components/settings/FinancialTab";
 import { HoursTab } from "@/components/settings/HoursTab";
 import { ProfileTab } from "@/components/settings/ProfileTab";
 import { AppearanceTab } from "@/components/settings/AppearanceTab";
+import { DocumentationTab } from "@/components/settings/DocumentationTab";
 import { cn } from "@/lib/utils";
 
 function SettingsLoadingSkeleton() {
@@ -48,6 +50,7 @@ const TAB_ITEMS = [
   { value: "hours", label: "Horários", icon: Clock },
   { value: "profile", label: "Perfil", icon: User },
   { value: "appearance", label: "Aparência", icon: Palette },
+  { value: "docs", label: "Ajuda", icon: BookOpen },
 ];
 
 export default function Settings() {
@@ -313,6 +316,11 @@ export default function Settings() {
         {/* Appearance Tab */}
         <TabsContent value="appearance" className="mt-0">
           <AppearanceTab />
+        </TabsContent>
+
+        {/* Documentation Tab */}
+        <TabsContent value="docs" className="mt-0">
+          <DocumentationTab />
         </TabsContent>
       </Tabs>
     </div>
