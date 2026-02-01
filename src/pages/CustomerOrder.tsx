@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
   SheetContent,
@@ -32,6 +33,9 @@ import {
   Clock,
   AlertCircle,
   ChefHat,
+  User,
+  Phone,
+  ArrowLeft,
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -219,7 +223,7 @@ function ProductCard({
   );
 }
 
-// Cart item component
+// Cart item component - Enhanced with thumbnail and detailed pricing
 function CartItemRow({
   item,
   onUpdateQuantity,
@@ -229,44 +233,99 @@ function CartItemRow({
   onUpdateQuantity: (productId: string, quantity: number) => void;
   onRemove: (productId: string) => void;
 }) {
+  const unitPrice = item.product.price;
+  const subtotal = unitPrice * item.quantity;
+
   return (
-    <div className="flex items-center gap-3 py-3 border-b last:border-0">
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-sm truncate">{item.product.name}</p>
-        <p className="text-primary text-sm font-semibold">
+    <div className="flex gap-3 py-4 border-b border-border/50 last:border-0 animate-in fade-in-50 duration-200">
+      {/* Product Thumbnail */}
+      <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+        {item.product.image_url ? (
+          <img
+            src={item.product.image_url}
+            alt={item.product.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <ChefHat className="h-6 w-6 text-muted-foreground/40" />
+          </div>
+        )}
+      </div>
+
+      {/* Product Info */}
+      <div className="flex-1 min-w-0 space-y-1">
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-medium text-sm leading-tight line-clamp-2">
+            {item.product.name}
+          </p>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 -mt-1 -mr-1 text-muted-foreground hover:text-destructive flex-shrink-0"
+            onClick={() => onRemove(item.product.id)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+        
+        <p className="text-xs text-muted-foreground">
           {new Intl.NumberFormat("pt-BR", {
             style: "currency",
             currency: "BRL",
-          }).format(item.product.price * item.quantity)}
+          }).format(unitPrice)} cada
         </p>
+
+        <div className="flex items-center justify-between pt-1">
+          {/* Quantity Controls */}
+          <div className="flex items-center gap-1 bg-muted/50 rounded-full p-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 rounded-full hover:bg-background"
+              onClick={() => onUpdateQuantity(item.product.id, item.quantity - 1)}
+            >
+              <Minus className="h-3 w-3" />
+            </Button>
+            <span className="w-6 text-center font-semibold text-sm">{item.quantity}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 rounded-full hover:bg-background"
+              onClick={() => onUpdateQuantity(item.product.id, item.quantity + 1)}
+            >
+              <Plus className="h-3 w-3" />
+            </Button>
+          </div>
+
+          {/* Subtotal */}
+          <p className="text-sm font-bold text-primary">
+            {new Intl.NumberFormat("pt-BR", {
+              style: "currency",
+              currency: "BRL",
+            }).format(subtotal)}
+          </p>
+        </div>
       </div>
-      <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-          onClick={() => onUpdateQuantity(item.product.id, item.quantity - 1)}
-        >
-          <Minus className="h-3 w-3" />
-        </Button>
-        <span className="w-6 text-center font-medium">{item.quantity}</span>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-          onClick={() => onUpdateQuantity(item.product.id, item.quantity + 1)}
-        >
-          <Plus className="h-3 w-3" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-destructive hover:text-destructive"
-          onClick={() => onRemove(item.product.id)}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+    </div>
+  );
+}
+
+// Empty cart state component
+function EmptyCartState({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 px-4 text-center animate-in fade-in-50 duration-300">
+      <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-4">
+        <ShoppingCart className="h-10 w-10 text-muted-foreground/50" />
       </div>
+      <h3 className="text-lg font-semibold mb-1">Carrinho vazio</h3>
+      <p className="text-sm text-muted-foreground mb-6 max-w-[240px]">
+        Adicione produtos do cardápio para começar seu pedido
+      </p>
+      <Button variant="outline" onClick={onClose} className="gap-2">
+        <ArrowLeft className="h-4 w-4" />
+        Ver Cardápio
+      </Button>
     </div>
   );
 }
@@ -399,9 +458,9 @@ export default function CustomerOrder() {
       {/* Cart button (fixed) */}
       <Sheet open={cartOpen} onOpenChange={setCartOpen}>
         <SheetTrigger asChild>
-          <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-background via-background to-transparent">
+          <div className="fixed bottom-0 left-0 right-0 p-4 pb-safe bg-gradient-to-t from-background via-background to-transparent">
             <Button
-              className="w-full h-14 text-base font-semibold shadow-lg"
+              className="w-full h-14 text-base font-semibold shadow-lg relative overflow-hidden"
               size="lg"
               disabled={cartItemsCount === 0}
             >
@@ -424,70 +483,113 @@ export default function CustomerOrder() {
           </div>
         </SheetTrigger>
 
-        <SheetContent side="bottom" className="h-[85vh] flex flex-col p-0">
-          <SheetHeader className="px-4 py-4 border-b flex-shrink-0">
-            <SheetTitle className="flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5" />
-              Seu Pedido
+        {/* FIXED: Added overflow-hidden and proper flex layout */}
+        <SheetContent 
+          side="bottom" 
+          className="h-[90vh] sm:h-[85vh] flex flex-col p-0 rounded-t-2xl overflow-hidden"
+        >
+          {/* Header - Fixed at top */}
+          <SheetHeader className="px-4 py-4 border-b flex-shrink-0 bg-background">
+            <SheetTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="h-5 w-5" />
+                Seu Pedido
+              </div>
+              {cartItemsCount > 0 && (
+                <Badge variant="secondary" className="font-semibold">
+                  {cartItemsCount} {cartItemsCount === 1 ? "item" : "itens"}
+                </Badge>
+              )}
             </SheetTitle>
           </SheetHeader>
 
-          <ScrollArea className="flex-1 px-4">
-            {cart.length === 0 ? (
-              <div className="py-12 text-center">
-                <ShoppingCart className="h-12 w-12 text-muted-foreground/40 mx-auto mb-4" />
-                <p className="text-muted-foreground">Seu carrinho está vazio</p>
-              </div>
-            ) : (
-              <div className="py-2">
-                {cart.map((item) => (
-                  <CartItemRow
-                    key={item.product.id}
-                    item={item}
-                    onUpdateQuantity={updateCartItemQuantity}
-                    onRemove={removeFromCart}
-                  />
-                ))}
-              </div>
-            )}
+          {/* FIXED: ScrollArea with min-h-0 for proper flex scrolling */}
+          <ScrollArea className="flex-1 min-h-0 overflow-hidden">
+            <div className="px-4">
+              {cart.length === 0 ? (
+                <EmptyCartState onClose={() => setCartOpen(false)} />
+              ) : (
+                <>
+                  {/* Cart Items */}
+                  <div className="py-2">
+                    {cart.map((item) => (
+                      <CartItemRow
+                        key={item.product.id}
+                        item={item}
+                        onUpdateQuantity={updateCartItemQuantity}
+                        onRemove={removeFromCart}
+                      />
+                    ))}
+                  </div>
 
-            {/* Customer info */}
-            {cart.length > 0 && (
-              <div className="py-4 space-y-3 border-t mt-2">
-                <p className="text-sm font-medium text-muted-foreground">
-                  Identificação (opcional)
-                </p>
-                <Input
-                  placeholder="Seu nome"
-                  value={customerInfo.name}
-                  onChange={(e) =>
-                    setCustomerInfo((prev) => ({ ...prev, name: e.target.value }))
-                  }
-                />
-                <Input
-                  placeholder="Telefone"
-                  type="tel"
-                  value={customerInfo.phone}
-                  onChange={(e) =>
-                    setCustomerInfo((prev) => ({ ...prev, phone: e.target.value }))
-                  }
-                />
-              </div>
-            )}
+                  {/* Customer Identification Section - Enhanced */}
+                  <div className="py-4 mt-2">
+                    <div className="bg-muted/40 rounded-xl p-4 space-y-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                          <p className="text-sm font-medium">Identificação</p>
+                          <span className="text-xs text-muted-foreground">(opcional)</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground pl-6">
+                          Para chamarmos você quando o pedido estiver pronto
+                        </p>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <div className="relative">
+                          <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            placeholder="Seu nome"
+                            value={customerInfo.name}
+                            onChange={(e) =>
+                              setCustomerInfo((prev) => ({ ...prev, name: e.target.value }))
+                            }
+                            className="pl-10 bg-background"
+                          />
+                        </div>
+                        <div className="relative">
+                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            placeholder="(00) 00000-0000"
+                            type="tel"
+                            value={customerInfo.phone}
+                            onChange={(e) =>
+                              setCustomerInfo((prev) => ({ ...prev, phone: e.target.value }))
+                            }
+                            className="pl-10 bg-background"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </ScrollArea>
 
+          {/* Footer - Fixed at bottom with expanded summary */}
           {cart.length > 0 && (
-            <SheetFooter className="flex-shrink-0 px-4 py-4 border-t bg-muted/30">
-              <div className="w-full space-y-4">
-                <div className="flex items-center justify-between text-lg font-bold">
-                  <span>Total</span>
-                  <span className="text-primary">
-                    {new Intl.NumberFormat("pt-BR", {
-                      style: "currency",
-                      currency: "BRL",
-                    }).format(cartTotal)}
-                  </span>
+            <SheetFooter className="flex-shrink-0 px-4 py-4 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 pb-safe">
+              <div className="w-full space-y-3">
+                {/* Order Summary */}
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    {cartItemsCount} {cartItemsCount === 1 ? "item" : "itens"} no carrinho
+                  </p>
+                  <Separator />
+                  <div className="flex items-center justify-between text-lg font-bold">
+                    <span>Total</span>
+                    <span className="text-primary">
+                      {new Intl.NumberFormat("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      }).format(cartTotal)}
+                    </span>
+                  </div>
                 </div>
+
+                {/* Submit Button */}
                 <Button
                   className="w-full h-12 text-base font-semibold"
                   size="lg"
@@ -497,12 +599,12 @@ export default function CustomerOrder() {
                   {isSubmitting ? (
                     <>
                       <div className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2" />
-                      Enviando...
+                      Enviando pedido...
                     </>
                   ) : (
                     <>
                       <CheckCircle2 className="h-5 w-5 mr-2" />
-                      Enviar Pedido
+                      Enviar Pedido para Cozinha
                     </>
                   )}
                 </Button>
