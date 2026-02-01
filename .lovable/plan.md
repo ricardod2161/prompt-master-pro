@@ -1,216 +1,192 @@
 
-# Plano: Correção Completa do WhatsApp - Presence, Status e Áudio
+# Análise Técnica Completa: RestaurantOS
 
-## Análise dos Problemas Identificados
+## Visão Geral do Sistema
 
-### 1. Indicador "Digitando/Gravando" NÃO aparece no WhatsApp do cliente
+O RestaurantOS é um sistema de gestão para restaurantes com as seguintes características:
+- **Frontend**: React + Vite + TypeScript + Tailwind CSS
+- **Backend**: Lovable Cloud (Supabase)
+- **Integrações**: Stripe (pagamentos), Evolution API (WhatsApp), AI Gateway (Gemini/GPT-5)
+- **Arquitetura**: Multi-tenant com RBAC (Role-Based Access Control)
 
-**Causa raiz encontrada:** O endpoint de presence está INCORRETO na Evolution API.
+---
+
+## 1. Análise de Segurança
+
+### 1.1 Problemas Críticos Identificados (ERRO)
+
+| Problema | Impacto | Tabela Afetada |
+|----------|---------|----------------|
+| Dados de negócio expostos | Concorrentes podem coletar CNPJs, endereços, telefones | `units` |
+| Dados de clientes expostos | Telefones e nomes podem ser coletados para spam/fraude | `orders`, `whatsapp_conversations` |
+| Endereços de entrega expostos | Risco de stalking/crimes com endereços residenciais | `delivery_orders` |
+| Credenciais WhatsApp expostas | API tokens podem ser roubados para spam | `whatsapp_settings` |
+| Dados de entregadores expostos | Telefones e informações pessoais | `delivery_drivers` |
+
+### 1.2 Avisos de Segurança (WARN)
+
+| Problema | Recomendação |
+|----------|--------------|
+| Proteção contra senhas vazadas desabilitada | Ativar no Supabase Auth |
+| Perfis podem ser acessíveis entre contas | Adicionar políticas de negação explícitas |
+| Dados financeiros acessíveis a todos com unit_access | Restringir a admins/gerentes |
+| Detalhes de pagamento visíveis para todos | Restringir a gerentes |
+| Tabela `whatsapp_typing_status` sem políticas restritas | Adicionar RLS mais restritivo |
+| Tabela `user_roles` permite auto-atribuição de roles | Bloquear INSERT para usuários normais |
+| Tabela `user_units` permite auto-associação | Restringir a admins |
+
+### 1.3 Status do RLS (Row Level Security)
 
 ```text
-CÓDIGO ATUAL (errado):
-URL: ${apiUrl}/chat/presence/${instanceName}
-Body: { number: phone, presence: "composing" }
-
-CÓDIGO CORRETO (conforme documentação Evolution API):
-URL: ${apiUrl}/chat/sendPresence/${instanceName}
-Body: { number: phone, options: { presence: "composing", delay: 1200 } }
+✅ RLS HABILITADO em todas as 23 tabelas
+✅ Função has_unit_access() implementada para controle multi-tenant
+✅ Função has_role() implementada para RBAC
+⚠️ Políticas públicas permissivas em algumas tabelas
 ```
 
-### 2. Status ✓✓ (risquinhos) - Esclarecimento IMPORTANTE
+### 1.4 Edge Functions - Segurança
 
-Os risquinhos (✓✓) no WhatsApp do CLIENTE são controlados **automaticamente pelo WhatsApp**, não pelo nosso sistema. O fluxo é:
+| Função | JWT Verification | Status |
+|--------|------------------|--------|
+| `whatsapp-webhook` | ❌ Desabilitado | ✅ Correto (recebe webhooks externos) |
+| `check-subscription` | ✅ Habilitado | ✅ Correto |
+| `create-checkout` | ✅ Habilitado | ✅ Correto |
+| `customer-portal` | ✅ Habilitado | ✅ Correto |
+| `send-order-notification` | ✅ Habilitado | ✅ Correto |
+| `test-evolution-connection` | ✅ Habilitado | ✅ Correto |
+
+---
+
+## 2. Análise do Workflow
+
+### 2.1 Fluxo de Autenticação
 
 ```text
-1. Bot envia mensagem → WhatsApp mostra ✓ (enviado)
-2. Mensagem chega no celular do cliente → WhatsApp mostra ✓✓ (entregue)
-3. Cliente abre a conversa → WhatsApp mostra ✓✓ azul (lido)
+Login/Signup → AuthContext → Verificar Subscription → Selecionar Unidade → Dashboard
+     │
+     ├─ Trigger: handle_new_user() cria profile e atribui role 'admin'
+     ├─ Auto-associação com unidade demo
+     └─ Verificação de subscription a cada 60 segundos
 ```
 
-**O que nosso sistema faz:**
-- Recebe eventos `messages.update` da Evolution API com status `DELIVERY_ACK` ou `READ`
-- Atualiza o banco de dados local
-- Mostra os risquinhos na NOSSA interface (ChatView)
+**Status**: ✅ Funcional, mas com problemas de segurança na auto-atribuição de roles.
 
-**Os logs confirmam que está funcionando:**
-```
-Message cml49xpgi00sbs64ccubsaeif status updated to: delivered
-Message cml49xpgi00sbs64ccubsaeif status updated to: read
-```
-
-### 3. Transcrição de Áudio - Análise
-
-Os logs mostram que a transcrição **ESTÁ funcionando**:
-```
-Gemini Pro transcription successful: "Mande os códigos do sistema...."
-```
-
-A resposta "não consigo prosseguir o atendimento por áudio" na imagem pode ser de uma versão anterior do código. O fluxo atual está correto.
-
----
-
-## Correções a Implementar
-
-### Correção 1: Endpoint sendPresence (CRÍTICO)
-
-**Arquivo:** `supabase/functions/whatsapp-webhook/index.ts`
-
-**Função sendPresence atual (linhas 908-931):**
-```typescript
-async function sendPresence(
-  apiUrl: string,
-  apiToken: string,
-  instanceName: string,
-  phone: string,
-  presence: "composing" | "recording" | "paused"
-): Promise<void> {
-  try {
-    await fetch(`${apiUrl}/chat/presence/${instanceName}`, {  // ❌ ERRADO
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: apiToken,
-      },
-      body: JSON.stringify({
-        number: phone,
-        presence,  // ❌ ERRADO
-      }),
-    });
-  } catch (error) {
-    console.error("Error sending presence:", error);
-  }
-}
-```
-
-**Correção:**
-```typescript
-async function sendPresence(
-  apiUrl: string,
-  apiToken: string,
-  instanceName: string,
-  phone: string,
-  presence: "composing" | "recording" | "paused"
-): Promise<void> {
-  try {
-    console.log(`Sending presence ${presence} to ${phone}...`);
-    
-    const response = await fetch(
-      `${apiUrl}/chat/sendPresence/${instanceName}`,  // ✅ CORRETO
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: apiToken,
-        },
-        body: JSON.stringify({
-          number: phone,
-          options: {  // ✅ CORRETO
-            delay: 1200,  // Duração do indicador em ms
-            presence: presence,
-          },
-        }),
-      }
-    );
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Presence error:", response.status, errorText);
-    } else {
-      console.log(`Presence ${presence} sent successfully to ${phone}`);
-    }
-  } catch (error) {
-    console.error("Error sending presence:", error);
-  }
-}
-```
-
-### Correção 2: Múltiplas Chamadas de Presence
-
-O indicador "digitando" deve ser enviado **múltiplas vezes** durante o processamento da IA, pois expira após alguns segundos:
-
-```typescript
-// Antes de processar com IA, iniciar interval para manter presence
-const presenceInterval = setInterval(async () => {
-  await sendPresence(
-    settings.api_url,
-    settings.api_token,
-    instanceName,
-    phone,
-    "composing"
-  );
-}, 10000); // A cada 10 segundos
-
-try {
-  // Enviar presence inicial
-  await sendPresence(..., "composing");
-  
-  // Processar com IA
-  assistantMessage = await processWithAI(...);
-} finally {
-  // Limpar interval
-  clearInterval(presenceInterval);
-  
-  // Enviar "paused" para limpar o indicador
-  await sendPresence(..., "paused");
-}
-```
-
-### Correção 3: Melhorar Logs de Debug
-
-Adicionar logs mais detalhados em pontos críticos:
-
-```typescript
-// No recebimento do webhook
-console.log(`[${payload.event}] Processing event...`);
-
-// No envio de presence
-console.log(`[PRESENCE] Sending ${presence} to ${phone}`);
-
-// No update de status
-console.log(`[STATUS] Message ${messageId}: ${status}`);
-
-// Na transcrição
-console.log(`[AUDIO] Transcription result: ${transcription?.substring(0, 50)}...`);
-```
-
----
-
-## Estrutura de Código Corrigida
+### 2.2 Fluxo de Pedidos (WhatsApp)
 
 ```text
-whatsapp-webhook/index.ts
-├── sendPresence()        ← CORRIGIR endpoint e body
-├── sendWhatsAppMessage() ← OK, já retorna message_id
-├── transcribeAudio()     ← OK, funcionando com Gemini Pro
-├── updateMessageStatus() ← OK, atualiza no banco
-├── updateTypingStatus()  ← OK, atualiza no banco (para nossa UI)
-└── serve() handler
-    ├── messages.update   ← OK, parsing correto
-    ├── presence.update   ← OK, parsing correto
-    └── messages.upsert
-        ├── sendPresence("composing") ← CORRIGIR
-        ├── processWithAI()
-        └── sendPresence("paused")    ← ADICIONAR
+Cliente envia mensagem → Evolution API → Webhook
+     │
+     ├─ messages.upsert: Processa mensagem
+     │   ├─ Áudio: Transcrição via Gemini Pro
+     │   ├─ Imagem: Análise via Gemini Flash
+     │   └─ Texto: Processa diretamente
+     │
+     ├─ Enviar presence "composing" (a cada 8s durante processamento)
+     │
+     ├─ Processar com IA (Gemini 2.5 Flash + Tool Calling)
+     │   ├─ listar_cardapio
+     │   ├─ buscar_produto
+     │   ├─ calcular_total
+     │   └─ confirmar_pedido
+     │
+     ├─ Enviar resposta via Evolution API
+     │
+     └─ messages.update: Atualiza status (delivered/read)
 ```
 
+**Status**: ✅ Funcional com correções recentes para presence e status.
+
+### 2.3 Fluxo de Subscription
+
+```text
+Usuário → Pricing → create-checkout → Stripe Checkout
+     │
+     ├─ Sucesso: Redireciona para /subscription-success
+     │
+     ├─ AuthContext verifica subscription (check-subscription)
+     │   └─ Mapeia product_id para tier (starter/pro/enterprise)
+     │
+     └─ SubscriptionGate controla acesso a features premium
+```
+
+**Status**: ✅ Funcional, mas sem webhooks para atualização em tempo real.
+
 ---
 
-## Resultado Esperado
+## 3. Pontos de Melhoria Identificados
 
-| Feature | Antes | Depois |
-|---------|-------|--------|
-| "Digitando" no WhatsApp | Não aparece | ✅ Aparece para o cliente |
-| "Gravando" no WhatsApp | Não aparece | ✅ Aparece para o cliente |
-| Status ✓✓ (nossa UI) | Funciona | ✅ Continua funcionando |
-| Transcrição de áudio | Funciona | ✅ Continua funcionando |
-| Logs de debug | Básicos | ✅ Detalhados |
+### 3.1 Segurança (Prioridade Alta)
+
+1. **Remover política pública da tabela `units`**
+2. **Restringir `whatsapp_settings`** - API tokens não devem ser selecionáveis por todos
+3. **Proteger `delivery_orders`** - Endereços de entrega são dados sensíveis
+4. **Bloquear auto-atribuição de roles** - `user_roles` não deve permitir INSERT por usuários
+5. **Habilitar proteção contra senhas vazadas** no Supabase Auth
+
+### 3.2 Robustez (Prioridade Média)
+
+1. **Webhook Stripe** - Implementar para atualização em tempo real de subscriptions
+2. **Rate Limiting** - Adicionar limites no webhook WhatsApp
+3. **Retry Logic** - Implementar retentativas para chamadas à Evolution API
+4. **Validação de Input** - Adicionar Zod para validação de payloads
+
+### 3.3 Funcionalidades (Prioridade Baixa)
+
+1. **Logs de auditoria** - Registrar ações administrativas
+2. **Backup de conversas** - Exportação de histórico WhatsApp
+3. **Métricas** - Dashboard com KPIs de atendimento
 
 ---
 
-## Ordem de Implementação
+## 4. Checklist para Produção
 
-1. **Corrigir função `sendPresence()`** - Mudar endpoint e formato do body
-2. **Adicionar interval para manter presence** - Durante processamento longo
-3. **Adicionar `sendPresence("paused")`** - Após enviar resposta
-4. **Melhorar logs** - Para facilitar debug futuro
-5. **Deploy e teste** - Enviar mensagem e verificar "digitando"
+### Segurança
+- [ ] Corrigir 6 políticas RLS com acesso público indevido
+- [ ] Ativar proteção contra senhas vazadas
+- [ ] Revisar função `handle_new_user()` - não atribuir admin automaticamente
+- [ ] Criptografar `api_token` em `whatsapp_settings`
+- [ ] Adicionar rate limiting no webhook
+
+### Infraestrutura
+- [ ] Configurar domínio customizado
+- [ ] Implementar webhook Stripe para subscriptions
+- [ ] Configurar alertas de erro (Sentry ou similar)
+- [ ] Testar escalabilidade com múltiplas unidades
+
+### Compliance
+- [ ] Termos de uso e política de privacidade
+- [ ] Consentimento LGPD para dados de clientes
+- [ ] Política de retenção de dados de conversas
+
+---
+
+## 5. Resumo Técnico
+
+| Área | Status | Score |
+|------|--------|-------|
+| Autenticação | ✅ Funcional | 8/10 |
+| Autorização (RLS) | ⚠️ Parcial | 6/10 |
+| Subscription System | ✅ Funcional | 8/10 |
+| WhatsApp Integration | ✅ Funcional | 8/10 |
+| Segurança Geral | ❌ Crítico | 4/10 |
+| Código Frontend | ✅ Bom | 8/10 |
+| Edge Functions | ✅ Bom | 8/10 |
+
+### Veredito Final
+
+**O sistema NÃO está pronto para produção comercial** devido a:
+1. **6 vulnerabilidades críticas de segurança** nas políticas RLS
+2. **Dados sensíveis expostos** (API tokens, endereços, telefones)
+3. **Auto-atribuição de roles** permite escalonamento de privilégios
+
+### Próximos Passos Recomendados
+
+1. **URGENTE**: Corrigir políticas RLS para remover acesso público a dados sensíveis
+2. **URGENTE**: Bloquear auto-atribuição de roles administrativos
+3. **IMPORTANTE**: Ativar proteção contra senhas vazadas
+4. **IMPORTANTE**: Implementar webhook Stripe
+5. **RECOMENDADO**: Adicionar rate limiting e logs de auditoria
+
+---
+
+Deseja que eu implemente as correções de segurança?
