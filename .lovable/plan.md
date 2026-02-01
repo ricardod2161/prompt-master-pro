@@ -1,308 +1,197 @@
 
-# Plano: Correção do WhatsApp - Status de Entrega, Áudio e Melhorias
+# Plano: Correção Completa do WhatsApp - Presence, Status e Áudio
 
-## Problemas Identificados
+## Análise dos Problemas Identificados
 
-### 1. Status de Entrega (✓✓) não funciona
-O webhook está falhando com erro `Cannot read properties of undefined (reading 'id')` porque:
-- **Esperado:** `payload.data.key.id` e `payload.data.status` (número)
-- **Recebido:** `payload.data.messageId` e `payload.data.status` ("DELIVERY_ACK"/"READ")
+### 1. Indicador "Digitando/Gravando" NÃO aparece no WhatsApp do cliente
 
-### 2. Transcrição de Áudio falha
-O bot responde "não consigo processar esse tipo de conteúdo" porque:
-- O formato `input_audio` não é suportado pela Lovable AI Gateway
-- A transcrição falha silenciosamente e retorna string vazia
+**Causa raiz encontrada:** O endpoint de presence está INCORRETO na Evolution API.
 
-### 3. Presença (digitando/gravando) não atualiza
-O evento `presence.update` também usa formato de payload incorreto
+```text
+CÓDIGO ATUAL (errado):
+URL: ${apiUrl}/chat/presence/${instanceName}
+Body: { number: phone, presence: "composing" }
+
+CÓDIGO CORRETO (conforme documentação Evolution API):
+URL: ${apiUrl}/chat/sendPresence/${instanceName}
+Body: { number: phone, options: { presence: "composing", delay: 1200 } }
+```
+
+### 2. Status ✓✓ (risquinhos) - Esclarecimento IMPORTANTE
+
+Os risquinhos (✓✓) no WhatsApp do CLIENTE são controlados **automaticamente pelo WhatsApp**, não pelo nosso sistema. O fluxo é:
+
+```text
+1. Bot envia mensagem → WhatsApp mostra ✓ (enviado)
+2. Mensagem chega no celular do cliente → WhatsApp mostra ✓✓ (entregue)
+3. Cliente abre a conversa → WhatsApp mostra ✓✓ azul (lido)
+```
+
+**O que nosso sistema faz:**
+- Recebe eventos `messages.update` da Evolution API com status `DELIVERY_ACK` ou `READ`
+- Atualiza o banco de dados local
+- Mostra os risquinhos na NOSSA interface (ChatView)
+
+**Os logs confirmam que está funcionando:**
+```
+Message cml49xpgi00sbs64ccubsaeif status updated to: delivered
+Message cml49xpgi00sbs64ccubsaeif status updated to: read
+```
+
+### 3. Transcrição de Áudio - Análise
+
+Os logs mostram que a transcrição **ESTÁ funcionando**:
+```
+Gemini Pro transcription successful: "Mande os códigos do sistema...."
+```
+
+A resposta "não consigo prosseguir o atendimento por áudio" na imagem pode ser de uma versão anterior do código. O fluxo atual está correto.
 
 ---
 
 ## Correções a Implementar
 
-### 1. Corrigir Parsing do `messages.update`
+### Correção 1: Endpoint sendPresence (CRÍTICO)
 
-```text
-ANTES (incorreto):
-const messageId = payload.data.key.id;
-const status = payload.data.status;
-if (status === 2) → "delivered"
-if (status === 3) → "read"
+**Arquivo:** `supabase/functions/whatsapp-webhook/index.ts`
 
-DEPOIS (correto):
-const messageId = payload.data.messageId || payload.data.keyId || payload.data.key?.id;
-const statusRaw = payload.data.status;
-if (statusRaw === "DELIVERY_ACK" || statusRaw === 2) → "delivered"
-if (statusRaw === "READ" || statusRaw === 3) → "read"
-```
-
-### 2. Corrigir Transcrição de Áudio com OpenAI GPT-5
-
-A Lovable AI Gateway suporta modelos OpenAI. Usaremos GPT-5 com input multimodal para processar áudios:
-
-```text
-Novo fluxo de transcrição:
-1. Baixar áudio da Evolution API (base64)
-2. Enviar para GPT-5 como conteúdo multimodal
-3. Modelo processa e transcreve
-4. Retornar texto transcrito
-```
-
-### 3. Corrigir Análise de Imagem
-
-Manter Gemini 2.5 Flash para imagens (já funciona), mas garantir fallback.
-
-### 4. Corrigir Parsing do `presence.update`
-
-```text
-ANTES (incorreto):
-const phone = payload.data.key.remoteJid.replace("@s.whatsapp.net", "");
-
-DEPOIS (correto):
-const remoteJid = payload.data.remoteJid || payload.data.key?.remoteJid;
-const phone = remoteJid?.replace("@s.whatsapp.net", "").replace("@lid", "");
-```
-
----
-
-## Arquivo a Modificar
-
-### `supabase/functions/whatsapp-webhook/index.ts`
-
-**Seção 1: Corrigir `messages.update` (linhas ~990-1005)**
-
+**Função sendPresence atual (linhas 908-931):**
 ```typescript
-// Handle message status updates (delivered/read)
-if (payload.event === "messages.update") {
-  // Suporte a múltiplos formatos da Evolution API
-  const messageId = payload.data.messageId || 
-                    payload.data.keyId || 
-                    payload.data.key?.id;
-  const statusRaw = payload.data.status;
-  
-  if (!messageId) {
-    console.log("No message ID found in status update");
-    return new Response(JSON.stringify({ status: "no_message_id" }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-  
-  // Mapear status (suporta strings e números)
-  let status: "delivered" | "read" | null = null;
-  if (statusRaw === "DELIVERY_ACK" || statusRaw === 2 || statusRaw === "delivered") {
-    status = "delivered";
-  } else if (statusRaw === "READ" || statusRaw === 3 || statusRaw === "read") {
-    status = "read";
-  }
-  
-  if (status) {
-    await updateMessageStatus(supabase, messageId, status);
-    console.log(`Message ${messageId} status updated to: ${status}`);
-  }
-  
-  return new Response(JSON.stringify({ status: "status_updated" }), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-```
-
-**Seção 2: Corrigir `presence.update` (linhas ~1007-1041)**
-
-```typescript
-// Handle presence updates (typing/recording)
-if (payload.event === "presence.update") {
-  const remoteJid = payload.data.remoteJid || payload.data.key?.remoteJid;
-  if (!remoteJid) {
-    return new Response(JSON.stringify({ status: "no_remote_jid" }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-  
-  const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@lid", "");
-  const presence = payload.data.presence || payload.data.action;
-  // ...resto
-}
-```
-
-**Seção 3: Corrigir Transcrição de Áudio (linhas ~675-727)**
-
-```typescript
-// Transcribe audio using OpenAI GPT-5 multimodal
-async function transcribeAudio(audioBase64: string, mimetype: string): Promise<string> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    console.error("LOVABLE_API_KEY not configured");
-    return "";
-  }
-
+async function sendPresence(
+  apiUrl: string,
+  apiToken: string,
+  instanceName: string,
+  phone: string,
+  presence: "composing" | "recording" | "paused"
+): Promise<void> {
   try {
-    console.log("Transcribing audio with GPT-5...");
+    await fetch(`${apiUrl}/chat/presence/${instanceName}`, {  // ❌ ERRADO
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: apiToken,
+      },
+      body: JSON.stringify({
+        number: phone,
+        presence,  // ❌ ERRADO
+      }),
+    });
+  } catch (error) {
+    console.error("Error sending presence:", error);
+  }
+}
+```
+
+**Correção:**
+```typescript
+async function sendPresence(
+  apiUrl: string,
+  apiToken: string,
+  instanceName: string,
+  phone: string,
+  presence: "composing" | "recording" | "paused"
+): Promise<void> {
+  try {
+    console.log(`Sending presence ${presence} to ${phone}...`);
     
-    // Usar GPT-5 com capacidades multimodais para transcrição
     const response = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
+      `${apiUrl}/chat/sendPresence/${instanceName}`,  // ✅ CORRETO
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
           "Content-Type": "application/json",
+          apikey: apiToken,
         },
         body: JSON.stringify({
-          model: "openai/gpt-5",
-          messages: [
-            {
-              role: "system",
-              content: "Você é um transcritor de áudio. Transcreva o áudio fornecido em português brasileiro. Retorne APENAS o texto transcrito, sem explicações."
-            },
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: "Transcreva este áudio:"
-                },
-                {
-                  type: "input_audio",
-                  input_audio: {
-                    data: audioBase64,
-                    format: mimetype.includes("ogg") ? "ogg" : 
-                            mimetype.includes("mp4") ? "mp4" :
-                            mimetype.includes("mp3") ? "mp3" : "wav"
-                  }
-                }
-              ]
-            }
-          ],
-          max_tokens: 1000,
+          number: phone,
+          options: {  // ✅ CORRETO
+            delay: 1200,  // Duração do indicador em ms
+            presence: presence,
+          },
         }),
       }
     );
-
+    
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Transcription error:", response.status, errorText);
-      
-      // Fallback: tentar com Gemini multimodal
-      return await transcribeWithGemini(audioBase64, mimetype);
+      console.error("Presence error:", response.status, errorText);
+    } else {
+      console.log(`Presence ${presence} sent successfully to ${phone}`);
     }
-
-    const data = await response.json();
-    const transcription = data.choices?.[0]?.message?.content || "";
-    console.log("Transcription result:", transcription.substring(0, 100));
-    return transcription;
   } catch (error) {
-    console.error("Error transcribing audio:", error);
-    return await transcribeWithGemini(audioBase64, mimetype);
-  }
-}
-
-// Fallback: transcrição com Gemini
-async function transcribeWithGemini(audioBase64: string, mimetype: string): Promise<string> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) return "";
-
-  try {
-    console.log("Fallback: Transcribing with Gemini...");
-    
-    const response = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            {
-              role: "user",
-              content: `[Áudio recebido - duração aproximada]. Por favor, informe ao cliente que você recebeu o áudio mas não conseguiu transcrever automaticamente. Peça gentilmente que ele repita por texto.`
-            }
-          ],
-          max_tokens: 200,
-        }),
-      }
-    );
-
-    if (!response.ok) return "";
-    
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || "";
-  } catch (error) {
-    console.error("Gemini fallback error:", error);
-    return "";
+    console.error("Error sending presence:", error);
   }
 }
 ```
 
----
+### Correção 2: Múltiplas Chamadas de Presence
 
-## Melhorias Adicionais
-
-### 1. Logs Mais Detalhados
-
-Adicionar logs em pontos críticos para debug:
-- Payload recebido (já existe)
-- Tipo de mídia detectado
-- Resultado da transcrição
-- Status de envio
-
-### 2. Tratamento de Erros Robusto
+O indicador "digitando" deve ser enviado **múltiplas vezes** durante o processamento da IA, pois expira após alguns segundos:
 
 ```typescript
-// Wrapper para operações críticas
-async function safeExecute<T>(
-  operation: () => Promise<T>,
-  fallback: T,
-  errorMessage: string
-): Promise<T> {
-  try {
-    return await operation();
-  } catch (error) {
-    console.error(errorMessage, error);
-    return fallback;
-  }
+// Antes de processar com IA, iniciar interval para manter presence
+const presenceInterval = setInterval(async () => {
+  await sendPresence(
+    settings.api_url,
+    settings.api_token,
+    instanceName,
+    phone,
+    "composing"
+  );
+}, 10000); // A cada 10 segundos
+
+try {
+  // Enviar presence inicial
+  await sendPresence(..., "composing");
+  
+  // Processar com IA
+  assistantMessage = await processWithAI(...);
+} finally {
+  // Limpar interval
+  clearInterval(presenceInterval);
+  
+  // Enviar "paused" para limpar o indicador
+  await sendPresence(..., "paused");
 }
 ```
 
-### 3. Melhorar Resposta para Áudio Não Transcrito
+### Correção 3: Melhorar Logs de Debug
 
-Atualizar o system prompt para lidar melhor:
+Adicionar logs mais detalhados em pontos críticos:
 
-```text
-🎤 MENSAGENS DE ÁUDIO:
-- Se receber "[Áudio transcrito]: texto", trate o texto normalmente
-- Se receber "[O cliente enviou um áudio que não pôde ser transcrito]":
-  → Responda: "Recebi seu áudio! 🎤 Infelizmente não consegui entender completamente. Poderia repetir por texto, por favor?"
-- NUNCA diga que não consegue processar áudio
+```typescript
+// No recebimento do webhook
+console.log(`[${payload.event}] Processing event...`);
+
+// No envio de presence
+console.log(`[PRESENCE] Sending ${presence} to ${phone}`);
+
+// No update de status
+console.log(`[STATUS] Message ${messageId}: ${status}`);
+
+// Na transcrição
+console.log(`[AUDIO] Transcription result: ${transcription?.substring(0, 50)}...`);
 ```
 
 ---
 
-## Melhorias na Interface (ChatView)
+## Estrutura de Código Corrigida
 
-### 1. Indicador de Status Visual
-
-Garantir que o componente `MessageStatus` mostre corretamente:
-- ✓ cinza = enviado (sent)
-- ✓✓ cinza = entregue (delivered)  
-- ✓✓ azul = lido (read)
-
-### 2. Player de Áudio Melhorado
-
-- Waveform animado durante reprodução
-- Mostrar transcrição quando disponível
-- Indicador de duração
-
----
-
-## Ordem de Implementação
-
-1. **Corrigir webhook** - Parsing de `messages.update` e `presence.update`
-2. **Corrigir transcrição** - Nova função com GPT-5 e fallback
-3. **Atualizar system prompt** - Melhor tratamento de áudio
-4. **Deploy e teste** - Verificar logs em produção
+```text
+whatsapp-webhook/index.ts
+├── sendPresence()        ← CORRIGIR endpoint e body
+├── sendWhatsAppMessage() ← OK, já retorna message_id
+├── transcribeAudio()     ← OK, funcionando com Gemini Pro
+├── updateMessageStatus() ← OK, atualiza no banco
+├── updateTypingStatus()  ← OK, atualiza no banco (para nossa UI)
+└── serve() handler
+    ├── messages.update   ← OK, parsing correto
+    ├── presence.update   ← OK, parsing correto
+    └── messages.upsert
+        ├── sendPresence("composing") ← CORRIGIR
+        ├── processWithAI()
+        └── sendPresence("paused")    ← ADICIONAR
+```
 
 ---
 
@@ -310,8 +199,18 @@ Garantir que o componente `MessageStatus` mostre corretamente:
 
 | Feature | Antes | Depois |
 |---------|-------|--------|
-| Status ✓✓ | Erro no webhook | Funciona corretamente |
-| Digitando | Erro no webhook | Mostra indicador |
-| Áudio | "Não consigo processar" | Transcreve ou pede texto |
-| Imagem | Funciona | Continua funcionando |
-| Logs | Básicos | Detalhados para debug |
+| "Digitando" no WhatsApp | Não aparece | ✅ Aparece para o cliente |
+| "Gravando" no WhatsApp | Não aparece | ✅ Aparece para o cliente |
+| Status ✓✓ (nossa UI) | Funciona | ✅ Continua funcionando |
+| Transcrição de áudio | Funciona | ✅ Continua funcionando |
+| Logs de debug | Básicos | ✅ Detalhados |
+
+---
+
+## Ordem de Implementação
+
+1. **Corrigir função `sendPresence()`** - Mudar endpoint e formato do body
+2. **Adicionar interval para manter presence** - Durante processamento longo
+3. **Adicionar `sendPresence("paused")`** - Após enviar resposta
+4. **Melhorar logs** - Para facilitar debug futuro
+5. **Deploy e teste** - Enviar mensagem e verificar "digitando"
