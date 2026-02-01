@@ -1,323 +1,239 @@
 
-# Plano: Sistema Visual 3D Profissional
+# Plano: Configuracoes - Redesign 3D Profissional
 
-## Visao Geral
+## Analise do Estado Atual
 
-Transformar o RestaurantOS em um sistema visualmente impressionante com efeitos 3D, glassmorphismo, sombras profundas, gradientes suaves e micro-animacoes inteligentes, mantendo a performance e responsividade.
-
----
-
-## 1. Sistema de Design 3D - CSS Base
-
-### Novas Variaveis e Utilitarios em `src/index.css`
-
-```css
-/* Sombras 3D em camadas */
---shadow-3d-sm: 
-  0 1px 2px rgba(0,0,0,0.02),
-  0 2px 4px rgba(0,0,0,0.02),
-  0 4px 8px rgba(0,0,0,0.03);
-
---shadow-3d-md: 
-  0 4px 6px rgba(0,0,0,0.02),
-  0 8px 16px rgba(0,0,0,0.04),
-  0 16px 32px rgba(0,0,0,0.06);
-
---shadow-3d-lg: 
-  0 8px 16px rgba(0,0,0,0.03),
-  0 16px 32px rgba(0,0,0,0.06),
-  0 32px 64px rgba(0,0,0,0.09);
-
-/* Glassmorphism */
---glass-bg: rgba(255,255,255,0.7);
---glass-bg-dark: rgba(30,30,40,0.7);
---glass-blur: 12px;
---glass-border: rgba(255,255,255,0.2);
-```
-
-### Classes Utilitarias
-
-```css
-/* Cards 3D */
-.card-3d {
-  @apply relative transition-all duration-300;
-  transform-style: preserve-3d;
-  box-shadow: var(--shadow-3d-md);
-}
-
-.card-3d:hover {
-  transform: translateY(-4px) scale(1.01);
-  box-shadow: var(--shadow-3d-lg);
-}
-
-/* Glassmorphism */
-.glass {
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border);
-}
-
-.dark .glass {
-  background: var(--glass-bg-dark);
-}
-
-/* Gradientes premium */
-.gradient-primary {
-  background: linear-gradient(135deg, 
-    hsl(var(--primary)) 0%, 
-    hsl(var(--primary) / 0.8) 100%);
-}
-
-/* Animacoes suaves */
-.float {
-  animation: float 3s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
-```
+A pagina de Configuracoes atual tem 852 linhas em um unico arquivo monolitico com:
+- Cards planos sem efeitos 3D
+- Tabs basicos sem animacoes
+- Switches simples sem destaque visual
+- Secao de horarios repetitiva e verbosa
+- Formularios sem hierarquia visual clara
+- Sem glassmorphism ou gradientes
 
 ---
 
-## 2. Componentes Reutilizaveis
+## Melhorias Propostas
 
-### 2.1 Card3D Component
+### 1. Arquitetura Modular
 
-Novo componente `src/components/ui/card-3d.tsx`:
+Dividir em componentes menores para melhor manutencao:
 
 ```text
-Card3D
-├── Sombra em multiplas camadas
-├── Efeito hover com lift sutil
-├── Border gradient opcional
-├── Variantes: elevated, glass, outlined
-└── Suporte a dark mode automatico
+src/components/settings/
+├── SettingsHeader.tsx         (header com gradiente 3D)
+├── SettingsTabs.tsx           (tabs animados)
+├── UnitTab.tsx                (dados da unidade)
+├── OperationalTab.tsx         (canais e automacoes)
+├── FinancialTab.tsx           (taxas e pagamentos)
+├── HoursTab.tsx               (horarios compactos)
+├── ProfileTab.tsx             (perfil e senha)
+├── AppearanceTab.tsx          (existente - aprimorar)
+├── SettingCard.tsx            (card 3D reutilizavel)
+└── SettingToggleItem.tsx      (toggle com visual premium)
 ```
 
-### 2.2 GlassCard Component
+### 2. Sistema Visual 3D
 
+#### Header Premium
 ```text
-GlassCard
-├── Backdrop blur configuravel
-├── Gradiente de borda suave
-├── Transparencia adaptativa
-└── Efeito de luz no topo
+┌─────────────────────────────────────────────────────┐
+│  [⚙️ Icon 3D]   Configuracoes                      │
+│                 Restaurante Sao Francisco           │
+│                 [Badge: Unidade Ativa]              │
+└─────────────────────────────────────────────────────┘
+ ↑ Gradiente sutil + sombra 3D + icone com glow
 ```
 
-### 2.3 StatCard3D Component
-
-Para KPIs e metricas com visual premium:
-
+#### Tabs Redesenhados
 ```text
-StatCard3D
-├── Icone com fundo gradiente
-├── Valor com animacao de contador
-├── Indicador de mudanca com cor
-├── Grafico mini sparkline opcional
-└── Hover com brilho sutil
+┌────────────────────────────────────────────────────────────┐
+│ [🏢 Unidade] [⚙️ Operacional] [💰 Financeiro] [🕐 Horarios] [👤 Perfil] [🎨 Aparencia] │
+│     ╰────────── Indicador animado deslizante ──────────╯    │
+└────────────────────────────────────────────────────────────┘
+ ↑ Fundo glassmorphism + tabs com hover glow + transicao suave
 ```
 
----
+### 3. SettingToggleItem Component
 
-## 3. Paginas a Melhorar
-
-### 3.1 Dashboard
+Novo componente reutilizavel para switches:
 
 ```text
-Melhorias:
-├── KPI Cards com efeito 3D e gradientes
-├── Grafico com fundo glassmorphism
-├── Card de caixa com borda luminosa
-├── Pedidos recentes com timeline animada
-├── Transicoes suaves entre estados
-└── Background com pattern sutil
+┌─────────────────────────────────────────────────────────────┐
+│ [🚚]  Delivery                                    [═════○]  │
+│       Pedidos para entrega                                  │
+│       ─────────────────────────────────────────────────────│
+│       ↑ Borda com gradiente quando ativo                    │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 3.2 Delivery (Pagina Atual)
+Caracteristicas:
+- Icone com background gradiente
+- Titulo em bold, descricao em muted
+- Switch com feedback visual
+- Borda luminosa quando ativo
+- Hover com lift sutil
 
+### 4. Secao de Horarios Compacta
+
+Antes (repetitivo):
 ```text
-Melhorias:
-├── Cards de pedido com profundidade 3D
-├── Badges de entregador com avatar circular
-├── Tabs com indicador animado
-├── Status com glow effect por cor
-├── Dialogs com backdrop blur
-├── Grid responsivo otimizado
-└── Empty states com ilustracoes animadas
+Segunda-feira    [Toggle]  [08:00] ate [22:00]
+Terca-feira      [Toggle]  [08:00] ate [22:00]
+Quarta-feira     [Toggle]  [08:00] ate [22:00]
+... (7 linhas identicas)
 ```
 
-### 3.3 POS (Ponto de Venda)
-
+Depois (inteligente):
 ```text
-Melhorias:
-├── Grid de produtos com cards 3D
-├── Carrinho com glassmorphism lateral
-├── Botoes de quantidade com feedback tactil
-├── Categorias com scroll snap
-├── Total com destaque gradiente
-└── Checkout dialog com transicao suave
+┌────────────────────────────────────────────────────────────┐
+│ 📅 Horario de Funcionamento                                │
+│ ┌──────────────────────────────────────────────────────┐  │
+│ │ Copiar horario:  [Seg-Sex ▼]  →  Aplicar a todos     │  │
+│ └──────────────────────────────────────────────────────┘  │
+│                                                            │
+│ ┌─────────┬─────────────────────────────────┬──────────┐  │
+│ │ Segunda │ ○ Aberto   08:00 - 22:00        │ [Editar] │  │
+│ │ Terca   │ ○ Aberto   08:00 - 22:00        │ [Editar] │  │
+│ │ ...     │ ...                              │ ...      │  │
+│ │ Domingo │ ● Fechado                        │ [Editar] │  │
+│ └─────────┴─────────────────────────────────┴──────────┘  │
+│                                                            │
+│ [💾 Salvar Horarios]                                       │
+└────────────────────────────────────────────────────────────┘
 ```
 
-### 3.4 KDS (Kitchen Display)
+Features:
+- Copiar horarios entre dias
+- Tabela visual compacta
+- Dialog para edicao detalhada
+- Indicador visual de aberto/fechado
+
+### 5. Cards de Configuracao 3D
+
+Aplicar Card3D com variantes:
 
 ```text
-Melhorias:
-├── Colunas com fundo gradient sutil
-├── Cards de pedido com timer visual
-├── Status com animacao de pulso
-├── Alerta de atraso com glow vermelho
-├── Botoes com feedback de estado
-└── Layout otimizado para tela cheia
+UnitTab:
+├── Card3D variant="elevated" (dados principais)
+└── Gradiente sutil no fundo
+
+OperationalTab:
+├── Card3D "Canais de Venda" com grid de toggles
+└── Card3D "Automacoes" com toggles de sistema
+
+FinancialTab:
+├── GlassCard para taxas (destaque visual)
+└── Card3D para metodos de pagamento
+
+ProfileTab:
+├── Card3D para dados pessoais
+├── Card3D para alterar senha
+└── Card com borda destructive para logout
 ```
 
-### 3.5 Mesas (Tables)
+### 6. Formularios Aprimorados
 
+Inputs com visual premium:
 ```text
-Melhorias:
-├── Cards de mesa com profundidade
-├── Indicador de status com borda colorida
-├── QR Code dialog com preview 3D
-├── Metricas com gradientes de cor
-├── Transicoes ao mudar status
-└── Hover effects suaves
+┌─────────────────────────────────────┐
+│ Nome do Estabelecimento             │
+│ ┌─────────────────────────────────┐ │
+│ │ [🏪] Restaurante São Francisco  │ │  ← Icone no input
+│ └─────────────────────────────────┘ │
+│                                     │
+│ CNPJ                    Telefone    │
+│ ┌──────────────┐  ┌──────────────┐  │
+│ │ 00.000.000/00│  │ (00) 00000-00│  │  ← Mascaras automaticas
+│ └──────────────┘  └──────────────┘  │
+└─────────────────────────────────────┘
 ```
 
-### 3.6 Login
+### 7. Animacoes e Transicoes
 
 ```text
-Melhorias:
-├── Card central com glassmorphism
-├── Logo com animacao float
-├── Background com gradiente animado
-├── Inputs com focus glow
-├── Botao com gradiente e hover lift
-└── Dark mode automatico
+Tab Changes:
+├── Fade in/out suave (200ms)
+├── Slide horizontal para conteudo
+└── Indicador animado no tab ativo
+
+Card Interactions:
+├── Hover lift (translateY -4px)
+├── Scale sutil (1.01)
+└── Shadow expansion
+
+Toggle Activation:
+├── Glow pulse quando ativa
+├── Background color transition
+└── Checkmark icon animation
 ```
 
----
+### 8. Responsividade Aprimorada
 
-## 4. Animacoes Globais
-
-### Tailwind Config Updates
-
+Mobile (< 640px):
 ```text
-Novas keyframes:
-├── float - movimento suave vertical
-├── glow-pulse - brilho pulsante
-├── slide-up-fade - entrada de baixo
-├── scale-bounce - escala com bounce
-├── shimmer - efeito de carregamento
-└── rotate-3d - rotacao 3D sutil
+- Tabs em scroll horizontal
+- Cards full-width
+- Toggles em lista vertical
+- Forms em coluna unica
+- Botoes full-width
+- Bottom sheet para dialogs
 ```
 
-### Transicoes Padronizadas
-
+Tablet (640-1024px):
 ```text
-transition-3d: transform 0.3s ease, box-shadow 0.3s ease
-transition-glass: backdrop-filter 0.2s ease, background 0.2s ease
-transition-glow: box-shadow 0.4s ease
+- Grid 2 colunas para toggles
+- Tabs visiveis com icones
+- Forms em 2 colunas
+```
+
+Desktop (> 1024px):
+```text
+- Grid 3 colunas para toggles
+- Sidebar opcional de navegacao rapida
+- Preview sticky no AppearanceTab
 ```
 
 ---
 
-## 5. Cores e Gradientes
+## Arquivos a Criar/Modificar
 
-### Paleta Expandida
-
-```text
-Gradientes para Status:
-├── success-gradient: verde para verde-claro
-├── warning-gradient: amarelo para laranja
-├── error-gradient: vermelho para rosa
-├── info-gradient: azul para ciano
-└── neutral-gradient: cinza para cinza-claro
-
-Gradientes para UI:
-├── primary-gradient: cor primaria com variacao
-├── glass-gradient: transparente com reflexo
-├── card-gradient: sutil para profundidade
-└── sidebar-gradient: vertical para navegacao
-```
+| Arquivo | Acao | Descricao |
+|---------|------|-----------|
+| `src/components/settings/SettingsHeader.tsx` | Criar | Header 3D com gradiente |
+| `src/components/settings/SettingToggleItem.tsx` | Criar | Toggle premium reutilizavel |
+| `src/components/settings/SettingCard.tsx` | Criar | Wrapper Card3D para settings |
+| `src/components/settings/UnitTab.tsx` | Criar | Tab dados da unidade |
+| `src/components/settings/OperationalTab.tsx` | Criar | Tab operacional |
+| `src/components/settings/FinancialTab.tsx` | Criar | Tab financeiro |
+| `src/components/settings/HoursTab.tsx` | Criar | Tab horarios compacto |
+| `src/components/settings/ProfileTab.tsx` | Criar | Tab perfil |
+| `src/components/settings/AppearanceTab.tsx` | Modificar | Aprimorar com 3D |
+| `src/pages/Settings.tsx` | Modificar | Refatorar para usar componentes |
 
 ---
 
-## 6. Responsividade Aprimorada
-
-### Breakpoints Otimizados
-
-```text
-Mobile First:
-├── xs (320px) - Celulares pequenos
-├── sm (640px) - Celulares grandes
-├── md (768px) - Tablets
-├── lg (1024px) - Laptops
-├── xl (1280px) - Desktops
-└── 2xl (1536px) - Monitores grandes
-```
-
-### Ajustes por Pagina
-
-```text
-Delivery Mobile:
-├── Tabs em scroll horizontal
-├── Cards em lista vertical
-├── Dialogs full-screen
-└── Botoes touch-friendly (min 44px)
-
-Dashboard Mobile:
-├── KPIs em grid 2x2
-├── Graficos com altura reduzida
-├── Scroll horizontal para tabelas
-└── Menu colapsavel
-```
-
----
-
-## 7. Arquivos a Modificar
-
-| Arquivo | Mudancas |
-|---------|----------|
-| `src/index.css` | Variaveis 3D, utilitarios glass, animacoes |
-| `tailwind.config.ts` | Keyframes, shadows, cores |
-| `src/components/ui/card-3d.tsx` | Novo componente (criar) |
-| `src/components/ui/glass-card.tsx` | Novo componente (criar) |
-| `src/components/ui/stat-card.tsx` | Novo componente (criar) |
-| `src/pages/Dashboard.tsx` | Cards 3D, glassmorphism |
-| `src/pages/Delivery.tsx` | Visual premium completo |
-| `src/pages/POS.tsx` | Grid 3D, carrinho glass |
-| `src/pages/KDS.tsx` | Colunas com gradientes |
-| `src/pages/Tables.tsx` | Cards com profundidade |
-| `src/pages/Login.tsx` | Background animado, glass card |
-| `src/pages/SelectUnit.tsx` | Cards com hover 3D |
-| `src/components/layout/AppSidebar.tsx` | Gradiente, glass effect |
-
----
-
-## 8. Resultado Visual Esperado
+## Resultado Visual Esperado
 
 | Elemento | Antes | Depois |
 |----------|-------|--------|
-| Cards | Flat com borda simples | 3D com sombras em camadas |
-| Backgrounds | Cor solida | Gradientes sutis + patterns |
-| Hover states | Mudanca de cor | Lift + scale + glow |
-| Dialogs | Overlay escuro | Glassmorphism com blur |
-| Botoes | Cor solida | Gradiente + shadow 3D |
-| Icones | Estaticos | Animacoes contextuais |
-| Loading | Skeleton basico | Shimmer animado |
-| Transicoes | Instantaneas | Suaves com easing |
+| Header | Texto simples | Gradiente 3D com glow |
+| Tabs | Basicos | Animados com indicador |
+| Cards | Flat | 3D com sombras em camadas |
+| Toggles | Switch simples | Item completo com icone/desc |
+| Horarios | 7 linhas identicas | Tabela compacta + copy |
+| Forms | Inputs basicos | Icones + mascaras + focus glow |
+| Responsivo | Funcional | Otimizado por breakpoint |
+| Animacoes | Nenhuma | Transicoes suaves em tudo |
 
 ---
 
-## 9. Ordem de Implementacao
+## Ordem de Implementacao
 
-1. Atualizar `src/index.css` com sistema 3D base
-2. Atualizar `tailwind.config.ts` com animacoes
-3. Criar componentes reutilizaveis (card-3d, glass-card, stat-card)
-4. Aplicar em `Login.tsx` (primeira impressao)
-5. Atualizar `Dashboard.tsx` (pagina principal)
-6. Melhorar `Delivery.tsx` (pagina atual do usuario)
-7. Refinar `POS.tsx`, `KDS.tsx`, `Tables.tsx`
-8. Finalizar `AppSidebar.tsx` e navegacao
-9. Testes de responsividade em todos os breakpoints
+1. Criar componentes base (SettingToggleItem, SettingCard, SettingsHeader)
+2. Criar tabs individuais (UnitTab, OperationalTab, FinancialTab, HoursTab, ProfileTab)
+3. Refatorar Settings.tsx para usar novos componentes
+4. Aprimorar AppearanceTab com visual 3D
+5. Adicionar animacoes e transicoes
+6. Testar responsividade em todos breakpoints
+7. Polish final e micro-interacoes
