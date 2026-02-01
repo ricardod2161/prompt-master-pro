@@ -18,6 +18,7 @@ import {
   LogOut,
   Save,
   Loader2,
+  Palette,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +37,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { AppearanceTab } from "@/components/settings/AppearanceTab";
 
 const DAYS_OF_WEEK = [
   { key: "monday", label: "Segunda-feira" },
@@ -290,6 +292,10 @@ export default function Settings() {
           <TabsTrigger value="profile" className="flex items-center gap-2 data-[state=active]:bg-background">
             <User className="h-4 w-4" />
             <span className="hidden sm:inline">Perfil</span>
+          </TabsTrigger>
+          <TabsTrigger value="appearance" className="flex items-center gap-2 data-[state=active]:bg-background">
+            <Palette className="h-4 w-4" />
+            <span className="hidden sm:inline">Aparência</span>
           </TabsTrigger>
         </TabsList>
 
@@ -834,6 +840,11 @@ export default function Settings() {
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Appearance Tab */}
+        <TabsContent value="appearance" className="mt-6">
+          <AppearanceTab />
         </TabsContent>
       </Tabs>
     </div>

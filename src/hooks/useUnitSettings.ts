@@ -38,6 +38,14 @@ export interface UnitSettings {
   timezone: string;
   currency: string;
   payment_methods: PaymentMethods;
+  // Theme customization
+  primary_color?: string;
+  accent_color?: string;
+  success_color?: string;
+  warning_color?: string;
+  error_color?: string;
+  sidebar_color?: string;
+  dark_mode_enabled?: boolean;
   created_at: string;
   updated_at: string;
 }

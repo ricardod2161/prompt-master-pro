@@ -7,6 +7,8 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { UnitProvider } from "@/contexts/UnitContext";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { useTheme } from "@/hooks/useTheme";
+import { useEffect } from "react";
 
 // Pages
 import Login from "./pages/Login";
@@ -27,12 +29,20 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+// Component to apply theme colors globally
+function ThemeColorApplier() {
+  // This hook automatically applies colors when settings load
+  useTheme();
+  return null;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
       <TooltipProvider>
         <AuthProvider>
           <UnitProvider>
+            <ThemeColorApplier />
             <Toaster />
             <Sonner />
             <BrowserRouter>
