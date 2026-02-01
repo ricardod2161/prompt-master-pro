@@ -14,6 +14,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_logs: {
+        Row: {
+          action: string
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          metadata: Json | null
+          severity: string | null
+          unit_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          severity?: string | null
+          unit_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          severity?: string | null
+          unit_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_logs_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cash_movements: {
         Row: {
           amount: number
@@ -1027,6 +1071,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_admin_log: {
+        Args: {
+          _action: string
+          _category?: string
+          _description?: string
+          _metadata?: Json
+          _severity?: string
+          _unit_id?: string
+          _user_id?: string
+        }
+        Returns: string
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
