@@ -893,21 +893,42 @@ export type Database = {
           conversation_id: string
           created_at: string
           id: string
+          media_caption: string | null
+          media_duration: number | null
+          media_type: string | null
+          media_url: string | null
+          message_id: string | null
           role: string
+          status: string | null
+          transcription: string | null
         }
         Insert: {
           content: string
           conversation_id: string
           created_at?: string
           id?: string
+          media_caption?: string | null
+          media_duration?: number | null
+          media_type?: string | null
+          media_url?: string | null
+          message_id?: string | null
           role: string
+          status?: string | null
+          transcription?: string | null
         }
         Update: {
           content?: string
           conversation_id?: string
           created_at?: string
           id?: string
+          media_caption?: string | null
+          media_duration?: number | null
+          media_type?: string | null
+          media_url?: string | null
+          message_id?: string | null
           role?: string
+          status?: string | null
+          transcription?: string | null
         }
         Relationships: [
           {
@@ -962,6 +983,41 @@ export type Database = {
             columns: ["unit_id"]
             isOneToOne: true
             referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_typing_status: {
+        Row: {
+          conversation_id: string
+          expires_at: string | null
+          id: string
+          is_recording: boolean | null
+          is_typing: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          conversation_id: string
+          expires_at?: string | null
+          id?: string
+          is_recording?: boolean | null
+          is_typing?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          conversation_id?: string
+          expires_at?: string | null
+          id?: string
+          is_recording?: boolean | null
+          is_typing?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_typing_status_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: true
+            referencedRelation: "whatsapp_conversations"
             referencedColumns: ["id"]
           },
         ]

@@ -56,7 +56,7 @@ const menuItems = [
     items: [
       { title: "Delivery", url: "/delivery", icon: Truck },
       { title: "Caixa", url: "/cashier", icon: Wallet },
-      { title: "WhatsApp", url: "/whatsapp/settings", icon: MessageSquare },
+      { title: "WhatsApp", url: "/whatsapp/chat", icon: MessageSquare },
     ],
   },
   {

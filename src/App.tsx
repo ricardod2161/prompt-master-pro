@@ -25,6 +25,7 @@ import Inventory from "./pages/Inventory";
 import Reports from "./pages/Reports";
 import Delivery from "./pages/Delivery";
 import WhatsAppSettings from "./pages/WhatsAppSettings";
+import WhatsAppChat from "./pages/WhatsAppChat";
 import Settings from "./pages/Settings";
 import Pricing from "./pages/Pricing";
 import SubscriptionSuccess from "./pages/SubscriptionSuccess";
@@ -69,6 +70,7 @@ const App = () => (
                   <Route path="/reports" element={<Reports />} />
                   <Route path="/delivery" element={<Delivery />} />
                   <Route path="/whatsapp/settings" element={<WhatsAppSettings />} />
+                  <Route path="/whatsapp/chat" element={<WhatsAppChat />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/pricing" element={<Pricing />} />
                 </Route>
