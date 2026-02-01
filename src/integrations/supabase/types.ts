@@ -673,63 +673,84 @@ export type Database = {
       }
       unit_settings: {
         Row: {
+          accent_color: string | null
           auto_notify_enabled: boolean | null
           auto_print_enabled: boolean | null
           counter_ordering_enabled: boolean | null
           created_at: string | null
           currency: string | null
+          dark_mode_enabled: boolean | null
           default_preparation_time: number | null
           delivery_enabled: boolean | null
           delivery_fee: number | null
+          error_color: string | null
           id: string
           min_delivery_order: number | null
           opening_hours: Json | null
           payment_methods: Json | null
+          primary_color: string | null
           service_fee_percentage: number | null
+          sidebar_color: string | null
+          success_color: string | null
           table_ordering_enabled: boolean | null
           timezone: string | null
           unit_id: string
           updated_at: string | null
+          warning_color: string | null
           whatsapp_ordering_enabled: boolean | null
         }
         Insert: {
+          accent_color?: string | null
           auto_notify_enabled?: boolean | null
           auto_print_enabled?: boolean | null
           counter_ordering_enabled?: boolean | null
           created_at?: string | null
           currency?: string | null
+          dark_mode_enabled?: boolean | null
           default_preparation_time?: number | null
           delivery_enabled?: boolean | null
           delivery_fee?: number | null
+          error_color?: string | null
           id?: string
           min_delivery_order?: number | null
           opening_hours?: Json | null
           payment_methods?: Json | null
+          primary_color?: string | null
           service_fee_percentage?: number | null
+          sidebar_color?: string | null
+          success_color?: string | null
           table_ordering_enabled?: boolean | null
           timezone?: string | null
           unit_id: string
           updated_at?: string | null
+          warning_color?: string | null
           whatsapp_ordering_enabled?: boolean | null
         }
         Update: {
+          accent_color?: string | null
           auto_notify_enabled?: boolean | null
           auto_print_enabled?: boolean | null
           counter_ordering_enabled?: boolean | null
           created_at?: string | null
           currency?: string | null
+          dark_mode_enabled?: boolean | null
           default_preparation_time?: number | null
           delivery_enabled?: boolean | null
           delivery_fee?: number | null
+          error_color?: string | null
           id?: string
           min_delivery_order?: number | null
           opening_hours?: Json | null
           payment_methods?: Json | null
+          primary_color?: string | null
           service_fee_percentage?: number | null
+          sidebar_color?: string | null
+          success_color?: string | null
           table_ordering_enabled?: boolean | null
           timezone?: string | null
           unit_id?: string
           updated_at?: string | null
+          warning_color?: string | null
           whatsapp_ordering_enabled?: boolean | null
         }
         Relationships: [
