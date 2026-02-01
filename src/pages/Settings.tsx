@@ -1,34 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Settings as SettingsIcon,
   Building2,
   Cog,
   DollarSign,
   Clock,
-  Users,
   User,
-  Store,
-  Truck,
-  QrCode,
-  Printer,
-  Bell,
-  CreditCard,
-  Banknote,
-  Wallet,
-  LogOut,
-  Save,
-  Loader2,
   Palette,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUnit } from "@/contexts/UnitContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -37,41 +17,38 @@ import { useProfile } from "@/hooks/useProfile";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+
+// Settings components
+import { SettingsHeader } from "@/components/settings/SettingsHeader";
+import { UnitTab } from "@/components/settings/UnitTab";
+import { OperationalTab } from "@/components/settings/OperationalTab";
+import { FinancialTab } from "@/components/settings/FinancialTab";
+import { HoursTab } from "@/components/settings/HoursTab";
+import { ProfileTab } from "@/components/settings/ProfileTab";
 import { AppearanceTab } from "@/components/settings/AppearanceTab";
-
-const DAYS_OF_WEEK = [
-  { key: "monday", label: "Segunda-feira" },
-  { key: "tuesday", label: "Terça-feira" },
-  { key: "wednesday", label: "Quarta-feira" },
-  { key: "thursday", label: "Quinta-feira" },
-  { key: "friday", label: "Sexta-feira" },
-  { key: "saturday", label: "Sábado" },
-  { key: "sunday", label: "Domingo" },
-] as const;
-
-const TIMEZONES = [
-  { value: "America/Sao_Paulo", label: "Brasília (GMT-3)" },
-  { value: "America/Manaus", label: "Manaus (GMT-4)" },
-  { value: "America/Belem", label: "Belém (GMT-3)" },
-  { value: "America/Fortaleza", label: "Fortaleza (GMT-3)" },
-  { value: "America/Recife", label: "Recife (GMT-3)" },
-  { value: "America/Cuiaba", label: "Cuiabá (GMT-4)" },
-  { value: "America/Porto_Velho", label: "Porto Velho (GMT-4)" },
-  { value: "America/Rio_Branco", label: "Rio Branco (GMT-5)" },
-];
+import { cn } from "@/lib/utils";
 
 function SettingsLoadingSkeleton() {
   return (
-    <div className="space-y-6">
-      <Skeleton className="h-32 w-full" />
-      <Skeleton className="h-10 w-full max-w-md" />
+    <div className="space-y-6 animate-fade-in">
+      <Skeleton className="h-32 w-full rounded-2xl" />
+      <Skeleton className="h-14 w-full max-w-2xl rounded-xl" />
       <div className="grid gap-4 md:grid-cols-2">
-        <Skeleton className="h-48" />
-        <Skeleton className="h-48" />
+        <Skeleton className="h-48 rounded-2xl" />
+        <Skeleton className="h-48 rounded-2xl" />
       </div>
     </div>
   );
 }
+
+const TAB_ITEMS = [
+  { value: "unit", label: "Unidade", icon: Building2 },
+  { value: "operational", label: "Operacional", icon: Cog },
+  { value: "financial", label: "Financeiro", icon: DollarSign },
+  { value: "hours", label: "Horários", icon: Clock },
+  { value: "profile", label: "Perfil", icon: User },
+  { value: "appearance", label: "Aparência", icon: Palette },
+];
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -140,7 +117,7 @@ export default function Settings() {
   });
   
   // Update form state when data loads
-  useState(() => {
+  useEffect(() => {
     if (selectedUnit) {
       setUnitForm({
         name: selectedUnit.name || "",
@@ -149,9 +126,9 @@ export default function Settings() {
         phone: selectedUnit.phone || "",
       });
     }
-  });
+  }, [selectedUnit]);
 
-  useState(() => {
+  useEffect(() => {
     if (settings) {
       setOperationalSettings({
         auto_print_enabled: settings.auto_print_enabled,
@@ -173,13 +150,13 @@ export default function Settings() {
         timezone: settings.timezone,
       });
     }
-  });
+  }, [settings]);
 
-  useState(() => {
+  useEffect(() => {
     if (profile) {
       setProfileForm((prev) => ({ ...prev, full_name: profile.full_name || "" }));
     }
-  });
+  }, [profile]);
 
   const handleSaveUnit = async () => {
     if (!selectedUnit) return;
@@ -214,14 +191,6 @@ export default function Settings() {
   };
 
   const handleChangePassword = async () => {
-    if (profileForm.newPassword !== profileForm.confirmPassword) {
-      toast({ title: "Erro", description: "As senhas não coincidem.", variant: "destructive" });
-      return;
-    }
-    if (profileForm.newPassword.length < 6) {
-      toast({ title: "Erro", description: "A senha deve ter pelo menos 6 caracteres.", variant: "destructive" });
-      return;
-    }
     await updatePassword(profileForm.newPassword);
     setProfileForm((prev) => ({ ...prev, newPassword: "", confirmPassword: "" }));
   };
@@ -233,9 +202,14 @@ export default function Settings() {
 
   if (!selectedUnit) {
     return (
-      <div className="flex flex-col items-center justify-center h-[60vh] text-center">
-        <SettingsIcon className="h-12 w-12 text-muted-foreground mb-4" />
-        <h1 className="text-2xl font-bold mb-2">Configurações</h1>
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center p-6">
+        <div className="relative">
+          <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl" />
+          <div className="relative p-6 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20">
+            <SettingsIcon className="h-12 w-12 text-primary" />
+          </div>
+        </div>
+        <h1 className="text-2xl font-bold mt-6 mb-2">Configurações</h1>
         <p className="text-muted-foreground">Selecione uma unidade para configurar.</p>
       </div>
     );
@@ -243,607 +217,92 @@ export default function Settings() {
 
   if (isLoadingSettings || isLoadingProfile) {
     return (
-      <div className="space-y-6 p-4 md:p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-3 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5">
-            <SettingsIcon className="h-6 w-6 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">Configurações</h1>
-            <p className="text-muted-foreground">{selectedUnit.name}</p>
-          </div>
-        </div>
+      <div className="p-4 md:p-6 lg:p-8">
+        <SettingsHeader unitName={selectedUnit.name} />
         <SettingsLoadingSkeleton />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="p-4 md:p-6 lg:p-8 min-h-screen">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <div className="p-3 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5">
-          <SettingsIcon className="h-6 w-6 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">Configurações</h1>
-          <p className="text-muted-foreground">{selectedUnit.name}</p>
-        </div>
-      </div>
+      <SettingsHeader unitName={selectedUnit.name} />
 
+      {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50 p-1">
-          <TabsTrigger value="unit" className="flex items-center gap-2 data-[state=active]:bg-background">
-            <Building2 className="h-4 w-4" />
-            <span className="hidden sm:inline">Unidade</span>
-          </TabsTrigger>
-          <TabsTrigger value="operational" className="flex items-center gap-2 data-[state=active]:bg-background">
-            <Cog className="h-4 w-4" />
-            <span className="hidden sm:inline">Operacional</span>
-          </TabsTrigger>
-          <TabsTrigger value="financial" className="flex items-center gap-2 data-[state=active]:bg-background">
-            <DollarSign className="h-4 w-4" />
-            <span className="hidden sm:inline">Financeiro</span>
-          </TabsTrigger>
-          <TabsTrigger value="hours" className="flex items-center gap-2 data-[state=active]:bg-background">
-            <Clock className="h-4 w-4" />
-            <span className="hidden sm:inline">Horários</span>
-          </TabsTrigger>
-          <TabsTrigger value="profile" className="flex items-center gap-2 data-[state=active]:bg-background">
-            <User className="h-4 w-4" />
-            <span className="hidden sm:inline">Perfil</span>
-          </TabsTrigger>
-          <TabsTrigger value="appearance" className="flex items-center gap-2 data-[state=active]:bg-background">
-            <Palette className="h-4 w-4" />
-            <span className="hidden sm:inline">Aparência</span>
-          </TabsTrigger>
+        <TabsList className="w-full flex flex-wrap h-auto gap-1.5 bg-card/50 backdrop-blur-sm border border-border/50 p-2 rounded-xl shadow-sm mb-6">
+          {TAB_ITEMS.map((tab) => (
+            <TabsTrigger
+              key={tab.value}
+              value={tab.value}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 rounded-lg transition-all duration-300",
+                "data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/90",
+                "data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg data-[state=active]:shadow-primary/25",
+                "data-[state=inactive]:hover:bg-muted/50"
+              )}
+            >
+              <tab.icon className="h-4 w-4" />
+              <span className="hidden sm:inline font-medium">{tab.label}</span>
+            </TabsTrigger>
+          ))}
         </TabsList>
 
         {/* Unit Tab */}
-        <TabsContent value="unit" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                Dados da Unidade
-              </CardTitle>
-              <CardDescription>Informações cadastrais do estabelecimento</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="unit-name">Nome do Estabelecimento</Label>
-                  <Input
-                    id="unit-name"
-                    value={unitForm.name}
-                    onChange={(e) => setUnitForm((prev) => ({ ...prev, name: e.target.value }))}
-                    placeholder="Nome do restaurante"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="unit-cnpj">CNPJ</Label>
-                  <Input
-                    id="unit-cnpj"
-                    value={unitForm.cnpj}
-                    onChange={(e) => setUnitForm((prev) => ({ ...prev, cnpj: e.target.value }))}
-                    placeholder="00.000.000/0000-00"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="unit-address">Endereço Completo</Label>
-                <Input
-                  id="unit-address"
-                  value={unitForm.address}
-                  onChange={(e) => setUnitForm((prev) => ({ ...prev, address: e.target.value }))}
-                  placeholder="Rua, número, bairro, cidade - UF"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="unit-phone">Telefone Principal</Label>
-                <Input
-                  id="unit-phone"
-                  value={unitForm.phone}
-                  onChange={(e) => setUnitForm((prev) => ({ ...prev, phone: e.target.value }))}
-                  placeholder="(00) 00000-0000"
-                />
-              </div>
-              <Button onClick={handleSaveUnit} className="w-full sm:w-auto">
-                <Save className="h-4 w-4 mr-2" />
-                Salvar Dados da Unidade
-              </Button>
-            </CardContent>
-          </Card>
+        <TabsContent value="unit" className="mt-0">
+          <UnitTab
+            unitForm={unitForm}
+            onFormChange={setUnitForm}
+            onSave={handleSaveUnit}
+          />
         </TabsContent>
 
         {/* Operational Tab */}
-        <TabsContent value="operational" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Store className="h-5 w-5" />
-                Canais de Venda
-              </CardTitle>
-              <CardDescription>Ative ou desative os canais de atendimento</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <div className="flex items-center gap-3">
-                  <Truck className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">Delivery</p>
-                    <p className="text-sm text-muted-foreground">Pedidos para entrega</p>
-                  </div>
-                </div>
-                <Switch
-                  checked={operationalSettings.delivery_enabled}
-                  onCheckedChange={(checked) =>
-                    setOperationalSettings((prev) => ({ ...prev, delivery_enabled: checked }))
-                  }
-                />
-              </div>
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <div className="flex items-center gap-3">
-                  <QrCode className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">Mesa / QR Code</p>
-                    <p className="text-sm text-muted-foreground">Pedidos via QR na mesa</p>
-                  </div>
-                </div>
-                <Switch
-                  checked={operationalSettings.table_ordering_enabled}
-                  onCheckedChange={(checked) =>
-                    setOperationalSettings((prev) => ({ ...prev, table_ordering_enabled: checked }))
-                  }
-                />
-              </div>
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <div className="flex items-center gap-3">
-                  <Store className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">Balcão</p>
-                    <p className="text-sm text-muted-foreground">Atendimento presencial</p>
-                  </div>
-                </div>
-                <Switch
-                  checked={operationalSettings.counter_ordering_enabled}
-                  onCheckedChange={(checked) =>
-                    setOperationalSettings((prev) => ({ ...prev, counter_ordering_enabled: checked }))
-                  }
-                />
-              </div>
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <div className="flex items-center gap-3">
-                  <Bell className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">WhatsApp</p>
-                    <p className="text-sm text-muted-foreground">Pedidos via WhatsApp</p>
-                  </div>
-                </div>
-                <Switch
-                  checked={operationalSettings.whatsapp_ordering_enabled}
-                  onCheckedChange={(checked) =>
-                    setOperationalSettings((prev) => ({ ...prev, whatsapp_ordering_enabled: checked }))
-                  }
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Cog className="h-5 w-5" />
-                Automações
-              </CardTitle>
-              <CardDescription>Configure ações automáticas do sistema</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <div className="flex items-center gap-3">
-                  <Printer className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">Impressão Automática</p>
-                    <p className="text-sm text-muted-foreground">
-                      Imprime comanda quando status muda para "Preparando"
-                    </p>
-                  </div>
-                </div>
-                <Switch
-                  checked={operationalSettings.auto_print_enabled}
-                  onCheckedChange={(checked) =>
-                    setOperationalSettings((prev) => ({ ...prev, auto_print_enabled: checked }))
-                  }
-                />
-              </div>
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <div className="flex items-center gap-3">
-                  <Bell className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">Notificação Automática</p>
-                    <p className="text-sm text-muted-foreground">
-                      Notifica cliente via WhatsApp quando pedido fica pronto
-                    </p>
-                  </div>
-                </div>
-                <Switch
-                  checked={operationalSettings.auto_notify_enabled}
-                  onCheckedChange={(checked) =>
-                    setOperationalSettings((prev) => ({ ...prev, auto_notify_enabled: checked }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="prep-time">Tempo Médio de Preparo (minutos)</Label>
-                <Input
-                  id="prep-time"
-                  type="number"
-                  min={5}
-                  max={120}
-                  value={operationalSettings.default_preparation_time}
-                  onChange={(e) =>
-                    setOperationalSettings((prev) => ({
-                      ...prev,
-                      default_preparation_time: parseInt(e.target.value) || 30,
-                    }))
-                  }
-                />
-              </div>
-              <Button onClick={handleSaveOperational} disabled={isSaving} className="w-full sm:w-auto">
-                {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                Salvar Configurações Operacionais
-              </Button>
-            </CardContent>
-          </Card>
+        <TabsContent value="operational" className="mt-0">
+          <OperationalTab
+            settings={operationalSettings}
+            onSettingsChange={setOperationalSettings}
+            onSave={handleSaveOperational}
+            isSaving={isSaving}
+          />
         </TabsContent>
 
         {/* Financial Tab */}
-        <TabsContent value="financial" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5" />
-                Taxas
-              </CardTitle>
-              <CardDescription>Configure taxas de serviço e entrega</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="service-fee">Taxa de Serviço (%)</Label>
-                  <Input
-                    id="service-fee"
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={0.5}
-                    value={financialSettings.service_fee_percentage}
-                    onChange={(e) =>
-                      setFinancialSettings((prev) => ({
-                        ...prev,
-                        service_fee_percentage: parseFloat(e.target.value) || 0,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="delivery-fee">Taxa de Entrega (R$)</Label>
-                  <Input
-                    id="delivery-fee"
-                    type="number"
-                    min={0}
-                    step={0.5}
-                    value={financialSettings.delivery_fee}
-                    onChange={(e) =>
-                      setFinancialSettings((prev) => ({
-                        ...prev,
-                        delivery_fee: parseFloat(e.target.value) || 0,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="min-order">Pedido Mínimo Delivery (R$)</Label>
-                  <Input
-                    id="min-order"
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={financialSettings.min_delivery_order}
-                    onChange={(e) =>
-                      setFinancialSettings((prev) => ({
-                        ...prev,
-                        min_delivery_order: parseFloat(e.target.value) || 0,
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="h-5 w-5" />
-                Métodos de Pagamento
-              </CardTitle>
-              <CardDescription>Ative ou desative formas de pagamento aceitas</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="flex items-center justify-between p-3 rounded-lg border">
-                  <div className="flex items-center gap-2">
-                    <Banknote className="h-4 w-4 text-muted-foreground" />
-                    <span>Dinheiro</span>
-                  </div>
-                  <Switch
-                    checked={financialSettings.payment_methods.cash}
-                    onCheckedChange={(checked) =>
-                      setFinancialSettings((prev) => ({
-                        ...prev,
-                        payment_methods: { ...prev.payment_methods, cash: checked },
-                      }))
-                    }
-                  />
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg border">
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="h-4 w-4 text-muted-foreground" />
-                    <span>Crédito</span>
-                  </div>
-                  <Switch
-                    checked={financialSettings.payment_methods.credit}
-                    onCheckedChange={(checked) =>
-                      setFinancialSettings((prev) => ({
-                        ...prev,
-                        payment_methods: { ...prev.payment_methods, credit: checked },
-                      }))
-                    }
-                  />
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg border">
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="h-4 w-4 text-muted-foreground" />
-                    <span>Débito</span>
-                  </div>
-                  <Switch
-                    checked={financialSettings.payment_methods.debit}
-                    onCheckedChange={(checked) =>
-                      setFinancialSettings((prev) => ({
-                        ...prev,
-                        payment_methods: { ...prev.payment_methods, debit: checked },
-                      }))
-                    }
-                  />
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg border">
-                  <div className="flex items-center gap-2">
-                    <Wallet className="h-4 w-4 text-muted-foreground" />
-                    <span>PIX</span>
-                  </div>
-                  <Switch
-                    checked={financialSettings.payment_methods.pix}
-                    onCheckedChange={(checked) =>
-                      setFinancialSettings((prev) => ({
-                        ...prev,
-                        payment_methods: { ...prev.payment_methods, pix: checked },
-                      }))
-                    }
-                  />
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg border">
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="h-4 w-4 text-muted-foreground" />
-                    <span>Voucher</span>
-                  </div>
-                  <Switch
-                    checked={financialSettings.payment_methods.voucher}
-                    onCheckedChange={(checked) =>
-                      setFinancialSettings((prev) => ({
-                        ...prev,
-                        payment_methods: { ...prev.payment_methods, voucher: checked },
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-              <Button onClick={handleSaveFinancial} disabled={isSaving} className="w-full sm:w-auto">
-                {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                Salvar Configurações Financeiras
-              </Button>
-            </CardContent>
-          </Card>
+        <TabsContent value="financial" className="mt-0">
+          <FinancialTab
+            settings={financialSettings}
+            onSettingsChange={setFinancialSettings}
+            onSave={handleSaveFinancial}
+            isSaving={isSaving}
+          />
         </TabsContent>
 
         {/* Hours Tab */}
-        <TabsContent value="hours" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Horário de Funcionamento
-              </CardTitle>
-              <CardDescription>Configure os horários de abertura e fechamento</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Fuso Horário</Label>
-                <Select
-                  value={hoursSettings.timezone}
-                  onValueChange={(value) => setHoursSettings((prev) => ({ ...prev, timezone: value }))}
-                >
-                  <SelectTrigger className="w-full sm:w-64">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TIMEZONES.map((tz) => (
-                      <SelectItem key={tz.value} value={tz.value}>
-                        {tz.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-3">
-                {DAYS_OF_WEEK.map((day) => (
-                  <div
-                    key={day.key}
-                    className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg border"
-                  >
-                    <div className="flex items-center justify-between sm:w-40">
-                      <span className="font-medium">{day.label}</span>
-                      <Switch
-                        checked={!hoursSettings.opening_hours[day.key].closed}
-                        onCheckedChange={(checked) =>
-                          setHoursSettings((prev) => ({
-                            ...prev,
-                            opening_hours: {
-                              ...prev.opening_hours,
-                              [day.key]: { ...prev.opening_hours[day.key], closed: !checked },
-                            },
-                          }))
-                        }
-                      />
-                    </div>
-                    {!hoursSettings.opening_hours[day.key].closed ? (
-                      <div className="flex items-center gap-2 flex-1">
-                        <Input
-                          type="time"
-                          value={hoursSettings.opening_hours[day.key].open}
-                          onChange={(e) =>
-                            setHoursSettings((prev) => ({
-                              ...prev,
-                              opening_hours: {
-                                ...prev.opening_hours,
-                                [day.key]: { ...prev.opening_hours[day.key], open: e.target.value },
-                              },
-                            }))
-                          }
-                          className="w-32"
-                        />
-                        <span className="text-muted-foreground">até</span>
-                        <Input
-                          type="time"
-                          value={hoursSettings.opening_hours[day.key].close}
-                          onChange={(e) =>
-                            setHoursSettings((prev) => ({
-                              ...prev,
-                              opening_hours: {
-                                ...prev.opening_hours,
-                                [day.key]: { ...prev.opening_hours[day.key], close: e.target.value },
-                              },
-                            }))
-                          }
-                          className="w-32"
-                        />
-                      </div>
-                    ) : (
-                      <Badge variant="secondary" className="w-fit">
-                        Fechado
-                      </Badge>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <Button onClick={handleSaveHours} disabled={isSaving} className="w-full sm:w-auto">
-                {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                Salvar Horários
-              </Button>
-            </CardContent>
-          </Card>
+        <TabsContent value="hours" className="mt-0">
+          <HoursTab
+            settings={hoursSettings}
+            onSettingsChange={setHoursSettings}
+            onSave={handleSaveHours}
+            isSaving={isSaving}
+          />
         </TabsContent>
 
         {/* Profile Tab */}
-        <TabsContent value="profile" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5" />
-                Dados Pessoais
-              </CardTitle>
-              <CardDescription>Gerencie suas informações de perfil</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="profile-name">Nome Completo</Label>
-                <Input
-                  id="profile-name"
-                  value={profileForm.full_name}
-                  onChange={(e) => setProfileForm((prev) => ({ ...prev, full_name: e.target.value }))}
-                  placeholder="Seu nome completo"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-email">Email</Label>
-                <Input id="profile-email" value={user?.email || ""} disabled className="bg-muted" />
-                <p className="text-xs text-muted-foreground">O email não pode ser alterado</p>
-              </div>
-              <Button onClick={handleSaveProfile} disabled={isUpdating} className="w-full sm:w-auto">
-                {isUpdating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                Salvar Perfil
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Alterar Senha</CardTitle>
-              <CardDescription>Atualize sua senha de acesso</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="new-password">Nova Senha</Label>
-                  <Input
-                    id="new-password"
-                    type="password"
-                    value={profileForm.newPassword}
-                    onChange={(e) => setProfileForm((prev) => ({ ...prev, newPassword: e.target.value }))}
-                    placeholder="••••••••"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Confirmar Senha</Label>
-                  <Input
-                    id="confirm-password"
-                    type="password"
-                    value={profileForm.confirmPassword}
-                    onChange={(e) => setProfileForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
-                    placeholder="••••••••"
-                  />
-                </div>
-              </div>
-              <Button
-                onClick={handleChangePassword}
-                disabled={!profileForm.newPassword || !profileForm.confirmPassword}
-                variant="outline"
-                className="w-full sm:w-auto"
-              >
-                Alterar Senha
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="border-destructive/50">
-            <CardHeader>
-              <CardTitle className="text-destructive">Sair da Conta</CardTitle>
-              <CardDescription>Encerre sua sessão atual</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button onClick={handleSignOut} variant="destructive" className="w-full sm:w-auto">
-                <LogOut className="h-4 w-4 mr-2" />
-                Sair da Conta
-              </Button>
-            </CardContent>
-          </Card>
+        <TabsContent value="profile" className="mt-0">
+          <ProfileTab
+            email={user?.email || ""}
+            profileForm={profileForm}
+            onFormChange={setProfileForm}
+            onSaveProfile={handleSaveProfile}
+            onChangePassword={handleChangePassword}
+            onSignOut={handleSignOut}
+            isUpdating={isUpdating}
+          />
         </TabsContent>
 
         {/* Appearance Tab */}
-        <TabsContent value="appearance" className="mt-6">
+        <TabsContent value="appearance" className="mt-0">
           <AppearanceTab />
         </TabsContent>
       </Tabs>
