@@ -4,7 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useUnit } from "@/contexts/UnitContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card3D, Card3DContent, Card3DHeader, Card3DTitle, Card3DDescription } from "@/components/ui/card-3d";
+import { GlassCard } from "@/components/ui/glass-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -115,17 +116,24 @@ export default function SelectUnit() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8">
-      <div className="max-w-4xl mx-auto space-y-8">
+    <div className="min-h-screen p-4 md:p-8 relative overflow-hidden">
+      {/* Animated background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-primary/5" />
+      <div className="absolute inset-0 opacity-20">
+        <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-primary/20 rounded-full blur-3xl animate-float" />
+        <div className="absolute bottom-1/3 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-float" style={{ animationDelay: "2s" }} />
+      </div>
+
+      <div className="max-w-4xl mx-auto space-y-8 relative z-10">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between animate-fade-in-up">
           <div>
             <h1 className="text-3xl font-bold">Selecione uma Unidade</h1>
             <p className="text-muted-foreground mt-1">
               Escolha a unidade que deseja gerenciar
             </p>
           </div>
-          <Button variant="outline" onClick={handleSignOut}>
+          <Button variant="outline" onClick={handleSignOut} className="hover-lift">
             <LogOut className="w-4 h-4 mr-2" />
             Sair
           </Button>
@@ -133,53 +141,59 @@ export default function SelectUnit() {
 
         {/* Units Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {units.map((unit) => (
-            <Card
+          {units.map((unit, index) => (
+            <Card3D
               key={unit.id}
-              className="cursor-pointer transition-all hover:border-primary hover:shadow-lg hover:shadow-primary/10"
+              variant="elevated"
+              className="cursor-pointer animate-fade-in-up"
+              style={{ animationDelay: `${0.1 * (index + 1)}s` }}
               onClick={() => handleSelectUnit(unit)}
             >
-              <CardHeader className="pb-3">
+              <Card3DHeader className="pb-3">
                 <div className="flex items-start justify-between">
-                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <Building2 className="w-6 h-6 text-primary" />
+                  <div className="w-14 h-14 rounded-xl gradient-primary flex items-center justify-center shadow-lg">
+                    <Building2 className="w-7 h-7 text-primary-foreground" />
                   </div>
                 </div>
-                <CardTitle className="mt-4">{unit.name}</CardTitle>
+                <Card3DTitle className="mt-4 text-xl">{unit.name}</Card3DTitle>
                 {unit.cnpj && (
-                  <CardDescription>{unit.cnpj}</CardDescription>
+                  <Card3DDescription>{unit.cnpj}</Card3DDescription>
                 )}
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm text-muted-foreground">
+              </Card3DHeader>
+              <Card3DContent className="space-y-2 text-sm text-muted-foreground">
                 {unit.address && (
                   <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4" />
+                    <MapPin className="w-4 h-4 text-primary/60" />
                     <span className="truncate">{unit.address}</span>
                   </div>
                 )}
                 {unit.phone && (
                   <div className="flex items-center gap-2">
-                    <Phone className="w-4 h-4" />
+                    <Phone className="w-4 h-4 text-primary/60" />
                     <span>{unit.phone}</span>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </Card3DContent>
+            </Card3D>
           ))}
 
           {/* Add New Unit Card */}
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Card className="cursor-pointer border-dashed hover:border-primary hover:bg-primary/5 transition-all">
-                <CardContent className="flex flex-col items-center justify-center h-full min-h-[200px] text-muted-foreground">
-                  <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mb-4">
-                    <Plus className="w-6 h-6" />
+              <Card3D 
+                variant="outlined" 
+                className="cursor-pointer border-dashed animate-fade-in-up"
+                style={{ animationDelay: `${0.1 * (units.length + 1)}s` }}
+              >
+                <Card3DContent className="flex flex-col items-center justify-center h-full min-h-[200px] text-muted-foreground">
+                  <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center mb-4 group-hover:bg-primary/10 transition-colors">
+                    <Plus className="w-7 h-7" />
                   </div>
                   <span className="font-medium">Nova Unidade</span>
-                </CardContent>
-              </Card>
+                </Card3DContent>
+              </Card3D>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="glass">
               <form onSubmit={handleCreateUnit}>
                 <DialogHeader>
                   <DialogTitle>Criar Nova Unidade</DialogTitle>
@@ -196,6 +210,7 @@ export default function SelectUnit() {
                       value={newUnitName}
                       onChange={(e) => setNewUnitName(e.target.value)}
                       required
+                      className="bg-background/50"
                     />
                   </div>
                   <div className="space-y-2">
@@ -205,6 +220,7 @@ export default function SelectUnit() {
                       placeholder="Rua, número, bairro"
                       value={newUnitAddress}
                       onChange={(e) => setNewUnitAddress(e.target.value)}
+                      className="bg-background/50"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -215,6 +231,7 @@ export default function SelectUnit() {
                         placeholder="(00) 00000-0000"
                         value={newUnitPhone}
                         onChange={(e) => setNewUnitPhone(e.target.value)}
+                        className="bg-background/50"
                       />
                     </div>
                     <div className="space-y-2">
@@ -224,6 +241,7 @@ export default function SelectUnit() {
                         placeholder="00.000.000/0000-00"
                         value={newUnitCnpj}
                         onChange={(e) => setNewUnitCnpj(e.target.value)}
+                        className="bg-background/50"
                       />
                     </div>
                   </div>
@@ -232,7 +250,7 @@ export default function SelectUnit() {
                   <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                     Cancelar
                   </Button>
-                  <Button type="submit" disabled={creating}>
+                  <Button type="submit" disabled={creating} className="gradient-primary">
                     {creating ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -249,8 +267,10 @@ export default function SelectUnit() {
         </div>
 
         {units.length === 0 && (
-          <div className="text-center py-12">
-            <Building2 className="w-16 h-16 mx-auto text-muted-foreground/50 mb-4" />
+          <div className="text-center py-12 animate-fade-in-up">
+            <div className="w-20 h-20 mx-auto rounded-2xl bg-muted flex items-center justify-center mb-4">
+              <Building2 className="w-10 h-10 text-muted-foreground/50" />
+            </div>
             <h3 className="text-xl font-semibold mb-2">Nenhuma unidade encontrada</h3>
             <p className="text-muted-foreground mb-6">
               Crie sua primeira unidade para começar a usar o sistema

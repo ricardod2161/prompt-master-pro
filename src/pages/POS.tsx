@@ -2,7 +2,8 @@ import { useState, useMemo } from "react";
 import { Search, ShoppingCart, Minus, Plus, Trash2, User, Phone, MessageSquare } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card3D, Card3DContent } from "@/components/ui/card-3d";
+import { GlassCard } from "@/components/ui/glass-card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -135,14 +136,14 @@ export default function POS() {
       {/* Products Section */}
       <div className="flex-1 flex flex-col min-h-0">
         {/* Search and Categories */}
-        <div className="space-y-3 mb-4">
+        <div className="space-y-3 mb-4 animate-fade-in-up">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Buscar produto..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
+              className="pl-9 bg-card/50 border-border/50"
             />
           </div>
 
@@ -152,6 +153,7 @@ export default function POS() {
                 variant={selectedCategory === null ? "default" : "outline"}
                 size="sm"
                 onClick={() => setSelectedCategory(null)}
+                className={selectedCategory === null ? "gradient-primary" : "hover-lift"}
               >
                 Todos
               </Button>
@@ -161,6 +163,7 @@ export default function POS() {
                   variant={selectedCategory === category.id ? "default" : "outline"}
                   size="sm"
                   onClick={() => setSelectedCategory(category.id)}
+                  className={selectedCategory === category.id ? "gradient-primary" : "hover-lift"}
                 >
                   {category.name}
                 </Button>
@@ -181,24 +184,26 @@ export default function POS() {
             />
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {filteredProducts.map((product) => (
-                <Card
+              {filteredProducts.map((product, index) => (
+                <Card3D
                   key={product.id}
-                  className="cursor-pointer hover:border-primary/50 transition-colors"
+                  variant="subtle"
+                  className="cursor-pointer animate-fade-in-up"
+                  style={{ animationDelay: `${0.03 * index}s` }}
                   onClick={() => addToCart(product)}
                 >
-                  <CardContent className="p-3">
+                  <Card3DContent className="p-3">
                     {product.image_url && (
-                      <div className="aspect-square rounded-md bg-muted mb-2 overflow-hidden">
+                      <div className="aspect-square rounded-lg bg-muted mb-2 overflow-hidden">
                         <img
                           src={product.image_url}
                           alt={product.name}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
                         />
                       </div>
                     )}
                     <h4 className="font-medium text-sm truncate">{product.name}</h4>
-                    <p className="text-primary font-semibold">
+                    <p className="text-primary font-bold">
                       R$ {product.price.toFixed(2)}
                     </p>
                     {product.category && (
@@ -206,8 +211,8 @@ export default function POS() {
                         {product.category.name}
                       </Badge>
                     )}
-                  </CardContent>
-                </Card>
+                  </Card3DContent>
+                </Card3D>
               ))}
             </div>
           )}
@@ -215,14 +220,17 @@ export default function POS() {
       </div>
 
       {/* Cart Section */}
-      <Card className="w-full lg:w-96 flex flex-col">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2">
-            <ShoppingCart className="h-5 w-5" />
-            Carrinho ({cart.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex-1 flex flex-col min-h-0">
+      <GlassCard glow={cart.length > 0} glowColor="primary" className="w-full lg:w-96 flex flex-col animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
+        <div className="p-6 pb-3 border-b border-border/50">
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <ShoppingCart className="h-5 w-5 text-primary" />
+            </div>
+            <span className="font-semibold text-lg">Carrinho</span>
+            <Badge variant="secondary" className="ml-auto">{cart.length}</Badge>
+          </div>
+        </div>
+        <div className="flex-1 flex flex-col min-h-0 p-6 pt-3">
           {cart.length === 0 ? (
             <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
               Carrinho vazio
@@ -232,7 +240,10 @@ export default function POS() {
               <ScrollArea className="flex-1 -mx-2 px-2">
                 <div className="space-y-3">
                   {cart.map((item) => (
-                    <div key={item.product.id} className="flex items-center gap-3">
+                    <div 
+                      key={item.product.id} 
+                      className="flex items-center gap-3 p-2 rounded-lg bg-background/50 hover:bg-background/80 transition-colors"
+                    >
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">
                           {item.product.name}
@@ -245,18 +256,18 @@ export default function POS() {
                         <Button
                           variant="outline"
                           size="icon"
-                          className="h-7 w-7"
+                          className="h-7 w-7 rounded-full"
                           onClick={() => updateQuantity(item.product.id, -1)}
                         >
                           <Minus className="h-3 w-3" />
                         </Button>
-                        <span className="w-8 text-center text-sm font-medium">
+                        <span className="w-8 text-center text-sm font-bold">
                           {item.quantity}
                         </span>
                         <Button
                           variant="outline"
                           size="icon"
-                          className="h-7 w-7"
+                          className="h-7 w-7 rounded-full"
                           onClick={() => updateQuantity(item.product.id, 1)}
                         >
                           <Plus className="h-3 w-3" />
@@ -264,7 +275,7 @@ export default function POS() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-destructive"
+                          className="h-7 w-7 text-destructive hover:bg-destructive/10"
                           onClick={() => removeFromCart(item.product.id)}
                         >
                           <Trash2 className="h-3 w-3" />
@@ -278,12 +289,12 @@ export default function POS() {
               <Separator className="my-4" />
 
               <div className="space-y-3">
-                <div className="flex justify-between text-lg font-semibold">
+                <div className="flex justify-between text-xl font-bold">
                   <span>Total</span>
-                  <span>R$ {cartTotal.toFixed(2)}</span>
+                  <span className="text-primary">R$ {cartTotal.toFixed(2)}</span>
                 </div>
                 <Button
-                  className="w-full"
+                  className="w-full gradient-primary hover-lift"
                   size="lg"
                   onClick={() => setCheckoutOpen(true)}
                   disabled={cart.length === 0}
@@ -293,12 +304,12 @@ export default function POS() {
               </div>
             </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </GlassCard>
 
       {/* Checkout Dialog */}
       <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md glass">
           <DialogHeader>
             <DialogTitle>Finalizar Pedido</DialogTitle>
           </DialogHeader>
@@ -307,7 +318,7 @@ export default function POS() {
             <div className="space-y-2">
               <Label>Canal</Label>
               <Select value={channel} onValueChange={(v) => setChannel(v as OrderChannel)}>
-                <SelectTrigger>
+                <SelectTrigger className="bg-background/50">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -324,7 +335,7 @@ export default function POS() {
               <div className="space-y-2">
                 <Label>Mesa</Label>
                 <Select value={selectedTable} onValueChange={setSelectedTable}>
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-background/50">
                     <SelectValue placeholder="Selecione a mesa" />
                   </SelectTrigger>
                   <SelectContent>
@@ -347,6 +358,7 @@ export default function POS() {
                   placeholder="Nome (opcional)"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
+                  className="bg-background/50"
                 />
               </div>
               <div className="space-y-2">
@@ -357,6 +369,7 @@ export default function POS() {
                   placeholder="(opcional)"
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
+                  className="bg-background/50"
                 />
               </div>
             </div>
@@ -369,13 +382,14 @@ export default function POS() {
                 placeholder="Observações do pedido..."
                 value={orderNotes}
                 onChange={(e) => setOrderNotes(e.target.value)}
+                className="bg-background/50"
               />
             </div>
 
             <div className="space-y-2">
               <Label>Forma de Pagamento</Label>
               <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}>
-                <SelectTrigger>
+                <SelectTrigger className="bg-background/50">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -390,7 +404,7 @@ export default function POS() {
 
             <Separator />
 
-            <div className="flex justify-between text-lg font-semibold">
+            <div className="flex justify-between text-xl font-bold">
               <span>Total a Pagar</span>
               <span className="text-primary">R$ {cartTotal.toFixed(2)}</span>
             </div>
@@ -403,6 +417,7 @@ export default function POS() {
             <Button
               onClick={handleCheckout}
               disabled={createOrder.isPending || (channel === "table" && !selectedTable)}
+              className="gradient-primary"
             >
               {createOrder.isPending ? "Processando..." : "Confirmar Pedido"}
             </Button>
