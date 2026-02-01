@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from "react-router-dom";
 import { useUnit } from "@/contexts/UnitContext";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Sidebar,
   SidebarContent,
@@ -27,8 +28,10 @@ import {
   Settings,
   Building2,
   Utensils,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SubscriptionBadge } from "@/components/subscription/SubscriptionBadge";
 
 const menuItems = [
   {
@@ -68,6 +71,7 @@ const menuItems = [
 export function AppSidebar() {
   const location = useLocation();
   const { selectedUnit } = useUnit();
+  const { subscription } = useAuth();
 
   return (
     <Sidebar className="border-r border-sidebar-border/50">
@@ -124,8 +128,24 @@ export function AppSidebar() {
         ))}
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border/50">
+      <SidebarFooter className="border-t border-sidebar-border/50 space-y-2">
+        {/* Subscription Badge */}
+        <div className="px-2 pt-2">
+          <SubscriptionBadge 
+            tier={subscription.tier} 
+            subscriptionEnd={subscription.subscriptionEnd} 
+          />
+        </div>
+        
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild className="hover:bg-sidebar-accent">
+              <NavLink to="/pricing" className="group">
+                <CreditCard className="w-4 h-4 transition-transform group-hover:scale-110" />
+                <span>Planos</span>
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton asChild className="hover:bg-sidebar-accent">
               <NavLink to="/select-unit" className="group">
