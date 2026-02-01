@@ -1,210 +1,278 @@
 
-# Fase 4: Triggers Automaticos e IA nos Logs
+# Documentacao Completa do Sistema na Pagina de Configuracoes
 
 ## Visao Geral
 
-Esta fase implementara automacao inteligente no sistema atraves de:
-1. **Triggers de banco** para notificacoes automaticas
-2. **Sistema de IA** para analise e resolucao de problemas nos logs
+Sera criada uma nova aba "Documentacao" na pagina de Configuracoes contendo toda a documentacao do sistema de forma interativa, organizada e profissional, permitindo que os usuarios acessem guias, tutoriais e informacoes tecnicas diretamente da interface.
 
 ---
 
-## Parte 1: Triggers de Notificacoes Automaticas
+## Estrutura da Documentacao
 
-### 1.1 Trigger para Novos Pedidos
+A documentacao sera dividida em secoes acessiveis por acordeoes (accordions) para facilitar a navegacao:
 
-Sera criada uma funcao de trigger que dispara automaticamente quando um pedido e inserido:
+### 1. Introducao ao Sistema
+- O que e o GastroHub
+- Principais funcionalidades
+- Diferenciais do sistema
 
-```text
-[Pedido Criado] --> [Trigger AFTER INSERT] --> [Notificacao Criada]
-                                           --> [Log Admin Criado]
-```
+### 2. Guia de Inicio Rapido
+- Primeiro acesso
+- Criando sua conta
+- Configurando sua unidade
+- Upload de logo
 
-**Logica:**
-- Detecta canal do pedido (delivery, counter, table, whatsapp)
-- Cria notificacao com tipo "order" e categoria apropriada
-- Registra log na tabela admin_logs
+### 3. Modulos do Sistema
 
-### 1.2 Trigger para Estoque Baixo
+#### 3.1 Gestao de Pedidos
+- Canais de recebimento (balcao, mesa, delivery, WhatsApp)
+- Fluxo de status dos pedidos
+- Acompanhamento em tempo real
 
-Funcao de trigger monitorando atualizacoes na tabela `inventory_items`:
+#### 3.2 KDS (Kitchen Display System)
+- Como funciona a tela da cozinha
+- Gerenciamento de filas
+- Alertas sonoros
 
-```text
-[Estoque Atualizado] --> [Verifica current_stock <= min_stock]
-                              |
-                    [SIM] --> [Cria Notificacao de Alerta]
-                              [Registra Log de Warning]
-```
+#### 3.3 Caixa (PDV)
+- Abrindo e fechando o caixa
+- Formas de pagamento
+- Sangria e suprimentos
+- Relatorios de caixa
 
-**Logica:**
-- Compara `current_stock` com `min_stock`
-- Evita duplicatas com verificacao de notificacao recente (24h)
-- Severidade baseada no nivel de estoque (warning vs error)
+#### 3.4 Gestao de Mesas
+- Mapa visual
+- QR Code para cardapio
+- Status das mesas
 
-### 1.3 Trigger para Mudanca de Status do Pedido
+#### 3.5 Delivery
+- Cadastro de entregadores
+- Despacho de pedidos
+- Taxas de entrega
 
-Monitora transicoes de status importantes:
-- `pending` -> `preparing` (em preparo)
-- `preparing` -> `ready` (pronto)
-- `ready` -> `delivering` (saiu para entrega)
-- `*` -> `cancelled` (cancelado)
+#### 3.6 Estoque
+- Cadastro de itens
+- Movimentacoes
+- Alertas automaticos de estoque baixo
+
+#### 3.7 WhatsApp
+- Configuracao da Evolution API
+- Chat em tempo real
+- Bot automatico
+
+### 4. Configuracoes do Sistema
+- Dados da unidade
+- Configuracoes operacionais
+- Configuracoes financeiras
+- Horarios de funcionamento
+- Personalizacao de aparencia
+
+### 5. Sistema de Notificacoes
+- Como funcionam as notificacoes automaticas
+- Tipos de alertas
+- Central de notificacoes
+
+### 6. Analise com IA
+- Analise de logs
+- Identificacao de problemas
+- Sugestoes de correcao
+
+### 7. Instalacao e Deploy
+- Pre-requisitos
+- Passo a passo de instalacao
+- Deploy via Lovable
+- Configuracao de dominio customizado
+
+### 8. FAQ e Solucao de Problemas
+- Perguntas frequentes
+- Erros comuns e solucoes
+- Contato de suporte
 
 ---
 
-## Parte 2: Sistema de IA para Analise de Logs
+## Arquivos a Criar
 
-### 2.1 Edge Function: `analyze-logs`
+### 1. `src/components/settings/DocumentationTab.tsx`
 
-Nova funcao serverless usando Lovable AI (google/gemini-3-flash-preview):
+Novo componente com a documentacao completa contendo:
+- Interface com accordions expansiveis
+- Icones ilustrativos para cada secao
+- Codigo de exemplo quando necessario
+- Links de navegacao rapida
+- Cards informativos com dicas
+- Barra de busca para filtrar conteudo
+- Botao de copiar codigo
 
-**Funcionalidades:**
-- Analisa ultimos N logs com erros/warnings
-- Identifica padroes e causas raiz
-- Sugere correcoes especificas
-- Gera relatorio de saude do sistema
+### 2. `src/components/settings/DocSection.tsx`
 
-### 2.2 Interface de Analise no Admin
+Componente auxiliar para secoes de documentacao com:
+- Icone da secao
+- Titulo e descricao
+- Conteudo expansivel
+- Estilizacao consistente
 
-Novo componente `AILogAnalyzer` com:
-- Botao "Analisar com IA"
-- Visualizacao de insights
-- Sugestoes de correcao acionaveis
-- Historico de analises
+### 3. `src/components/settings/CodeBlock.tsx`
 
-### 2.3 Fluxo de Analise
-
-```text
-[Admin clica Analisar] --> [Frontend busca logs recentes]
-                               |
-                       [Envia para Edge Function]
-                               |
-                       [IA processa e classifica]
-                               |
-                       [Retorna insights + sugestoes]
-                               |
-                       [Exibe no painel com acoes]
-```
+Componente para exibir blocos de codigo com:
+- Syntax highlighting basico
+- Botao de copiar
+- Label do tipo de codigo
 
 ---
 
-## Detalhes Tecnicos
+## Arquivos a Modificar
 
-### Migracao SQL
+### 1. `src/pages/Settings.tsx`
 
-```sql
--- Trigger para novos pedidos
-CREATE FUNCTION notify_new_order()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO notifications (unit_id, title, message, type, category, metadata)
-  VALUES (
-    NEW.unit_id,
-    'Novo pedido #' || NEW.order_number,
-    'Pedido de ' || COALESCE(NEW.customer_name, 'Cliente') || ' - R$ ' || NEW.total_price,
-    'info',
-    'order',
-    jsonb_build_object('order_id', NEW.id, 'channel', NEW.channel)
-  );
-  
-  INSERT INTO admin_logs (action, category, unit_id, metadata, severity)
-  VALUES (
-    'Novo pedido criado',
-    'order',
-    NEW.unit_id,
-    jsonb_build_object('order_id', NEW.id, 'order_number', NEW.order_number),
-    'info'
-  );
-  
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Trigger para estoque baixo
-CREATE FUNCTION check_low_stock()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.current_stock <= COALESCE(NEW.min_stock, 0) THEN
-    -- Verificar se ja existe notificacao recente
-    IF NOT EXISTS (
-      SELECT 1 FROM notifications
-      WHERE category = 'stock'
-      AND metadata->>'item_id' = NEW.id::text
-      AND created_at > NOW() - INTERVAL '24 hours'
-    ) THEN
-      INSERT INTO notifications (...)
-    END IF;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-```
-
-### Edge Function: analyze-logs
-
+Adicionar nova aba "Documentacao" ao TAB_ITEMS:
 ```typescript
-// Estrutura basica
-serve(async (req) => {
-  const { logs, analysisType } = await req.json();
-  
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: JSON.stringify(logs) }
-      ],
-      tools: [{ type: "function", function: analyzeLogsSchema }]
-    })
-  });
-  
-  return Response.json(result);
-});
+const TAB_ITEMS = [
+  { value: "unit", label: "Unidade", icon: Building2 },
+  { value: "operational", label: "Operacional", icon: Cog },
+  { value: "financial", label: "Financeiro", icon: DollarSign },
+  { value: "hours", label: "Horários", icon: Clock },
+  { value: "profile", label: "Perfil", icon: User },
+  { value: "appearance", label: "Aparência", icon: Palette },
+  { value: "docs", label: "Ajuda", icon: BookOpen }, // Nova aba
+];
 ```
 
-### Componente AILogAnalyzer
-
-- Card de "Analise Inteligente" no topo dos logs
-- Indicadores de saude: OK/Warning/Critical
-- Lista de problemas detectados com severidade
-- Botoes de acao rapida para cada sugestao
-- Loading state com animacao durante analise
+Adicionar novo TabsContent para DocumentationTab.
 
 ---
 
-## Arquivos a Criar/Modificar
+## Design da Interface
 
-### Novos Arquivos:
-1. `supabase/migrations/xxx_notification_triggers.sql` - Triggers SQL
-2. `supabase/functions/analyze-logs/index.ts` - Edge function IA
-3. `src/components/admin/AILogAnalyzer.tsx` - Componente de analise
-4. `src/hooks/useLogAnalysis.ts` - Hook para chamar a IA
+### Layout Principal
 
-### Arquivos a Modificar:
-1. `src/components/admin/AdminActivityLogs.tsx` - Integrar AILogAnalyzer
-2. `supabase/config.toml` - Registrar nova edge function
-3. `src/hooks/useAdminLogs.ts` - Adicionar funcao de analise
+```text
++--------------------------------------------------+
+|  [Icone] Documentacao & Ajuda                     |
+|  Guias completos de uso do sistema                |
++--------------------------------------------------+
+|                                                   |
+|  [Buscar na documentacao...]              [Busca] |
+|                                                   |
++--------------------------------------------------+
+|                                                   |
+|  [v] Introducao ao Sistema                        |
+|      +----------------------------------------+   |
+|      | O GastroHub e um sistema completo...   |   |
+|      +----------------------------------------+   |
+|                                                   |
+|  [>] Guia de Inicio Rapido                        |
+|                                                   |
+|  [>] Gestao de Pedidos                            |
+|                                                   |
+|  [>] KDS - Tela da Cozinha                        |
+|                                                   |
+|  [>] Caixa (PDV)                                  |
+|                                                   |
+|  [>] Gestao de Mesas                              |
+|                                                   |
+|  [>] Delivery                                     |
+|                                                   |
+|  [>] Estoque                                      |
+|                                                   |
+|  [>] Integracao WhatsApp                          |
+|                                                   |
+|  [>] Configuracoes                                |
+|                                                   |
+|  [>] Notificacoes Automaticas                     |
+|                                                   |
+|  [>] Analise com IA                               |
+|                                                   |
+|  [>] Instalacao e Deploy                          |
+|                                                   |
+|  [>] FAQ e Suporte                                |
+|                                                   |
++--------------------------------------------------+
+```
+
+### Elementos de UI
+
+- **Accordions**: Usados para cada secao principal
+- **Cards informativos**: Dicas e alertas importantes
+- **Blocos de codigo**: Para exemplos tecnicos
+- **Badges**: Para indicar nivel (Basico, Intermediario, Avancado)
+- **Links de navegacao**: Para pular entre secoes
+- **Icones**: lucide-react para cada modulo
+
+### Responsividade
+
+- Mobile: Accordions em coluna unica, texto ajustado
+- Tablet: Layout adaptado com margens adequadas
+- Desktop: Layout completo com sidebar de navegacao rapida
+
+---
+
+## Conteudo Detalhado
+
+### Introducao
+
+```text
+O GastroHub e um sistema de gestao completo para restaurantes, 
+desenvolvido com tecnologias modernas como React, TypeScript e 
+Supabase. Ele oferece uma solucao integrada para:
+
+- Gerenciar pedidos de multiplos canais
+- Controlar estoque com alertas automaticos
+- Gerenciar caixa e pagamentos
+- Integrar com WhatsApp para atendimento
+- Analisar logs com inteligencia artificial
+```
+
+### Guia de Status dos Pedidos
+
+```text
+Fluxo de Status:
+1. Pendente    -> Pedido recebido, aguardando preparo
+2. Preparando  -> Cozinha iniciou o preparo
+3. Pronto      -> Pedido finalizado, aguardando entrega/retirada
+4. Entregue    -> Pedido entregue ao cliente
+5. Cancelado   -> Pedido cancelado (em qualquer etapa)
+```
+
+### Instalacao
+
+```bash
+# 1. Clone o repositorio
+git clone <URL_DO_REPOSITORIO>
+cd gastrohub
+
+# 2. Instale as dependencias
+npm install
+# ou com Bun
+bun install
+
+# 3. Configure as variaveis de ambiente
+# O arquivo .env e gerado automaticamente pelo Lovable
+
+# 4. Inicie o servidor de desenvolvimento
+npm run dev
+# ou
+bun dev
+
+# 5. Acesse no navegador
+# http://localhost:5173
+```
 
 ---
 
 ## Beneficios
 
-1. **Automacao Total**: Notificacoes criadas sem intervencao manual
-2. **Proatividade**: Alertas de estoque antes de acabar
-3. **Inteligencia**: IA identifica problemas antes de escalar
-4. **Rastreabilidade**: Todos eventos logados automaticamente
-5. **Acoes Rapidas**: Sugestoes da IA com um clique
+1. **Acessibilidade**: Documentacao sempre disponivel na interface
+2. **Contexto**: Usuario aprende sem sair do sistema
+3. **Organizacao**: Informacoes estruturadas e navegaveis
+4. **Busca**: Encontrar informacoes rapidamente
+5. **Profissionalismo**: Sistema completo e bem documentado
 
 ---
 
-## Proximos Passos Apos Aprovacao
+## Proximos Passos
 
-1. Criar migracao SQL com triggers
-2. Implementar edge function de analise
-3. Desenvolver interface do AILogAnalyzer
-4. Integrar no painel de administracao
-5. Testar fluxo completo
+1. Criar componente `CodeBlock.tsx` para blocos de codigo
+2. Criar componente `DocSection.tsx` para secoes
+3. Criar componente `DocumentationTab.tsx` principal
+4. Atualizar `Settings.tsx` com nova aba
+5. Testar responsividade e navegacao
