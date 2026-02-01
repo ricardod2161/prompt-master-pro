@@ -1038,6 +1038,7 @@ export type Database = {
         Args: { _unit_id: string; _user_id: string }
         Returns: boolean
       }
+      is_developer: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       app_role:
