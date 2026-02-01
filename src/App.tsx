@@ -54,7 +54,6 @@ const App = () => (
                 <Route path="/" element={<Login />} />
                 <Route path="/select-unit" element={<SelectUnit />} />
                 <Route path="/order/:tableId" element={<CustomerOrder />} />
-                <Route path="/pricing" element={<Pricing />} />
                 <Route path="/subscription-success" element={<SubscriptionSuccess />} />
 
                 {/* Protected routes with layout */}
@@ -71,6 +70,7 @@ const App = () => (
                   <Route path="/delivery" element={<Delivery />} />
                   <Route path="/whatsapp/settings" element={<WhatsAppSettings />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route path="/pricing" element={<Pricing />} />
                 </Route>
 
                 {/* Catch-all */}
