@@ -160,18 +160,53 @@ export function useAssignDriver() {
   });
 }
 
+export function useMarkReady() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (orderId: string) => {
+      const { error } = await supabase
+        .from("orders")
+        .update({ status: "ready" })
+        .eq("id", orderId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["delivery-orders"] });
+      toast({ title: "Pedido pronto para entrega!" });
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro ao marcar pedido",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+
 export function useMarkDelivered() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (orderId: string) => {
-      const { error: deliveryError } = await supabase
+      // Tenta atualizar delivery_orders SE existir
+      const { data: existing } = await supabase
         .from("delivery_orders")
-        .update({ delivery_time: new Date().toISOString() })
-        .eq("order_id", orderId);
+        .select("id")
+        .eq("order_id", orderId)
+        .maybeSingle();
 
-      if (deliveryError) throw deliveryError;
+      if (existing) {
+        await supabase
+          .from("delivery_orders")
+          .update({ delivery_time: new Date().toISOString() })
+          .eq("order_id", orderId);
+      }
 
+      // Sempre atualiza o status do pedido
       const { error: orderError } = await supabase
         .from("orders")
         .update({ status: "delivered" })

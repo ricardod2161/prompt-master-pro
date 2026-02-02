@@ -205,10 +205,20 @@ export function useWhatsAppConversationsRealtime() {
   const { selectedUnit } = useUnit();
   const queryClient = useQueryClient();
 
+  // Debug: verificar qual unidade está selecionada
+  useEffect(() => {
+    console.log("WhatsApp Chat - Selected Unit:", selectedUnit?.id, selectedUnit?.name);
+  }, [selectedUnit]);
+
   const query = useQuery({
     queryKey: ["whatsapp-conversations-rt", selectedUnit?.id],
     queryFn: async () => {
-      if (!selectedUnit?.id) return [];
+      if (!selectedUnit?.id) {
+        console.warn("WhatsApp Chat: No unit selected");
+        return [];
+      }
+
+      console.log("WhatsApp Chat: Fetching conversations for unit:", selectedUnit.id);
 
       const { data, error } = await supabase
         .from("whatsapp_conversations")
@@ -216,7 +226,12 @@ export function useWhatsAppConversationsRealtime() {
         .eq("unit_id", selectedUnit.id)
         .order("last_message_at", { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error("WhatsApp Chat: Error fetching conversations:", error);
+        throw error;
+      }
+      
+      console.log("WhatsApp Chat: Found", data?.length || 0, "conversations");
       return data as WhatsAppConversation[];
     },
     enabled: !!selectedUnit?.id,
