@@ -11,6 +11,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useEffect } from "react";
 
 // Pages
+import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import SelectUnit from "./pages/SelectUnit";
 import Dashboard from "./pages/Dashboard";
@@ -53,7 +54,8 @@ const App = () => (
             <BrowserRouter>
               <Routes>
                 {/* Public routes */}
-                <Route path="/" element={<Login />} />
+                <Route path="/" element={<Landing />} />
+                <Route path="/login" element={<Login />} />
                 <Route path="/select-unit" element={<SelectUnit />} />
                 <Route path="/order/:tableId" element={<CustomerOrder />} />
                 <Route path="/subscription-success" element={<SubscriptionSuccess />} />
