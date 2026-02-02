@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { 
@@ -277,12 +277,12 @@ function OrderDetailsModal({
   ];
 
   // Reset editing state when order changes
-  useState(() => {
+  useEffect(() => {
     if (order?.order_payments?.[0]) {
       setSelectedPaymentMethod(order.order_payments[0].method);
     }
     setEditingPayment(false);
-  });
+  }, [order?.id]);
 
   const handleSavePayment = () => {
     if (!order) return;
