@@ -62,6 +62,157 @@ interface Product {
   category: { name: string } | null;
 }
 
+// Get emoji for category
+function getCategoryEmoji(category: string): string {
+  const emojiMap: Record<string, string> = {
+    'bebidas': '🍹',
+    'drinks': '🍹',
+    'sucos': '🧃',
+    'pratos': '🍽️',
+    'pratos feitos': '🍽️',
+    'lanches': '🍔',
+    'hambúrguer': '🍔',
+    'hamburgueres': '🍔',
+    'pizzas': '🍕',
+    'pizza': '🍕',
+    'sobremesas': '🍰',
+    'doces': '🍰',
+    'açaí': '🍇',
+    'acai': '🍇',
+    'porções': '🍟',
+    'porcoes': '🍟',
+    'combos': '🎁',
+    'promoções': '🎉',
+    'promocoes': '🎉',
+    'entradas': '🥗',
+    'saladas': '🥗',
+    'massas': '🍝',
+    'carnes': '🥩',
+    'frutos do mar': '🦐',
+    'peixes': '🐟',
+    'aves': '🍗',
+    'sopas': '🍜',
+    'cafés': '☕',
+    'cafe': '☕',
+    'petit gateau': '🍫',
+    'sorvetes': '🍦',
+    'milkshake': '🥤',
+    'cervejas': '🍺',
+    'vinhos': '🍷',
+    'destilados': '🥃',
+    'outros': '📋',
+  };
+  
+  const key = category.toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  
+  for (const [mapKey, emoji] of Object.entries(emojiMap)) {
+    const normalizedMapKey = mapKey
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    if (key.includes(normalizedMapKey) || normalizedMapKey.includes(key)) {
+      return emoji;
+    }
+  }
+  
+  return '📋';
+}
+
+// Detect if user wants human escalation
+function detectHumanEscalation(message: string): boolean {
+  const escalationKeywords = [
+    // Pedido direto de humano
+    'falar com humano',
+    'atendente humano',
+    'pessoa real',
+    'atendente real',
+    'falar com alguem',
+    'falar com pessoa',
+    'atendimento humano',
+    'atendente por favor',
+    'quero um atendente',
+    'chama o atendente',
+    'passa pro atendente',
+    'transfere pro atendente',
+    'atendente',
+    'humano',
+    // Reclamações e insatisfação
+    'reclamacao',
+    'fazer reclamacao',
+    'quero reclamar',
+    'gerente',
+    'supervisor',
+    'responsavel',
+    'nao estou satisfeito',
+    'insatisfeito',
+    'absurdo',
+    'descaso',
+    'pessimo',
+    'horrivel',
+    'voces sao ruins',
+    'pior atendimento',
+    'nao resolve',
+    'nao esta ajudando',
+    'nao entende',
+    'esse robo',
+    'esse bot',
+    'maquina',
+    'cansei',
+    'desisto',
+    'vou reclamar',
+    'ouvidoria',
+    'procon',
+  ];
+  
+  const lowerMessage = message.toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  
+  return escalationKeywords.some(keyword => {
+    const normalizedKeyword = keyword
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    return lowerMessage.includes(normalizedKeyword);
+  });
+}
+
+// Escalate conversation to human
+async function escalateToHuman(
+  supabase: any,
+  conversationId: string,
+  unitId: string,
+  customerPhone: string,
+  customerName: string,
+  reason: string
+): Promise<string> {
+  // Disable bot for this conversation
+  await supabase
+    .from('whatsapp_conversations')
+    .update({ is_bot_active: false })
+    .eq('id', conversationId);
+  
+  // Create notification for team
+  await supabase.from('notifications').insert({
+    unit_id: unitId,
+    title: '🆘 Atendimento Humano Solicitado',
+    message: `Cliente ${customerName} (${customerPhone}) solicitou atendimento humano. Motivo: ${reason.substring(0, 100)}`,
+    type: 'warning',
+    category: 'whatsapp',
+    read: false,
+  });
+  
+  console.log(`[ESCALATION] Conversation ${conversationId} escalated to human. Reason: ${reason.substring(0, 50)}`);
+  
+  return `Entendi sua solicitação! 🙏
+
+Vou transferir você para um *atendente humano* agora mesmo.
+
+Por favor, aguarde um momento que logo alguém da nossa equipe vai te atender.
+
+⏱️ Tempo médio de espera: 2-5 minutos`;
+}
+
 // Tool definitions for function calling - FLUXO PROFISSIONAL COMPLETO
 const tools = [
   {
@@ -224,6 +375,21 @@ function sanitizeResponse(response: string): string {
   return sanitized;
 }
 
+// WhatsApp context for sending messages directly from tools
+interface WhatsAppContext {
+  apiUrl: string;
+  apiToken: string;
+  instanceName: string;
+  phone: string;
+  conversationId: string;
+}
+
+// Tool execution result - can queue multiple messages
+interface ToolResult {
+  text: string; // Text for AI context
+  multipleMessages?: string[]; // If present, these should be sent as separate messages
+}
+
 // Tool execution functions
 async function executeTool(
   supabase: any,
@@ -231,42 +397,54 @@ async function executeTool(
   toolName: string,
   args: Record<string, unknown>,
   customerPhone: string,
-  customerName: string
-): Promise<string> {
+  customerName: string,
+  whatsappContext?: WhatsAppContext
+): Promise<ToolResult> {
   console.log(`Executing tool: ${toolName} with args:`, JSON.stringify(args));
 
   switch (toolName) {
-    case "listar_cardapio":
-      return await listarCardapio(supabase, unitId);
+    case "listar_cardapio": {
+      const menuResult = await listarCardapio(supabase, unitId);
+      // Return multiple messages for separate sending, plus a summary for AI
+      return {
+        text: `[Cardápio enviado ao cliente em ${menuResult.messages.length} mensagens separadas]`,
+        multipleMessages: menuResult.messages
+      };
+    }
     case "buscar_produto":
-      return await buscarProduto(supabase, unitId, args.nome as string);
+      return { text: await buscarProduto(supabase, unitId, args.nome as string) };
     case "calcular_total":
-      return await calcularTotal(supabase, unitId, args.itens as Array<{nome: string, quantidade: number}>);
+      return { text: await calcularTotal(supabase, unitId, args.itens as Array<{nome: string, quantidade: number}>) };
     case "confirmar_pedido":
-      return await confirmarPedido(
-        supabase,
-        unitId,
-        args as unknown as ConfirmarPedidoArgs,
-        customerPhone
-      );
+      return {
+        text: await confirmarPedido(
+          supabase,
+          unitId,
+          args as unknown as ConfirmarPedidoArgs,
+          customerPhone
+        )
+      };
     // Legacy support
     case "criar_pedido":
-      return await criarPedidoLegacy(
-        supabase, 
-        unitId, 
-        args.itens as Array<{nome: string, quantidade: number}>,
-        args.endereco as string,
-        args.forma_pagamento as string,
-        args.observacoes as string | undefined,
-        customerPhone,
-        customerName
-      );
+      return {
+        text: await criarPedidoLegacy(
+          supabase, 
+          unitId, 
+          args.itens as Array<{nome: string, quantidade: number}>,
+          args.endereco as string,
+          args.forma_pagamento as string,
+          args.observacoes as string | undefined,
+          customerPhone,
+          customerName
+        )
+      };
     default:
-      return `Ferramenta "${toolName}" não encontrada.`;
+      return { text: `Ferramenta "${toolName}" não encontrada.` };
   }
 }
 
-async function listarCardapio(supabase: any, unitId: string): Promise<string> {
+// Returns multiple messages for elegant menu display
+async function listarCardapio(supabase: any, unitId: string): Promise<{ type: 'multiple'; messages: string[] }> {
   const { data: products, error } = await supabase
     .from("products")
     .select(`
@@ -283,13 +461,14 @@ async function listarCardapio(supabase: any, unitId: string): Promise<string> {
 
   if (error) {
     console.error("Error fetching menu:", error);
-    return "Erro ao buscar o cardápio. Por favor, tente novamente.";
+    return { type: 'multiple', messages: ["Erro ao buscar o cardápio. Por favor, tente novamente."] };
   }
 
   if (!products || products.length === 0) {
-    return "No momento não temos produtos disponíveis no cardápio.";
+    return { type: 'multiple', messages: ["No momento não temos produtos disponíveis no cardápio."] };
   }
 
+  // Group by category
   const byCategory: Record<string, Product[]> = {};
   for (const product of products as Product[]) {
     const categoryName = product.category?.name || "Outros";
@@ -299,21 +478,33 @@ async function listarCardapio(supabase: any, unitId: string): Promise<string> {
     byCategory[categoryName].push(product);
   }
 
-  let menu = "📋 *CARDÁPIO*\n\n";
+  // Build array of messages - one per category
+  const messages: string[] = [];
+  
+  // Welcome message
+  messages.push("✨ *BEM-VINDO AO NOSSO CARDÁPIO* ✨");
+  
+  // One message per category with emoji and nice formatting
   for (const [category, items] of Object.entries(byCategory)) {
-    menu += `*${category.toUpperCase()}*\n`;
+    const emoji = getCategoryEmoji(category);
+    let categoryMsg = `${emoji} *${category.toUpperCase()}*\n────────────\n`;
+    
     for (const item of items) {
       const price = item.delivery_price || item.price;
-      menu += `• ${item.name} - R$ ${price.toFixed(2).replace(".", ",")}`;
+      categoryMsg += `🔸 ${item.name} - R$ ${price.toFixed(2).replace(".", ",")}`;
       if (item.description) {
-        menu += `\n  _${item.description}_`;
+        categoryMsg += `\n   _${item.description}_`;
       }
-      menu += "\n";
+      categoryMsg += "\n";
     }
-    menu += "\n";
+    
+    messages.push(categoryMsg.trim());
   }
-
-  return menu;
+  
+  // Final message
+  messages.push("💬 O que você gostaria de pedir?");
+  
+  return { type: 'multiple', messages };
 }
 
 async function buscarProduto(supabase: any, unitId: string, nome: string): Promise<string> {
@@ -985,13 +1176,18 @@ async function updateMessageStatus(
 }
 
 // Process AI response with tool calling loop
+interface ProcessWithAIResult {
+  response: string;
+  menuMessages?: string[];
+}
+
 async function processWithAI(
   supabase: any,
   unitId: string,
   messages: Array<{role: string, content: string}>,
   customerPhone: string,
   customerName: string
-): Promise<string> {
+): Promise<ProcessWithAIResult> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
     throw new Error("LOVABLE_API_KEY is not configured");
@@ -1000,6 +1196,7 @@ async function processWithAI(
   const MAX_ITERATIONS = 6;
   let iterations = 0;
   const currentMessages: any[] = [...messages];
+  let pendingMenuMessages: string[] | undefined;
 
   while (iterations < MAX_ITERATIONS) {
     iterations++;
@@ -1057,7 +1254,7 @@ async function processWithAI(
 
       for (const toolCall of message.tool_calls as ToolCall[]) {
         const args = JSON.parse(toolCall.function.arguments || "{}");
-        const result = await executeTool(
+        const toolResult = await executeTool(
           supabase, 
           unitId, 
           toolCall.function.name, 
@@ -1066,9 +1263,15 @@ async function processWithAI(
           customerName
         );
 
+        // Check if tool returned multiple messages (e.g., menu)
+        if (toolResult.multipleMessages) {
+          pendingMenuMessages = toolResult.multipleMessages;
+          console.log(`Tool returned ${toolResult.multipleMessages.length} messages to send separately`);
+        }
+
         currentMessages.push({
           role: "tool",
-          content: result,
+          content: toolResult.text,
           tool_call_id: toolCall.id
         });
       }
@@ -1081,7 +1284,7 @@ async function processWithAI(
     if (parsedAction) {
       console.log(`Detected action in content: ${parsedAction.action}`);
       
-      const result = await executeTool(
+      const toolResult = await executeTool(
         supabase,
         unitId,
         parsedAction.action,
@@ -1090,13 +1293,18 @@ async function processWithAI(
         customerName
       );
 
+      // Check if tool returned multiple messages
+      if (toolResult.multipleMessages) {
+        pendingMenuMessages = toolResult.multipleMessages;
+      }
+
       currentMessages.push({
         role: "assistant",
         content: `[Processando...]`
       });
       currentMessages.push({
         role: "user", 
-        content: `Resultado:\n\n${result}\n\nAgora responda ao cliente de forma natural, amigável e profissional. Continue o fluxo do pedido conforme as instruções.`
+        content: `Resultado:\n\n${toolResult.text}\n\nAgora responda ao cliente de forma natural, amigável e profissional. Continue o fluxo do pedido conforme as instruções.`
       });
       
       continue;
@@ -1106,13 +1314,19 @@ async function processWithAI(
     const finalResponse = sanitizeResponse(message.content || "");
     
     if (!finalResponse) {
-      return "Desculpe, não consegui gerar uma resposta. Como posso ajudar?";
+      return { 
+        response: "Desculpe, não consegui gerar uma resposta. Como posso ajudar?",
+        menuMessages: pendingMenuMessages
+      };
     }
     
-    return finalResponse;
+    return { response: finalResponse, menuMessages: pendingMenuMessages };
   }
 
-  return "Desculpe, tive dificuldade em processar sua solicitação. Por favor, tente novamente.";
+  return { 
+    response: "Desculpe, tive dificuldade em processar sua solicitação. Por favor, tente novamente.",
+    menuMessages: pendingMenuMessages
+  };
 }
 
 serve(async (req) => {
@@ -1364,6 +1578,18 @@ serve(async (req) => {
 
     if (!conversation?.is_bot_active) {
       console.log("Bot is disabled for this conversation");
+      // Store user message even when bot is disabled
+      await supabase.from("whatsapp_messages").insert({
+        conversation_id: conversation.id,
+        role: "user",
+        content: messageText,
+        message_id: messageKey,
+        media_type: mediaType,
+        media_url: mediaUrl,
+        media_duration: mediaDuration,
+        media_caption: mediaCaption,
+        transcription: transcription,
+      });
       return new Response(JSON.stringify({ status: "bot_disabled_conversation" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -1381,6 +1607,45 @@ serve(async (req) => {
       media_caption: mediaCaption,
       transcription: transcription,
     });
+
+    // Check for human escalation BEFORE AI processing
+    if (detectHumanEscalation(messageText)) {
+      console.log(`[ESCALATION] Human escalation detected for ${phone}`);
+      
+      const escalationMessage = await escalateToHuman(
+        supabase,
+        conversation.id,
+        settings.unit_id,
+        phone,
+        customerName,
+        messageText
+      );
+      
+      // Send escalation message
+      const sentMessageId = await sendWhatsAppMessage(
+        settings.api_url,
+        settings.api_token,
+        instanceName,
+        phone,
+        escalationMessage
+      );
+      
+      // Store the escalation message
+      await supabase.from("whatsapp_messages").insert({
+        conversation_id: conversation.id,
+        role: "assistant",
+        content: escalationMessage,
+        message_id: sentMessageId,
+        status: "sent",
+      });
+      
+      return new Response(JSON.stringify({ 
+        status: "escalated_to_human",
+        reason: messageText.substring(0, 100)
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Send initial typing indicator to client
     console.log(`[PRESENCE] Starting composing indicator for ${phone}`);
@@ -1406,7 +1671,7 @@ serve(async (req) => {
     // Build messages array for AI with professional system prompt
     const systemPrompt = settings.system_prompt || getDefaultSystemPrompt();
 
-    const messages = [
+    const aiMessages = [
       { role: "system", content: systemPrompt },
       ...(recentMessages || []).reverse().map((m: any) => ({
         role: m.role === "assistant" ? "assistant" : "user",
@@ -1416,15 +1681,18 @@ serve(async (req) => {
 
     // Process with AI
     let assistantMessage: string;
+    let menuMessages: string[] | undefined;
     
     try {
-      assistantMessage = await processWithAI(
+      const aiResult = await processWithAI(
         supabase,
         settings.unit_id,
-        messages,
+        aiMessages,
         phone,
         customerName
       );
+      assistantMessage = aiResult.response;
+      menuMessages = aiResult.menuMessages;
     } catch (error) {
       console.error("AI processing error:", error);
       
@@ -1451,26 +1719,56 @@ serve(async (req) => {
     console.log(`[PRESENCE] Clearing composing indicator for ${phone}`);
     await sendPresence(settings.api_url, settings.api_token, instanceName, phone, "paused");
 
+    // Send menu messages separately if available
+    if (menuMessages && menuMessages.length > 0) {
+      console.log(`[MENU] Sending ${menuMessages.length} menu messages separately`);
+      
+      const menuMessageId = await sendMultipleWhatsAppMessages(
+        settings.api_url,
+        settings.api_token,
+        instanceName,
+        phone,
+        menuMessages
+      );
+      
+      // Store all menu messages as one entry with combined content
+      await supabase.from("whatsapp_messages").insert({
+        conversation_id: conversation.id,
+        role: "assistant",
+        content: menuMessages.join("\n\n"),
+        message_id: menuMessageId,
+        status: "sent",
+      });
+    }
+
     // Final sanitization
     assistantMessage = sanitizeResponse(assistantMessage);
 
-    // Send response via Evolution API and get message ID
-    const sentMessageId = await sendWhatsAppMessage(
-      settings.api_url,
-      settings.api_token,
-      instanceName,
-      phone,
-      assistantMessage
-    );
+    // Only send AI response if it's not just acknowledging the menu was sent
+    const isJustMenuAck = assistantMessage.includes("[Cardápio enviado") || 
+                          assistantMessage.toLowerCase().includes("aqui está o cardápio") ||
+                          assistantMessage.toLowerCase().includes("aqui está nosso cardápio");
+    
+    let sentMessageId = "";
+    if (!isJustMenuAck || !menuMessages) {
+      // Send response via Evolution API and get message ID
+      sentMessageId = await sendWhatsAppMessage(
+        settings.api_url,
+        settings.api_token,
+        instanceName,
+        phone,
+        assistantMessage
+      );
 
-    // Store assistant message with message ID for status tracking
-    await supabase.from("whatsapp_messages").insert({
-      conversation_id: conversation.id,
-      role: "assistant",
-      content: assistantMessage,
-      message_id: sentMessageId,
-      status: "sent",
-    });
+      // Store assistant message with message ID for status tracking
+      await supabase.from("whatsapp_messages").insert({
+        conversation_id: conversation.id,
+        role: "assistant",
+        content: assistantMessage,
+        message_id: sentMessageId,
+        status: "sent",
+      });
+    }
 
     return new Response(
       JSON.stringify({
@@ -1645,4 +1943,34 @@ async function sendWhatsAppMessage(
   
   // Return the message ID for status tracking
   return data.key?.id || "";
+}
+
+// Send multiple messages with delay for natural conversation flow
+async function sendMultipleWhatsAppMessages(
+  apiUrl: string,
+  apiToken: string,
+  instanceName: string,
+  phone: string,
+  messages: string[]
+): Promise<string> {
+  let lastMessageId = "";
+  
+  for (let i = 0; i < messages.length; i++) {
+    // Send typing indicator between messages
+    if (i > 0) {
+      await sendPresence(apiUrl, apiToken, instanceName, phone, "composing");
+      await new Promise(resolve => setTimeout(resolve, 800));
+    }
+    
+    lastMessageId = await sendWhatsAppMessage(
+      apiUrl, apiToken, instanceName, phone, messages[i]
+    );
+    
+    // Small delay between messages for natural feel
+    if (i < messages.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 1200));
+    }
+  }
+  
+  return lastMessageId;
 }
