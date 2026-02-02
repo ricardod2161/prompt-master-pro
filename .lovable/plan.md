@@ -1,103 +1,63 @@
 
-# Correção dos Problemas: Delivery + WhatsApp Chat
+# Correção do Bug de Pedidos Duplicados
 
-## Problemas Identificados
+## Problema Identificado
 
-### 1. Botão "Entregar" Não Funciona na Tela de Delivery
+Ao mudar o método de pagamento de PIX para Dinheiro, o sistema criou dois pedidos separados (#8 e #9) porque **não existe funcionalidade para editar o pagamento** de um pedido existente.
 
-**Causa Raiz:**
-- O pedido #7 está com status `pending`, mas os botões "Despachar" e "Entregue" só aparecem na aba "Prontos" (pedidos com status `ready`)
-- Na aba "Preparando" não há nenhum botão de ação disponível
-- Além disso, o hook `useMarkDelivered` tenta atualizar `delivery_orders` primeiro, mas se não existe registro (porque o entregador nunca foi atribuído), o update silenciosamente não encontra nada para atualizar
-
-**Fluxo Atual Quebrado:**
-```text
-Pedido pending → Aba "Preparando" → SEM BOTÕES → Usuário não consegue avançar
-```
-
-### 2. Conversas do WhatsApp Não Aparecem
-
-**Causa Raiz:**
-- As conversas existem no banco de dados e estão na unidade `Restaurante Demo` (ID: `00000000-0000-0000-0000-000000000001`)
-- **NENHUM usuário** está associado a essa unidade na tabela `user_units`
-- A política RLS (`has_unit_access`) bloqueia o acesso porque o usuário não tem permissão para essa unidade
-- Provavelmente o usuário está logado em outra unidade (como "paulo" ou "dantas lima")
+| Pedido | Pagamento | Valor | Status |
+|--------|-----------|-------|--------|
+| #8 | PIX | R$ 20,00 | pending |
+| #9 | Dinheiro | R$ 20,00 | pending |
 
 ---
 
-## Solução Proposta
+## Solução
 
-### Parte 1: Melhorar Fluxo de Delivery
+### Parte 1: Cancelar o Pedido Duplicado
+Cancelar o pedido #8 (o que tinha PIX) mantendo apenas o #9 (Dinheiro).
 
-#### 1.1 Adicionar Botões de Ação em Todas as Abas
-Na página `src/pages/Delivery.tsx`, os pedidos em preparo também precisam de botões:
-
-| Aba | Status | Botões Disponíveis |
-|-----|--------|-------------------|
-| Preparando | pending/preparing | **"Marcar Pronto"** (novo) |
-| Prontos | ready | "Despachar", "Entregue" |
-| Entregues | delivered | (nenhum - histórico) |
-
-#### 1.2 Corrigir Hook `useMarkDelivered`
-Modificar para:
-1. Verificar se existe registro em `delivery_orders`
-2. Se não existir, apenas atualizar o status do pedido para `delivered`
-3. Se existir, atualizar `delivery_time` e o status
-
-#### 1.3 Adicionar Hook para Marcar como Pronto
-Criar `useMarkReady` que:
-- Atualiza o status do pedido para `ready`
-- Opcionalmente envia notificação ao cliente
-
-#### 1.4 Melhorar Feedback Visual
-- Adicionar estado de loading nos botões
-- Mostrar toast de sucesso/erro claro
-- Destacar pedidos prontos para despacho
-
----
-
-### Parte 2: Corrigir WhatsApp Chat
-
-#### 2.1 Diagnóstico
-O usuário precisa:
-- Estar logado na unidade correta (`Restaurante Demo`)
-- Ou criar conversas na unidade em que está atualmente
-
-#### 2.2 Verificar Seleção de Unidade
-Adicionar log/debug no hook `useWhatsAppConversationsRealtime` para verificar qual unidade está selecionada.
-
-#### 2.3 Solução Recomendada
-- Se o usuário quer usar o WhatsApp na unidade atual, as conversas precisam ser associadas a essa unidade
-- Se quer usar a unidade Demo, precisa ter acesso a ela em `user_units`
+### Parte 2: Adicionar Edição de Pagamento
+Permitir que o usuário altere o método de pagamento de um pedido diretamente na tela de detalhes.
 
 ---
 
 ## Alterações Técnicas
 
-### Arquivo 1: `src/hooks/useDelivery.ts`
+### 1. Cancelar Pedido #8 (Duplicado)
+Atualizar status do pedido #8 para "cancelled" via SQL.
 
-**Novo hook `useMarkReady`:**
+### 2. Novo Hook: `useUpdatePaymentMethod`
+Criar hook para atualizar o método de pagamento de um pedido existente.
+
 ```typescript
-export function useMarkReady() {
+// src/hooks/useOrders.ts
+export function useUpdatePaymentMethod() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (orderId: string) => {
+    mutationFn: async ({
+      orderId,
+      newMethod,
+    }: {
+      orderId: string;
+      newMethod: PaymentMethod;
+    }) => {
+      // Atualiza o método de pagamento existente
       const { error } = await supabase
-        .from("orders")
-        .update({ status: "ready" })
-        .eq("id", orderId);
+        .from("order_payments")
+        .update({ method: newMethod })
+        .eq("order_id", orderId);
 
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
-      queryClient.invalidateQueries({ queryKey: ["delivery-orders"] });
-      toast({ title: "Pedido pronto para entrega!" });
+      toast({ title: "Forma de pagamento atualizada!" });
     },
     onError: (error) => {
       toast({
-        title: "Erro ao marcar pedido",
+        title: "Erro ao atualizar pagamento",
         description: error.message,
         variant: "destructive",
       });
@@ -106,142 +66,82 @@ export function useMarkReady() {
 }
 ```
 
-**Corrigir `useMarkDelivered`:**
-```typescript
-export function useMarkDelivered() {
-  const queryClient = useQueryClient();
+### 3. UI: Botão de Editar Pagamento no Modal de Detalhes
+Na seção de pagamento do modal, adicionar botão para editar:
 
-  return useMutation({
-    mutationFn: async (orderId: string) => {
-      // Tenta atualizar delivery_orders SE existir
-      const { data: existing } = await supabase
-        .from("delivery_orders")
-        .select("id")
-        .eq("order_id", orderId)
-        .maybeSingle();
-
-      if (existing) {
-        await supabase
-          .from("delivery_orders")
-          .update({ delivery_time: new Date().toISOString() })
-          .eq("order_id", orderId);
-      }
-
-      // Sempre atualiza o status do pedido
-      const { error: orderError } = await supabase
-        .from("orders")
-        .update({ status: "delivered" })
-        .eq("id", orderId);
-
-      if (orderError) throw orderError;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
-      queryClient.invalidateQueries({ queryKey: ["delivery-orders"] });
-      toast({ title: "Entrega confirmada!" });
-    },
-    onError: (error) => {
-      toast({
-        title: "Erro ao confirmar entrega",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-}
-```
-
-### Arquivo 2: `src/pages/Delivery.tsx`
-
-**Adicionar botões na aba "Preparando":**
-```typescript
-// Na aba "pending" (Preparando), adicionar botão para marcar como pronto
-<TabsContent value="pending">
-  {pendingOrders.map((order) => (
-    <OrderCard
-      key={order.id}
-      order={order}
-      onMarkReady={() => markReady.mutate(order.id)} // NOVO
-    />
-  ))}
-</TabsContent>
-```
-
-**Atualizar componente OrderCard:**
-```typescript
-function OrderCard({
-  order,
-  onMarkReady,  // NOVO
-  onAssign,
-  onDeliver,
-}) {
-  return (
-    <Card3D>
-      {/* ... conteúdo existente ... */}
-      <div className="flex gap-2">
-        {onMarkReady && (
-          <Button onClick={onMarkReady}>
-            <CheckCircle className="h-4 w-4 mr-1" />
-            Pronto
-          </Button>
-        )}
-        {onAssign && (
-          <Button variant="outline" onClick={onAssign}>
-            <Truck className="h-4 w-4 mr-1" />
-            Despachar
-          </Button>
-        )}
-        {onDeliver && (
-          <Button onClick={onDeliver}>
-            <CheckCircle className="h-4 w-4 mr-1" />
-            Entregue
-          </Button>
-        )}
+```tsx
+// src/pages/Orders.tsx - No OrderDetailsModal
+{order.order_payments && order.order_payments.length > 0 && (
+  <section className="space-y-2">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <CreditCard className="h-4 w-4 text-primary" />
+        <span>Pagamento</span>
       </div>
-    </Card3D>
-  );
-}
-```
-
-### Arquivo 3: `src/hooks/useWhatsAppChat.ts`
-
-**Adicionar debug para verificar unidade:**
-```typescript
-export function useWhatsAppConversationsRealtime() {
-  const { selectedUnit } = useUnit();
-  
-  // Debug: verificar qual unidade está selecionada
-  useEffect(() => {
-    console.log("WhatsApp Chat - Selected Unit:", selectedUnit?.id, selectedUnit?.name);
-  }, [selectedUnit]);
-
-  const query = useQuery({
-    queryKey: ["whatsapp-conversations-rt", selectedUnit?.id],
-    queryFn: async () => {
-      if (!selectedUnit?.id) {
-        console.warn("WhatsApp Chat: No unit selected");
-        return [];
-      }
-      // ... resto da query
-    },
-  });
-}
+      {/* NOVO: Botão para editar pagamento */}
+      {order.status === "pending" && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setEditingPayment(true)}
+        >
+          <Edit className="h-3.5 w-3.5 mr-1" />
+          Editar
+        </Button>
+      )}
+    </div>
+    
+    {/* Se estiver editando, mostra select */}
+    {editingPayment ? (
+      <div className="flex gap-2">
+        <Select
+          value={selectedPaymentMethod}
+          onValueChange={setSelectedPaymentMethod}
+        >
+          <SelectTrigger className="flex-1">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {paymentMethods.map((m) => (
+              <SelectItem key={m.value} value={m.value}>
+                {m.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          size="sm"
+          onClick={handleSavePayment}
+          disabled={updatePayment.isPending}
+        >
+          Salvar
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setEditingPayment(false)}
+        >
+          Cancelar
+        </Button>
+      </div>
+    ) : (
+      // Mostra pagamento atual
+      <Card>...</Card>
+    )}
+  </section>
+)}
 ```
 
 ---
 
-## Fluxo de Delivery Corrigido
+## Fluxo Visual
 
 ```text
-ANTES:
-Pedido pending → Aba "Preparando" → SEM BOTÕES → ❌ Bloqueado
+ANTES (Bug):
+Pedido criado → Pagamento errado → Cria novo pedido → 2 pedidos duplicados ❌
 
-DEPOIS:
-Pedido pending → Aba "Preparando" → [Botão "Pronto"] → 
-  ↓
-Pedido ready → Aba "Prontos" → [Despachar] [Entregue] →
-  ↓
-Pedido delivered → Aba "Entregues" → Histórico ✓
+DEPOIS (Corrigido):
+Pedido criado → Pagamento errado → Clica "Editar" → Muda pagamento → 1 pedido ✓
 ```
 
 ---
@@ -250,23 +150,22 @@ Pedido delivered → Aba "Entregues" → Histórico ✓
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/hooks/useDelivery.ts` | Novo hook `useMarkReady`, corrigir `useMarkDelivered` |
-| `src/pages/Delivery.tsx` | Adicionar botão "Pronto" na aba Preparando, melhorar OrderCard |
-| `src/hooks/useWhatsAppChat.ts` | Adicionar log de debug para verificar unidade |
+| Banco de Dados | Cancelar pedido #8 (duplicado) |
+| `src/hooks/useOrders.ts` | Novo hook `useUpdatePaymentMethod` |
+| `src/pages/Orders.tsx` | Adicionar UI para editar pagamento no modal |
 
 ---
 
-## Ação Necessária do Usuário
+## Prevenção Futura
 
-Para resolver o problema do WhatsApp Chat:
-1. Verificar qual unidade está selecionada (canto superior esquerdo)
-2. Se as conversas estão em "Restaurante Demo", precisa trocar para essa unidade
-3. Ou configurar o WhatsApp na unidade em que está atualmente
+1. **Botão "Confirmar Pedido"** no POS já está protegido com `disabled={createOrder.isPending}`
+2. **Nova funcionalidade de editar pagamento** evitará que usuários criem novos pedidos apenas para corrigir pagamento
+3. **Feedback visual** claro quando pagamento é alterado
 
 ---
 
 ## Resultado Esperado
 
-1. **Delivery:** Botões de ação visíveis em todas as etapas do fluxo
-2. **Delivery:** Botão "Entregue" funcionará mesmo sem entregador atribuído
-3. **WhatsApp:** Com o debug, será possível identificar se o problema é a unidade selecionada
+1. Pedido #8 será cancelado (ficará no histórico como referência)
+2. Pedido #9 permanece como o pedido válido
+3. Futuramente, usuários poderão editar o pagamento diretamente sem criar duplicatas
