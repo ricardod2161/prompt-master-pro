@@ -443,7 +443,7 @@ async function executeTool(
   }
 }
 
-// Returns multiple messages for elegant menu display
+// Returns multiple messages for elegant menu display - FORMATAÇÃO EXATA DA IMAGEM
 async function listarCardapio(supabase: any, unitId: string): Promise<{ type: 'multiple'; messages: string[] }> {
   const { data: products, error } = await supabase
     .from("products")
@@ -468,6 +468,9 @@ async function listarCardapio(supabase: any, unitId: string): Promise<{ type: 'm
     return { type: 'multiple', messages: ["No momento não temos produtos disponíveis no cardápio."] };
   }
 
+  // Linha horizontal padrão (40 caracteres) - EXATA DA IMAGEM
+  const LINE = "────────────────────────────────────────";
+
   // Group by category
   const byCategory: Record<string, Product[]> = {};
   for (const product of products as Product[]) {
@@ -478,31 +481,43 @@ async function listarCardapio(supabase: any, unitId: string): Promise<{ type: 'm
     byCategory[categoryName].push(product);
   }
 
-  // Build array of messages - one per category
+  const categoryEntries = Object.entries(byCategory);
   const messages: string[] = [];
   
-  // Welcome message
-  messages.push("✨ *BEM-VINDO AO NOSSO CARDÁPIO* ✨");
+  // PRIMEIRA MENSAGEM: Welcome + Primeira Categoria juntos (como na imagem)
+  if (categoryEntries.length > 0) {
+    const [firstCategory, firstItems] = categoryEntries[0];
+    const firstEmoji = getCategoryEmoji(firstCategory);
+    
+    let firstMsg = `✨ *BEM-VINDO AO NOSSO CARDÁPIO* ✨\n${LINE}\n\n`;
+    firstMsg += `${firstEmoji} *${firstCategory.toUpperCase()}*\n${LINE}\n\n`;
+    
+    for (const item of firstItems) {
+      const price = item.delivery_price || item.price;
+      firstMsg += `🔶 ${item.name} - R$ ${price.toFixed(2).replace(".", ",")}\n`;
+    }
+    
+    messages.push(firstMsg.trim());
+  }
   
-  // One message per category with emoji and nice formatting
-  for (const [category, items] of Object.entries(byCategory)) {
+  // MENSAGENS SUBSEQUENTES: Cada categoria adicional (começa com LINE no topo)
+  for (let i = 1; i < categoryEntries.length; i++) {
+    const [category, items] = categoryEntries[i];
     const emoji = getCategoryEmoji(category);
-    let categoryMsg = `${emoji} *${category.toUpperCase()}*\n────────────\n`;
+    
+    // Começa com linha no topo, depois emoji + categoria + linha
+    let categoryMsg = `${LINE}\n${emoji} *${category.toUpperCase()}*\n${LINE}\n\n`;
     
     for (const item of items) {
       const price = item.delivery_price || item.price;
-      categoryMsg += `🔸 ${item.name} - R$ ${price.toFixed(2).replace(".", ",")}`;
-      if (item.description) {
-        categoryMsg += `\n   _${item.description}_`;
-      }
-      categoryMsg += "\n";
+      categoryMsg += `🔶 ${item.name} - R$ ${price.toFixed(2).replace(".", ",")}\n`;
     }
     
     messages.push(categoryMsg.trim());
   }
   
-  // Final message
-  messages.push("💬 O que você gostaria de pedir?");
+  // MENSAGEM FINAL: Pergunta com linha no topo
+  messages.push(`${LINE}\n💬 O que você gostaria de pedir?`);
   
   return { type: 'multiple', messages };
 }
