@@ -34,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MoreHorizontal, Plus, X, Building2, Shield } from "lucide-react";
+import { MoreHorizontal, Plus, X, Building2, Shield, Unlink } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { format } from "date-fns";
@@ -68,6 +68,7 @@ export function AdminUsersList() {
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [isAddRoleOpen, setIsAddRoleOpen] = useState(false);
   const [isAssignUnitOpen, setIsAssignUnitOpen] = useState(false);
+  const [isRemoveUnitOpen, setIsRemoveUnitOpen] = useState(false);
 
   // Buscar unidades disponíveis
   const { data: units } = useQuery({
@@ -104,6 +105,11 @@ export function AdminUsersList() {
   const handleAssignUnit = (userId: string, unitId: string) => {
     assignUnit({ userId, unitId });
     setIsAssignUnitOpen(false);
+  };
+
+  const handleRemoveUnit = (userId: string, unitId: string) => {
+    removeUnit({ userId, unitId });
+    setIsRemoveUnitOpen(false);
   };
 
   return (
@@ -251,6 +257,41 @@ export function AdminUsersList() {
                                 ))}
                             </SelectContent>
                           </Select>
+                        </DialogContent>
+                      </Dialog>
+                      <Dialog open={isRemoveUnitOpen && selectedUser === user.user_id} onOpenChange={(open) => {
+                        setIsRemoveUnitOpen(open);
+                        if (open) setSelectedUser(user.user_id);
+                      }}>
+                        <DialogTrigger asChild>
+                          <DropdownMenuItem 
+                            onSelect={(e) => e.preventDefault()}
+                            disabled={user.units.length === 0}
+                          >
+                            <Unlink className="mr-2 h-4 w-4" />
+                            Desassociar Unidade
+                          </DropdownMenuItem>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Desassociar Unidade</DialogTitle>
+                          </DialogHeader>
+                          {user.units.length === 0 ? (
+                            <p className="text-muted-foreground text-sm">Este usuário não está associado a nenhuma unidade.</p>
+                          ) : (
+                            <Select onValueChange={(value) => handleRemoveUnit(user.user_id, value)}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione uma unidade para desassociar" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {user.units.map((unit) => (
+                                  <SelectItem key={unit.id} value={unit.id}>
+                                    {unit.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
                         </DialogContent>
                       </Dialog>
                     </DropdownMenuContent>
