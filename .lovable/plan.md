@@ -1,24 +1,39 @@
 
 
-# Correção Final: Função Simplificada sem Bypass de RLS
+# Correção Definitiva: SECURITY DEFINER sem set_config
 
-## Problema Raiz
+## Problema Encontrado
 
-O Supabase bloqueia completamente a instrução `set_config('role', ...)` dentro de funções `SECURITY DEFINER`. Todas as tentativas anteriores de bypass de RLS falharam por esta restrição de segurança.
+Análise das permissões revelou:
 
-## Descoberta Importante
+| Role | rolbypassrls |
+|------|--------------|
+| postgres (owner) | **true** |
+| authenticated (chamador) | false |
+| service_role | true |
 
-Analisando as políticas RLS existentes, elas **já permitem** todas as operações necessárias:
-
-| Tabela | Política INSERT | Permite |
-|--------|-----------------|---------|
-| `units` | `true` | Qualquer usuário autenticado |
-| `user_units` | `auth.uid() = user_id` | Auto-associação |
-| `user_roles` | `auth.uid() = user_id` | Auto-atribuição |
+A função atual usa `SECURITY INVOKER`, então roda com permissões do **authenticated** (que NÃO pode bypassar RLS).
 
 ## Solução
 
-Recriar a função `create_unit_with_owner` como uma função **simples** que apenas executa as operações em sequência. **Não é necessário bypass de RLS** porque as políticas já permitem as operações.
+Mudar para `SECURITY DEFINER` **sem** usar `set_config`. A função rodará com os privilégios do owner `postgres` que TEM `rolbypassrls:true`.
+
+```text
+ANTES (SECURITY INVOKER):
++------------------+     +-----------------+
+| authenticated    | --> | Função executa  | --> RLS BLOQUEIA
+| bypassrls=false  |     | como AUTH user  |
++------------------+     +-----------------+
+
+DEPOIS (SECURITY DEFINER):
++------------------+     +-----------------+
+| authenticated    | --> | Função executa  | --> RLS BYPASSED
+|                  |     | como POSTGRES   |
++------------------+     +-----------------+
+                         | bypassrls=true  |
+```
+
+## Modificação no Banco de Dados
 
 ```sql
 CREATE OR REPLACE FUNCTION public.create_unit_with_owner(
@@ -29,7 +44,7 @@ CREATE OR REPLACE FUNCTION public.create_unit_with_owner(
 )
 RETURNS uuid
 LANGUAGE plpgsql
-SECURITY INVOKER  -- Usa as credenciais do usuário chamador
+SECURITY DEFINER  -- Roda como postgres (bypassrls=true)
 SET search_path = public
 AS $$
 DECLARE
@@ -49,16 +64,16 @@ BEGIN
   FROM public.user_units
   WHERE user_id = _user_id;
   
-  -- Criar a unidade (RLS permite: true para authenticated)
+  -- Criar a unidade (RLS bypassed porque SECURITY DEFINER com owner postgres)
   INSERT INTO public.units (name, address, phone, cnpj)
   VALUES (_name, _address, _phone, _cnpj)
   RETURNING id INTO _unit_id;
   
-  -- Associar usuário à unidade (RLS permite: auth.uid() = user_id)
+  -- Associar usuário à unidade
   INSERT INTO public.user_units (user_id, unit_id, is_default)
   VALUES (_user_id, _unit_id, _user_unit_count = 0);
   
-  -- Se for a primeira unidade, dar role de admin (RLS permite: auth.uid() = user_id)
+  -- Se for a primeira unidade, dar role de admin
   IF _user_unit_count = 0 THEN
     INSERT INTO public.user_roles (user_id, role)
     VALUES (_user_id, 'admin')
@@ -70,50 +85,23 @@ END;
 $$;
 ```
 
-## Por que funciona agora
+## Por Que Funciona
 
-```text
-+---------------------------+
-| Usuário Autenticado       |
-+---------------------------+
-            |
-            v
-+---------------------------+
-| create_unit_with_owner    |
-| SECURITY INVOKER          |
-| (usa credenciais do user) |
-+---------------------------+
-            |
-            v
-+---------------------------+
-| INSERT INTO units         |
-| RLS: true (PERMITIDO)     |
-+---------------------------+
-            |
-            v
-+---------------------------+
-| INSERT INTO user_units    |
-| RLS: auth.uid() = user_id |
-| (PERMITIDO - são iguais)  |
-+---------------------------+
-            |
-            v
-+---------------------------+
-| INSERT INTO user_roles    |
-| RLS: auth.uid() = user_id |
-| (PERMITIDO - são iguais)  |
-+---------------------------+
-```
+1. **SECURITY DEFINER**: A função executa com os privilégios do **owner** da função
+2. **Owner = postgres**: O owner `postgres` tem `rolbypassrls=true`
+3. **Bypass automático**: RLS é automaticamente bypassed para roles com `rolbypassrls=true`
+4. **Sem set_config**: Não precisa mudar role manualmente (isso é bloqueado pelo Supabase)
 
-## Mudança Principal
+## Diferença das Tentativas Anteriores
 
-| Antes | Depois |
-|-------|--------|
-| `SECURITY DEFINER` | `SECURITY INVOKER` |
-| Tentava bypass de RLS | Confia nas políticas existentes |
-| Bloqueado pelo Supabase | Funciona com as regras |
+| Tentativa | Problema |
+|-----------|----------|
+| SECURITY DEFINER + set_config('role') | set_config bloqueado pelo Supabase |
+| SECURITY DEFINER + SET LOCAL row_security | Comando bloqueado pelo Supabase |
+| SECURITY INVOKER | Roda como authenticated (sem bypassrls) |
+| **SECURITY DEFINER simples** | ✅ Roda como postgres (com bypassrls) |
 
 ## Arquivos a Modificar
 
-Apenas uma migration no banco de dados para recriar a função.
+Apenas uma migration no banco de dados para alterar a função de SECURITY INVOKER para SECURITY DEFINER.
 
