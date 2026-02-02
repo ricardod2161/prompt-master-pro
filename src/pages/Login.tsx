@@ -8,7 +8,20 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Utensils, Loader2 } from "lucide-react";
+import { Utensils, Loader2, Eye, EyeOff } from "lucide-react";
+
+const translateError = (message: string): string => {
+  const translations: Record<string, string> = {
+    "Password is known to be weak and easy to guess. Please choose a different one.": 
+      "Esta senha é muito fraca e comum. Por favor, escolha uma senha mais segura.",
+    "Invalid login credentials": "Email ou senha incorretos.",
+    "Email not confirmed": "Email não confirmado. Verifique sua caixa de entrada.",
+    "User already registered": "Este email já está cadastrado.",
+    "Signup requires a valid password": "A senha é obrigatória.",
+    "Unable to validate email address: invalid format": "Formato de email inválido.",
+  };
+  return translations[message] || message;
+};
 
 export default function Login() {
   const navigate = useNavigate();
@@ -21,12 +34,14 @@ export default function Login() {
   // Login form
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   // Signup form
   const [signupName, setSignupName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,7 +51,7 @@ export default function Login() {
 
     if (error) {
       toast.error("Erro ao entrar", {
-        description: error.message,
+        description: translateError(error.message),
       });
     } else {
       toast.success("Login realizado com sucesso!");
@@ -65,7 +80,7 @@ export default function Login() {
 
     if (error) {
       toast.error("Erro ao criar conta", {
-        description: error.message,
+        description: translateError(error.message),
       });
     } else {
       toast.success("Conta criada com sucesso!");
@@ -83,7 +98,7 @@ export default function Login() {
 
     if (error) {
       toast.error("Erro ao enviar email", {
-        description: error.message,
+        description: translateError(error.message),
       });
     } else {
       toast.success("Email enviado!", {
@@ -193,16 +208,26 @@ export default function Login() {
                         </DialogContent>
                       </Dialog>
                     </div>
-                    <Input
-                      id="login-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      required
-                      disabled={loading}
-                      className="bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="login-password"
+                        type={showLoginPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        required
+                        disabled={loading}
+                        className="bg-background/50 border-border/50 focus:border-primary focus:ring-primary/20 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowLoginPassword(!showLoginPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        tabIndex={-1}
+                      >
+                        {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div className="p-6 pt-4">
@@ -256,29 +281,49 @@ export default function Login() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="signup-password">Senha</Label>
-                    <Input
-                      id="signup-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={signupPassword}
-                      onChange={(e) => setSignupPassword(e.target.value)}
-                      required
-                      disabled={loading}
-                      className="bg-background/50 border-border/50 focus:border-primary"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="signup-password"
+                        type={showSignupPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        value={signupPassword}
+                        onChange={(e) => setSignupPassword(e.target.value)}
+                        required
+                        disabled={loading}
+                        className="bg-background/50 border-border/50 focus:border-primary pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSignupPassword(!showSignupPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        tabIndex={-1}
+                      >
+                        {showSignupPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="signup-confirm">Confirmar Senha</Label>
-                    <Input
-                      id="signup-confirm"
-                      type="password"
-                      placeholder="••••••••"
-                      value={signupConfirmPassword}
-                      onChange={(e) => setSignupConfirmPassword(e.target.value)}
-                      required
-                      disabled={loading}
-                      className="bg-background/50 border-border/50 focus:border-primary"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="signup-confirm"
+                        type={showConfirmPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        value={signupConfirmPassword}
+                        onChange={(e) => setSignupConfirmPassword(e.target.value)}
+                        required
+                        disabled={loading}
+                        className="bg-background/50 border-border/50 focus:border-primary pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        tabIndex={-1}
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div className="p-6 pt-4">
