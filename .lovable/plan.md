@@ -1,140 +1,127 @@
 
-# Adicionar Relogio em Tempo Real ao Sistema
+# Melhorias na Pagina de Login - Mostrar Senha e Erro Traduzido
 
 ## Visao Geral
 
-Sera criado um componente de relogio em tempo real elegante e profissional, integrado ao header do AppLayout, exibindo hora, minutos, segundos e a data atual. O componente seguira o design system existente com glassmorphismo e animacoes suaves.
+Serao implementadas duas melhorias na pagina de Login:
+1. Botao de mostrar/ocultar senha em todos os campos de senha
+2. Traducao da mensagem de erro de senha fraca para portugues
 
 ---
 
-## Componente a Criar
+## Sobre o Erro
 
-### `src/components/layout/LiveClock.tsx`
+O erro "Password is known to be weak and easy to guess" ocorre porque o Supabase Auth tem a verificacao HIBP (Have I Been Pwned) ativada, que bloqueia senhas que ja vazaram em brechas de dados. Isso e uma configuracao de seguranca importante.
 
-Relogio em tempo real com:
-- Exibicao de hora:minuto:segundo
-- Data atual formatada em portugues
-- Atualizacao a cada segundo via useEffect
-- Icone de relogio animado
-- Design glassmorphism sutil
-- Responsividade (oculta detalhes em mobile)
-- Tooltip com data completa
-
-**Funcionalidades:**
-- useState para armazenar hora atual
-- useEffect com setInterval de 1 segundo
-- Limpeza do interval no cleanup
-- Formatacao com date-fns em pt-BR
-- Animacao sutil nos segundos
+**Solucao**: Traduzir a mensagem para portugues para melhor experiencia do usuario.
 
 ---
 
-## Arquivo a Modificar
+## Funcionalidades a Implementar
 
-### `src/components/layout/AppLayout.tsx`
+### 1. Botao Mostrar/Ocultar Senha
 
-Adicionar o LiveClock no header entre o titulo da pagina e os botoes de acao:
+Adicionar em todos os campos de senha:
+- Campo de senha do Login
+- Campo de senha do Cadastro
+- Campo de confirmar senha do Cadastro
 
-```text
-+------------------------------------------------------------------+
-| [Menu] | Titulo da Pagina    [RELOGIO]    [Sino] [Badge Plano]  |
-+------------------------------------------------------------------+
+**Comportamento:**
+- Icone de olho (Eye) quando senha oculta
+- Icone de olho riscado (EyeOff) quando senha visivel
+- Toggle entre type="password" e type="text"
+- Estado independente para cada campo
+
+### 2. Traducao de Mensagens de Erro
+
+Criar funcao para traduzir mensagens de erro do Supabase para portugues:
+- "Password is known to be weak..." -> "Esta senha e muito fraca e comum..."
+- Outras mensagens comuns tambem serao traduzidas
+
+---
+
+## Modificacoes no Arquivo
+
+### `src/pages/Login.tsx`
+
+**Novos estados:**
+```typescript
+const [showLoginPassword, setShowLoginPassword] = useState(false);
+const [showSignupPassword, setShowSignupPassword] = useState(false);
+const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 ```
 
-**Posicionamento:**
-- Centralizado no header em desktop
-- Compacto em tablet/mobile
-- Flexbox com gap adequado
-
----
-
-## Design Visual
-
-### Layout do Relogio
-
-```text
-Desktop:
-+----------------------------------------+
-| [Icone] 14:32:45 | Domingo, 02 de Fev   |
-+----------------------------------------+
-
-Mobile:
-+----------------+
-| [Icone] 14:32  |
-+----------------+
+**Novos imports:**
+```typescript
+import { Eye, EyeOff } from "lucide-react";
 ```
 
-### Estilizacao
+**Funcao de traducao:**
+```typescript
+const translateError = (message: string) => {
+  const translations: Record<string, string> = {
+    "Password is known to be weak and easy to guess. Please choose a different one.": 
+      "Esta senha é muito fraca e comum. Por favor, escolha uma senha mais segura.",
+    // outras traducoes...
+  };
+  return translations[message] || message;
+};
+```
 
-- Background: `bg-background/50` com borda sutil
-- Icone: Clock do lucide-react com animacao pulse nos segundos
-- Tipografia: font-mono para numeros alinhados
-- Transicoes suaves ao atualizar
-- Glassmorphism consistente com o sistema
-
-### Responsividade
-
+**Estrutura do campo com botao:**
 ```text
-Mobile (< 640px):
-- Mostra apenas hora:minuto
-- Oculta segundos e data
-- Tamanho compacto
-
-Tablet (640px - 1024px):
-- Mostra hora:minuto:segundo
-- Oculta data por extenso
-
-Desktop (> 1024px):
-- Exibe tudo: hora completa + data
-- Layout horizontal expandido
++------------------------------------------+
+| [Input de senha............] [Icone Eye] |
++------------------------------------------+
 ```
 
 ---
 
-## Codigo Exemplo
+## Design do Botao
+
+- Posicao: Dentro do input, alinhado a direita
+- Icone: Eye (olho aberto) ou EyeOff (olho fechado)
+- Cor: text-muted-foreground com hover:text-foreground
+- Tamanho: h-4 w-4
+- Cursor: pointer
+- Sem fundo, apenas icone
+
+---
+
+## Estrutura do Input com Botao
 
 ```typescript
-// Estado e efeito
-const [currentTime, setCurrentTime] = useState(new Date());
-
-useEffect(() => {
-  const timer = setInterval(() => {
-    setCurrentTime(new Date());
-  }, 1000);
-  
-  return () => clearInterval(timer);
-}, []);
-
-// Formatacao
-const timeString = format(currentTime, "HH:mm:ss");
-const dateString = format(currentTime, "EEEE, dd 'de' MMM", { locale: ptBR });
+<div className="relative">
+  <Input
+    type={showPassword ? "text" : "password"}
+    className="pr-10" // padding para o botao
+  />
+  <button
+    type="button"
+    onClick={() => setShowPassword(!showPassword)}
+    className="absolute right-3 top-1/2 -translate-y-1/2"
+  >
+    {showPassword ? <EyeOff /> : <Eye />}
+  </button>
+</div>
 ```
 
 ---
 
 ## Beneficios
 
-1. **Utilidade**: Usuarios sempre sabem a hora atual sem sair do sistema
-2. **Profissionalismo**: Elemento comum em sistemas empresariais
-3. **Design**: Segue padrao visual existente
-4. **Performance**: Atualiza apenas o necessario a cada segundo
-5. **Responsividade**: Adapta-se a qualquer dispositivo
-
----
-
-## Arquivos Envolvidos
-
-| Arquivo | Acao |
-|---------|------|
-| `src/components/layout/LiveClock.tsx` | Criar |
-| `src/components/layout/AppLayout.tsx` | Modificar |
+1. **Usabilidade**: Usuario pode verificar se digitou a senha corretamente
+2. **Acessibilidade**: Reducao de erros de digitacao
+3. **UX**: Mensagens de erro em portugues facilitam entendimento
+4. **Seguranca**: Usuario entende porque a senha foi rejeitada
 
 ---
 
 ## Proximos Passos
 
-1. Criar componente LiveClock com useState/useEffect
-2. Implementar formatacao de data/hora em pt-BR
-3. Adicionar responsividade com classes Tailwind
-4. Integrar no AppLayout header
-5. Testar em diferentes tamanhos de tela
+1. Adicionar estados para controle de visibilidade das senhas
+2. Importar icones Eye e EyeOff do lucide-react
+3. Criar funcao translateError para traduzir mensagens
+4. Adicionar botoes de toggle em cada campo de senha
+5. Ajustar estilos para o botao ficar dentro do input
+6. Testar em todos os campos de senha
