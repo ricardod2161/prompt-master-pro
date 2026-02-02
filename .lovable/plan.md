@@ -1,18 +1,24 @@
 
 
-# Correção Definitiva do Erro de RLS - Abordagem Garantida
+# Correção Final: Função Simplificada sem Bypass de RLS
 
-## Problema Identificado
+## Problema Raiz
 
-O `SET LOCAL row_security = off` NÃO funciona no Supabase porque:
-- O Supabase bloqueia esse comando por razões de segurança
-- Mesmo funções `SECURITY DEFINER` são limitadas no ambiente Supabase
+O Supabase bloqueia completamente a instrução `set_config('role', ...)` dentro de funções `SECURITY DEFINER`. Todas as tentativas anteriores de bypass de RLS falharam por esta restrição de segurança.
 
-## Solução: Usar set_config para mudar o role de sessão
+## Descoberta Importante
 
-A solução é usar `set_config('role', 'service_role', true)` dentro da função para temporariamente assumir o role `service_role` que tem `bypassrls: true` e é permitido no Supabase.
+Analisando as políticas RLS existentes, elas **já permitem** todas as operações necessárias:
 
-## Modificação no Banco de Dados
+| Tabela | Política INSERT | Permite |
+|--------|-----------------|---------|
+| `units` | `true` | Qualquer usuário autenticado |
+| `user_units` | `auth.uid() = user_id` | Auto-associação |
+| `user_roles` | `auth.uid() = user_id` | Auto-atribuição |
+
+## Solução
+
+Recriar a função `create_unit_with_owner` como uma função **simples** que apenas executa as operações em sequência. **Não é necessário bypass de RLS** porque as políticas já permitem as operações.
 
 ```sql
 CREATE OR REPLACE FUNCTION public.create_unit_with_owner(
@@ -23,79 +29,91 @@ CREATE OR REPLACE FUNCTION public.create_unit_with_owner(
 )
 RETURNS uuid
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER  -- Usa as credenciais do usuário chamador
 SET search_path = public
 AS $$
 DECLARE
   _unit_id uuid;
   _user_id uuid;
   _user_unit_count int;
-  _original_role text;
 BEGIN
-  -- Salvar o role original
-  _original_role := current_setting('role');
-  
-  -- Obter o ID do usuário autenticado ANTES de mudar o role
+  -- Obter o ID do usuário autenticado
   _user_id := auth.uid();
   
   IF _user_id IS NULL THEN
     RAISE EXCEPTION 'Usuário não autenticado';
   END IF;
   
-  -- Mudar para service_role para bypass RLS
-  PERFORM set_config('role', 'service_role', true);
-  
   -- Verificar se é a primeira unidade do usuário
   SELECT COUNT(*) INTO _user_unit_count
   FROM public.user_units
   WHERE user_id = _user_id;
   
-  -- Criar a unidade
+  -- Criar a unidade (RLS permite: true para authenticated)
   INSERT INTO public.units (name, address, phone, cnpj)
   VALUES (_name, _address, _phone, _cnpj)
   RETURNING id INTO _unit_id;
   
-  -- Associar usuário à unidade
+  -- Associar usuário à unidade (RLS permite: auth.uid() = user_id)
   INSERT INTO public.user_units (user_id, unit_id, is_default)
   VALUES (_user_id, _unit_id, _user_unit_count = 0);
   
-  -- Se for a primeira unidade, dar role de admin
+  -- Se for a primeira unidade, dar role de admin (RLS permite: auth.uid() = user_id)
   IF _user_unit_count = 0 THEN
     INSERT INTO public.user_roles (user_id, role)
     VALUES (_user_id, 'admin')
     ON CONFLICT (user_id, role) DO NOTHING;
   END IF;
   
-  -- Restaurar role original
-  PERFORM set_config('role', _original_role, true);
-  
   RETURN _unit_id;
-EXCEPTION
-  WHEN OTHERS THEN
-    -- Garantir restauração do role mesmo em caso de erro
-    PERFORM set_config('role', _original_role, true);
-    RAISE;
 END;
 $$;
 ```
 
-## O que muda
+## Por que funciona agora
 
-| Abordagem Anterior | Nova Abordagem |
-|-------------------|----------------|
-| `SET LOCAL row_security = off` | `set_config('role', 'service_role', true)` |
-| Bloqueado pelo Supabase | Permitido e funciona corretamente |
+```text
++---------------------------+
+| Usuário Autenticado       |
++---------------------------+
+            |
+            v
++---------------------------+
+| create_unit_with_owner    |
+| SECURITY INVOKER          |
+| (usa credenciais do user) |
++---------------------------+
+            |
+            v
++---------------------------+
+| INSERT INTO units         |
+| RLS: true (PERMITIDO)     |
++---------------------------+
+            |
+            v
++---------------------------+
+| INSERT INTO user_units    |
+| RLS: auth.uid() = user_id |
+| (PERMITIDO - são iguais)  |
++---------------------------+
+            |
+            v
++---------------------------+
+| INSERT INTO user_roles    |
+| RLS: auth.uid() = user_id |
+| (PERMITIDO - são iguais)  |
++---------------------------+
+```
 
-## Segurança
+## Mudança Principal
 
-A solução mantém a segurança porque:
-
-1. O usuário é validado antes da mudança de role
-2. O role é restaurado ao final (e em caso de erro)
-3. A função só permite operações específicas
-4. O `auth.uid()` é capturado antes da mudança de role
+| Antes | Depois |
+|-------|--------|
+| `SECURITY DEFINER` | `SECURITY INVOKER` |
+| Tentava bypass de RLS | Confia nas políticas existentes |
+| Bloqueado pelo Supabase | Funciona com as regras |
 
 ## Arquivos a Modificar
 
-Apenas uma migration no banco de dados será criada para atualizar a função.
+Apenas uma migration no banco de dados para recriar a função.
 
