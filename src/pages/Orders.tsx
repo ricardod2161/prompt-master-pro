@@ -4,7 +4,7 @@ import { ptBR } from "date-fns/locale";
 import { 
   Search, Filter, Eye, Clock, Package, User, MapPin, 
   CreditCard, LayoutGrid, List, ChefHat, CheckCircle2, 
-  Truck, XCircle, ShoppingBag, Banknote, Printer, Bell
+  Truck, XCircle, ShoppingBag, Banknote, Printer, Bell, Edit
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useOrders, useUpdateOrderStatus, type Order, type OrderStatus, type OrderChannel } from "@/hooks/useOrders";
+import { useOrders, useUpdateOrderStatus, useUpdatePaymentMethod, type Order, type OrderStatus, type OrderChannel, type PaymentMethod } from "@/hooks/useOrders";
 import { useOrderNotification } from "@/hooks/useOrderNotification";
 import { StatusBadge, ChannelBadge } from "@/components/shared/StatusBadge";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
@@ -264,6 +264,36 @@ function OrderDetailsModal({
   onPrint: (order: Order) => void;
   isUpdating: boolean;
 }) {
+  const [editingPayment, setEditingPayment] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>("pix");
+  const updatePayment = useUpdatePaymentMethod();
+
+  const paymentMethods: { value: PaymentMethod; label: string }[] = [
+    { value: "cash", label: "Dinheiro" },
+    { value: "credit", label: "Crédito" },
+    { value: "debit", label: "Débito" },
+    { value: "pix", label: "Pix" },
+    { value: "voucher", label: "Vale Refeição" },
+  ];
+
+  // Reset editing state when order changes
+  useState(() => {
+    if (order?.order_payments?.[0]) {
+      setSelectedPaymentMethod(order.order_payments[0].method);
+    }
+    setEditingPayment(false);
+  });
+
+  const handleSavePayment = () => {
+    if (!order) return;
+    updatePayment.mutate(
+      { orderId: order.id, newMethod: selectedPaymentMethod },
+      {
+        onSuccess: () => setEditingPayment(false),
+      }
+    );
+  };
+
   if (!order) return null;
 
   // Extract change info from notes if available
@@ -377,29 +407,88 @@ function OrderDetailsModal({
             {/* Payment */}
             {order.order_payments && order.order_payments.length > 0 && (
               <section className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <CreditCard className="h-4 w-4 text-primary" />
-                  <span>Pagamento</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <CreditCard className="h-4 w-4 text-primary" />
+                    <span>Pagamento</span>
+                  </div>
+                  {order.status === "pending" && !editingPayment && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        setSelectedPaymentMethod(order.order_payments?.[0]?.method || "pix");
+                        setEditingPayment(true);
+                      }}
+                    >
+                      <Edit className="h-3.5 w-3.5 mr-1" />
+                      Editar
+                    </Button>
+                  )}
                 </div>
-                <Card className="bg-muted/50 border-muted">
-                  <CardContent className="p-3 sm:p-4 space-y-2">
-                    {order.order_payments.map((payment) => (
-                      <div key={payment.id} className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">{paymentLabels[payment.method] || payment.method}</span>
-                        <span className="font-medium">R$ {payment.amount.toFixed(2)}</span>
-                      </div>
-                    ))}
-                    {changeFor && (
-                      <>
-                        <Separator />
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Troco para</span>
-                          <span className="font-medium text-orange-500">R$ {changeFor}</span>
+                
+                {editingPayment ? (
+                  <Card className="bg-muted/50 border-muted">
+                    <CardContent className="p-3 sm:p-4">
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <Select
+                          value={selectedPaymentMethod}
+                          onValueChange={(v) => setSelectedPaymentMethod(v as PaymentMethod)}
+                        >
+                          <SelectTrigger className="flex-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {paymentMethods.map((m) => (
+                              <SelectItem key={m.value} value={m.value}>
+                                {m.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={handleSavePayment}
+                            disabled={updatePayment.isPending}
+                            className="flex-1 sm:flex-none"
+                          >
+                            Salvar
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEditingPayment(false)}
+                            className="flex-1 sm:flex-none"
+                          >
+                            Cancelar
+                          </Button>
                         </div>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card className="bg-muted/50 border-muted">
+                    <CardContent className="p-3 sm:p-4 space-y-2">
+                      {order.order_payments.map((payment) => (
+                        <div key={payment.id} className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">{paymentLabels[payment.method] || payment.method}</span>
+                          <span className="font-medium">R$ {payment.amount.toFixed(2)}</span>
+                        </div>
+                      ))}
+                      {changeFor && (
+                        <>
+                          <Separator />
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Troco para</span>
+                            <span className="font-medium text-orange-500">R$ {changeFor}</span>
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
               </section>
             )}
             

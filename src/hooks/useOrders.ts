@@ -244,3 +244,35 @@ export function useUpdateKitchenStatus() {
     },
   });
 }
+
+export function useUpdatePaymentMethod() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      orderId,
+      newMethod,
+    }: {
+      orderId: string;
+      newMethod: PaymentMethod;
+    }) => {
+      const { error } = await supabase
+        .from("order_payments")
+        .update({ method: newMethod })
+        .eq("order_id", orderId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      toast({ title: "Forma de pagamento atualizada!" });
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro ao atualizar pagamento",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
