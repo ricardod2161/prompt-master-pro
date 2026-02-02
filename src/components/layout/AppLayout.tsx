@@ -10,6 +10,7 @@ import { SubscriptionBadge } from "@/components/subscription/SubscriptionBadge";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 import { useNotifications } from "@/hooks/useNotifications";
+import { LiveClock } from "./LiveClock";
 
 // Page titles mapping
 const pageTitles: Record<string, string> = {
@@ -84,6 +85,9 @@ export function AppLayout() {
           )}
           
           <div className="flex-1" />
+          
+          {/* Live Clock */}
+          <LiveClock />
           
           {/* Notification Bell */}
           <NotificationBell
