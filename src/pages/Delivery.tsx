@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOrders, type Order } from "@/hooks/useOrders";
-import { useDeliveryDrivers, useCreateDriver, useAssignDriver, useMarkDelivered } from "@/hooks/useDelivery";
+import { useDeliveryDrivers, useCreateDriver, useAssignDriver, useMarkDelivered, useMarkReady } from "@/hooks/useDelivery";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -24,6 +24,7 @@ export default function Delivery() {
   const createDriver = useCreateDriver();
   const assignDriver = useAssignDriver();
   const markDelivered = useMarkDelivered();
+  const markReady = useMarkReady();
 
   const [createDriverOpen, setCreateDriverOpen] = useState(false);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -148,7 +149,8 @@ export default function Delivery() {
               {pendingOrders.map((order, index) => (
                 <OrderCard 
                   key={order.id} 
-                  order={order} 
+                  order={order}
+                  onMarkReady={() => markReady.mutate(order.id)}
                   style={{ animationDelay: `${0.1 * (index + 1)}s` }}
                 />
               ))}
@@ -315,11 +317,13 @@ export default function Delivery() {
 
 function OrderCard({
   order,
+  onMarkReady,
   onAssign,
   onDeliver,
   style,
 }: {
   order: Order;
+  onMarkReady?: () => void;
   onAssign?: () => void;
   onDeliver?: () => void;
   style?: React.CSSProperties;
@@ -376,9 +380,15 @@ function OrderCard({
           )}
         </div>
 
-        <div className="flex justify-between items-center pt-2">
+        <div className="flex flex-wrap justify-between items-center gap-2 pt-2">
           <span className="font-bold text-lg">R$ {order.total_price.toFixed(2)}</span>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {onMarkReady && (
+              <Button size="sm" onClick={onMarkReady} className="gradient-primary text-white hover-lift">
+                <CheckCircle className="h-4 w-4 mr-1" />
+                Pronto
+              </Button>
+            )}
             {onAssign && (
               <Button size="sm" variant="outline" onClick={onAssign} className="hover-lift">
                 <Truck className="h-4 w-4 mr-1" />
