@@ -1121,7 +1121,47 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      whatsapp_settings_public: {
+        Row: {
+          bot_enabled: boolean | null
+          created_at: string | null
+          id: string | null
+          instance_name: string | null
+          system_prompt: string | null
+          unit_id: string | null
+          updated_at: string | null
+          welcome_message: string | null
+        }
+        Insert: {
+          bot_enabled?: boolean | null
+          created_at?: string | null
+          id?: string | null
+          instance_name?: string | null
+          system_prompt?: string | null
+          unit_id?: string | null
+          updated_at?: string | null
+          welcome_message?: string | null
+        }
+        Update: {
+          bot_enabled?: boolean | null
+          created_at?: string | null
+          id?: string | null
+          instance_name?: string | null
+          system_prompt?: string | null
+          unit_id?: string | null
+          updated_at?: string | null
+          welcome_message?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_settings_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: true
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       create_admin_log: {
