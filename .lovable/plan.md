@@ -1,127 +1,118 @@
 
-# Melhorias na Pagina de Login - Mostrar Senha e Erro Traduzido
 
-## Visao Geral
+# Correção Definitiva do Erro de RLS na Criação de Unidades
 
-Serao implementadas duas melhorias na pagina de Login:
-1. Botao de mostrar/ocultar senha em todos os campos de senha
-2. Traducao da mensagem de erro de senha fraca para portugues
+## Problema Identificado
 
----
+A função `create_unit_with_owner` está configurada como `SECURITY DEFINER` e é de propriedade do usuário `postgres` que tem `bypass_rls:true`. No entanto, o RLS ainda está bloqueando as operações porque o Supabase requer que a função explicitamente desabilite a verificação de RLS durante a execução.
 
-## Sobre o Erro
+## Análise Técnica
 
-O erro "Password is known to be weak and easy to guess" ocorre porque o Supabase Auth tem a verificacao HIBP (Have I Been Pwned) ativada, que bloqueia senhas que ja vazaram em brechas de dados. Isso e uma configuracao de seguranca importante.
-
-**Solucao**: Traduzir a mensagem para portugues para melhor experiencia do usuario.
-
----
-
-## Funcionalidades a Implementar
-
-### 1. Botao Mostrar/Ocultar Senha
-
-Adicionar em todos os campos de senha:
-- Campo de senha do Login
-- Campo de senha do Cadastro
-- Campo de confirmar senha do Cadastro
-
-**Comportamento:**
-- Icone de olho (Eye) quando senha oculta
-- Icone de olho riscado (EyeOff) quando senha visivel
-- Toggle entre type="password" e type="text"
-- Estado independente para cada campo
-
-### 2. Traducao de Mensagens de Erro
-
-Criar funcao para traduzir mensagens de erro do Supabase para portugues:
-- "Password is known to be weak..." -> "Esta senha e muito fraca e comum..."
-- Outras mensagens comuns tambem serao traduzidas
-
----
-
-## Modificacoes no Arquivo
-
-### `src/pages/Login.tsx`
-
-**Novos estados:**
-```typescript
-const [showLoginPassword, setShowLoginPassword] = useState(false);
-const [showSignupPassword, setShowSignupPassword] = useState(false);
-const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-```
-
-**Novos imports:**
-```typescript
-import { Eye, EyeOff } from "lucide-react";
-```
-
-**Funcao de traducao:**
-```typescript
-const translateError = (message: string) => {
-  const translations: Record<string, string> = {
-    "Password is known to be weak and easy to guess. Please choose a different one.": 
-      "Esta senha é muito fraca e comum. Por favor, escolha uma senha mais segura.",
-    // outras traducoes...
-  };
-  return translations[message] || message;
-};
-```
-
-**Estrutura do campo com botao:**
 ```text
-+------------------------------------------+
-| [Input de senha............] [Icone Eye] |
-+------------------------------------------+
++------------------------+     +------------------------+
+|   Usuário Autenticado  |---->|  supabase.rpc(...)     |
++------------------------+     +------------------------+
+                                         |
+                                         v
+                               +------------------------+
+                               | create_unit_with_owner |
+                               | SECURITY DEFINER       |
+                               | Owner: postgres        |
+                               +------------------------+
+                                         |
+                                         v
+                               +------------------------+
+                               | INSERT INTO units      |
+                               | RLS ainda ativo!       | <-- PROBLEMA
+                               +------------------------+
+```
+
+## Solução
+
+Recriar a função com `SET LOCAL row_security = off` para garantir que o RLS seja desabilitado durante a execução da função.
+
+---
+
+## Modificação no Banco de Dados
+
+Será criada uma migration para recriar a função:
+
+```sql
+CREATE OR REPLACE FUNCTION public.create_unit_with_owner(
+  _name text,
+  _address text DEFAULT NULL,
+  _phone text DEFAULT NULL,
+  _cnpj text DEFAULT NULL
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _unit_id uuid;
+  _user_id uuid;
+  _user_unit_count int;
+BEGIN
+  -- Desabilitar RLS para esta transação
+  SET LOCAL row_security = off;
+  
+  -- Obter o ID do usuário autenticado
+  _user_id := auth.uid();
+  
+  IF _user_id IS NULL THEN
+    RAISE EXCEPTION 'Usuário não autenticado';
+  END IF;
+  
+  -- Verificar se é a primeira unidade do usuário
+  SELECT COUNT(*) INTO _user_unit_count
+  FROM public.user_units
+  WHERE user_id = _user_id;
+  
+  -- Criar a unidade
+  INSERT INTO public.units (name, address, phone, cnpj)
+  VALUES (_name, _address, _phone, _cnpj)
+  RETURNING id INTO _unit_id;
+  
+  -- Associar usuário à unidade
+  INSERT INTO public.user_units (user_id, unit_id, is_default)
+  VALUES (_user_id, _unit_id, _user_unit_count = 0);
+  
+  -- Se for a primeira unidade, dar role de admin ao usuário
+  IF _user_unit_count = 0 THEN
+    INSERT INTO public.user_roles (user_id, role)
+    VALUES (_user_id, 'admin')
+    ON CONFLICT (user_id, role) DO NOTHING;
+  END IF;
+  
+  RETURN _unit_id;
+END;
+$$;
 ```
 
 ---
 
-## Design do Botao
+## O que muda
 
-- Posicao: Dentro do input, alinhado a direita
-- Icone: Eye (olho aberto) ou EyeOff (olho fechado)
-- Cor: text-muted-foreground com hover:text-foreground
-- Tamanho: h-4 w-4
-- Cursor: pointer
-- Sem fundo, apenas icone
+| Antes | Depois |
+|-------|--------|
+| RLS verificado mesmo com SECURITY DEFINER | RLS desabilitado com SET LOCAL |
+| Erro de violação de política | Operação executada com sucesso |
 
 ---
 
-## Estrutura do Input com Botao
+## Segurança
 
-```typescript
-<div className="relative">
-  <Input
-    type={showPassword ? "text" : "password"}
-    className="pr-10" // padding para o botao
-  />
-  <button
-    type="button"
-    onClick={() => setShowPassword(!showPassword)}
-    className="absolute right-3 top-1/2 -translate-y-1/2"
-  >
-    {showPassword ? <EyeOff /> : <Eye />}
-  </button>
-</div>
-```
+A solução é segura porque:
+
+1. `SET LOCAL` só afeta a transação atual
+2. A função ainda valida que o usuário está autenticado
+3. A função só permite operações específicas (criar unidade + associar usuário)
+4. Não há como um usuário mal-intencionado abusar desta função para fazer outras operações
 
 ---
 
-## Beneficios
+## Arquivos a Modificar
 
-1. **Usabilidade**: Usuario pode verificar se digitou a senha corretamente
-2. **Acessibilidade**: Reducao de erros de digitacao
-3. **UX**: Mensagens de erro em portugues facilitam entendimento
-4. **Seguranca**: Usuario entende porque a senha foi rejeitada
+Apenas uma migration no banco de dados - nenhuma alteração de código necessária.
 
----
-
-## Proximos Passos
-
-1. Adicionar estados para controle de visibilidade das senhas
-2. Importar icones Eye e EyeOff do lucide-react
-3. Criar funcao translateError para traduzir mensagens
-4. Adicionar botoes de toggle em cada campo de senha
-5. Ajustar estilos para o botao ficar dentro do input
-6. Testar em todos os campos de senha
