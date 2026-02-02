@@ -18,7 +18,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Building2, Plus, MapPin, Phone, Loader2, LogOut } from "lucide-react";
+import { Building2, Plus, MapPin, Phone, Loader2, LogOut, RotateCcw } from "lucide-react";
 
 export default function SelectUnit() {
   const navigate = useNavigate();
@@ -83,6 +83,14 @@ export default function SelectUnit() {
     navigate("/");
   };
 
+  const handleReset = async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    await signOut();
+    navigate("/");
+    window.location.reload();
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -109,10 +117,20 @@ export default function SelectUnit() {
               Escolha a unidade que deseja gerenciar
             </p>
           </div>
-          <Button variant="outline" onClick={handleSignOut} className="hover-lift">
-            <LogOut className="w-4 h-4 mr-2" />
-            Sair
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={handleReset} 
+              className="hover-lift text-destructive hover:bg-destructive/10"
+            >
+              <RotateCcw className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Resetar</span>
+            </Button>
+            <Button variant="outline" onClick={handleSignOut} className="hover-lift">
+              <LogOut className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Sair</span>
+            </Button>
+          </div>
         </div>
 
         {/* Units Grid */}
