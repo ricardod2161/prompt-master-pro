@@ -51,39 +51,15 @@ export default function SelectUnit() {
     setCreating(true);
 
     try {
-      // Create the unit
-      const { data: unitData, error: unitError } = await supabase
-        .from("units")
-        .insert({
-          name: newUnitName,
-          address: newUnitAddress || null,
-          phone: newUnitPhone || null,
-          cnpj: newUnitCnpj || null,
-        })
-        .select()
-        .single();
-
-      if (unitError) throw unitError;
-
-      // Associate user with unit
-      const { error: userUnitError } = await supabase.from("user_units").insert({
-        user_id: user.id,
-        unit_id: unitData.id,
-        is_default: units.length === 0,
+      // Use the security definer function to create unit with owner
+      const { data, error } = await supabase.rpc("create_unit_with_owner", {
+        _name: newUnitName,
+        _address: newUnitAddress || null,
+        _phone: newUnitPhone || null,
+        _cnpj: newUnitCnpj || null,
       });
 
-      if (userUnitError) throw userUnitError;
-
-      // Add admin role to user
-      const { error: roleError } = await supabase.from("user_roles").insert({
-        user_id: user.id,
-        role: "admin",
-      });
-
-      // Ignore if role already exists
-      if (roleError && !roleError.message.includes("duplicate")) {
-        throw roleError;
-      }
+      if (error) throw error;
 
       toast.success("Unidade criada com sucesso!");
       setDialogOpen(false);

@@ -1149,6 +1149,15 @@ export type Database = {
         }
         Returns: string
       }
+      create_unit_with_owner: {
+        Args: {
+          _address?: string
+          _cnpj?: string
+          _name: string
+          _phone?: string
+        }
+        Returns: string
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
