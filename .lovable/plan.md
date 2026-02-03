@@ -1,97 +1,111 @@
 
-# Adicionar Senha de Acesso às Configurações do WhatsApp
+# Melhorias na Gestão de Mesas e QR Codes Funcionais
 
-## Objetivo
-Proteger a página de configurações do WhatsApp com uma senha, impedindo que usuários não autorizados alterem as configurações da API, bot e webhook.
+## Problema Identificado
+O QR Code atual **não funciona** porque mostra apenas um ícone decorativo (`<QrCode />` do Lucide) em vez de um QR Code real e escaneável. Os clientes não conseguem escanear para fazer pedidos.
 
 ---
 
 ## Alterações Necessárias
 
-### 1. Banco de Dados
-
-**Adicionar coluna na tabela `whatsapp_settings`:**
-
-```sql
-ALTER TABLE whatsapp_settings 
-ADD COLUMN settings_password TEXT DEFAULT NULL;
+### 1. Instalar Biblioteca de QR Code
+```bash
+npm install qrcode.react
 ```
-
-- Campo opcional (NULL = sem proteção)
-- Armazenado como texto (hash seria ideal, mas para simplicidade usaremos texto)
+Essa biblioteca gera QR Codes reais e escaneáveis.
 
 ---
 
-### 2. Frontend - Hook useWhatsApp.ts
+### 2. Refatorar QRCodeDialog (src/pages/Tables.tsx)
 
-**Atualizar interface `WhatsAppSettings`:**
+**Problemas atuais:**
+- Mostra ícone fake de QR (linhas 514-517)
+- Download gera SVG estático sem QR real
+- Visual básico
+
+**Solução - Novo QRCodeDialog profissional:**
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│            🎯 QR Code - Mesa 1                          │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│          ┌─────────────────────┐                        │
+│          │   ██▀▀▀▀▀▀▀██       │                        │
+│          │   ██ █ █ ███       │  ← QR Code REAL        │
+│          │   ██ ███████       │    (escaneável)        │
+│          │   ██ █ █ ███       │                        │
+│          │   ██▄▄▄▄▄▄▄██       │                        │
+│          └─────────────────────┘                        │
+│                  Mesa 1                                 │
+│          Escaneie para fazer pedido                     │
+│                                                         │
+├─────────────────────────────────────────────────────────┤
+│  🔗 https://app.../order/uuid-mesa                      │
+│                                                         │
+│  [ 📋 Copiar ]  [ 🌐 Abrir ]  [ 📥 Baixar ]  [ 🖨 Print ]│
+└─────────────────────────────────────────────────────────┘
+```
+
+**Recursos novos:**
+- QR Code real usando `qrcode.react`
+- Botão de imprimir ticket com QR
+- Design glassmorphism elegante
+- Download em PNG de alta qualidade
+- Preview visual profissional
+
+---
+
+### 3. Criar Componente de Ticket Imprimível
+
+Novo componente para impressão profissional:
+
+```text
+┌────────────────────┐
+│    🍽️ LOGO         │
+│                    │
+│   ┌──────────┐     │
+│   │  QR CODE │     │
+│   │  REAL    │     │
+│   └──────────┘     │
+│                    │
+│     MESA 1         │
+│                    │
+│  Escaneie e faça   │
+│    seu pedido!     │
+│                    │
+│  ─────────────────  │
+│  restaurante.app   │
+└────────────────────┘
+```
+
+---
+
+### 4. Melhorias Visuais nos Cards de Mesa
+
+**Antes:** Cards simples
+**Depois:** Cards com glassmorphism, animações sutis e indicadores visuais
+
+Melhorias:
+- Gradientes premium nos status
+- Sombras em múltiplas camadas (3D)
+- Animação de pulse sutil em mesas aguardando
+- Ícone de QR mais destacado
+- Hover effects elegantes
+
+---
+
+### 5. Melhorias na Função de Download
+
+**Atual:** Download de SVG fake
+**Novo:** Download de PNG real com QR Code funcional
 
 ```typescript
-export interface WhatsAppSettings {
-  // ... campos existentes
-  settings_password: string | null;  // NOVO
-}
+// Usar canvas para gerar PNG de alta qualidade
+const canvas = document.getElementById('qr-canvas');
+const dataUrl = canvas.toDataURL('image/png');
+// Download automático
 ```
-
----
-
-### 3. Frontend - WhatsAppSettings.tsx
-
-**Adicionar estado e lógica de verificação:**
-
-```text
-Estados novos:
-- settingsPassword (valor atual da senha)
-- isPasswordProtected (se existe senha configurada)
-- isUnlocked (se usuário já desbloqueou)
-- passwordInput (input de verificação)
-```
-
-**Fluxo de acesso:**
-1. Ao carregar a página, verifica se existe `settings_password`
-2. Se existir, exibe tela de desbloqueio com campo de senha
-3. Usuário digita senha correta → acesso liberado
-4. Usuário pode configurar/alterar senha na aba de configurações
-
-**Novo card na aba API ou nova aba "Segurança":**
-
-```text
-Card "Proteção por Senha"
-├── Switch: Ativar proteção por senha
-├── Input: Nova senha (type="password")
-├── Input: Confirmar senha
-└── Botão: Salvar Proteção
-```
-
----
-
-## Interface de Desbloqueio
-
-Quando a página carregar e houver senha configurada:
-
-```text
-┌─────────────────────────────────────────┐
-│     🔒 Configurações Protegidas         │
-│                                         │
-│  Esta página está protegida por senha.  │
-│                                         │
-│  [ ••••••••••••• ]                      │
-│                                         │
-│       [ Desbloquear ]                   │
-└─────────────────────────────────────────┘
-```
-
----
-
-## Fluxo de Configuração
-
-| Cenário | Comportamento |
-|---------|---------------|
-| Sem senha | Acesso direto às configurações |
-| Com senha + não desbloqueado | Exibe tela de desbloqueio |
-| Com senha + desbloqueado | Acesso normal às configurações |
-| Configurar nova senha | Input + confirmação + salvar |
-| Remover senha | Switch OFF + salvar |
 
 ---
 
@@ -99,14 +113,51 @@ Quando a página carregar e houver senha configurada:
 
 | Arquivo | Alteração |
 |---------|-----------|
-| Banco de dados | Adicionar coluna `settings_password` |
-| `src/hooks/useWhatsApp.ts` | Atualizar interface |
-| `src/pages/WhatsAppSettings.tsx` | Adicionar lógica de bloqueio e card de configuração |
+| `package.json` | Adicionar `qrcode.react` |
+| `src/pages/Tables.tsx` | Refatorar QRCodeDialog com QR real, melhorar cards, adicionar impressão |
 
 ---
 
-## Segurança
+## Estrutura do Novo QRCodeDialog
 
-- A senha é verificada no frontend (comparação simples)
-- A proteção é por sessão (não persiste após fechar navegador)
-- Para segurança avançada, poderia ser implementado hash bcrypt no backend
+```typescript
+import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
+
+function QRCodeDialog({ ... }) {
+  // QR Code real usando a biblioteca
+  <QRCodeSVG 
+    value={qrCode}
+    size={200}
+    level="H"          // Alta correção de erro
+    includeMargin={true}
+  />
+  
+  // Canvas oculto para download PNG
+  <QRCodeCanvas
+    id="qr-canvas"
+    value={qrCode}
+    size={400}
+    style={{ display: 'none' }}
+  />
+}
+```
+
+---
+
+## Resultado Esperado
+
+1. ✅ QR Codes funcionais e escaneáveis
+2. ✅ Clientes podem fazer pedidos via celular
+3. ✅ Download em PNG de alta qualidade
+4. ✅ Impressão de tickets profissionais
+5. ✅ Design elegante e responsivo
+6. ✅ Rota `/order/:tableId` funcionando corretamente
+
+---
+
+## Fluxo do Cliente
+
+```text
+Cliente escaneia QR → Abre /order/{tableId} → Vê cardápio → Faz pedido → KDS recebe
+```
+
