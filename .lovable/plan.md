@@ -1,99 +1,110 @@
 
-# Adicionar Botão de Reset Completo
+# Melhorias no System Prompt do WhatsApp Bot
 
 ## Objetivo
-Adicionar um botão "Resetar Tudo" na página de seleção de unidades que faz logout e limpa todos os dados locais do navegador.
+Tornar o bot mais humano mantendo o tom formal, adicionando variações nas respostas e mais empatia nas interações.
 
 ---
 
-## Funcionalidade do Botão
+## Alterações no Arquivo
 
-O botão irá:
-1. Limpar `localStorage` 
-2. Limpar `sessionStorage`
-3. Fazer `signOut()` do Supabase
-4. Redirecionar para a página inicial
+**Arquivo:** `supabase/functions/whatsapp-webhook/index.ts`
+**Função:** `getDefaultSystemPrompt()` (linhas 1811-1926)
 
 ---
 
-## Alterações Técnicas
+## Mudanças Específicas
 
-### Arquivo: `src/pages/SelectUnit.tsx`
+### 1. Adicionar Seção de Variações de Resposta
 
-**1. Adicionar import do ícone:**
-```typescript
-import { Building2, Plus, MapPin, Phone, Loader2, LogOut, RotateCcw } from "lucide-react";
-```
-
-**2. Adicionar função de reset:**
-```typescript
-const handleReset = async () => {
-  // Limpar todos os dados locais
-  localStorage.clear();
-  sessionStorage.clear();
-  
-  // Fazer logout
-  await signOut();
-  
-  // Redirecionar para home
-  navigate("/");
-  
-  // Recarregar para garantir limpeza completa
-  window.location.reload();
-};
-```
-
-**3. Adicionar botão no header (ao lado do botão Sair):**
-```tsx
-<div className="flex gap-2">
-  <Button 
-    variant="outline" 
-    onClick={handleReset} 
-    className="hover-lift text-destructive hover:bg-destructive/10"
-  >
-    <RotateCcw className="w-4 h-4 mr-2" />
-    Resetar
-  </Button>
-  <Button variant="outline" onClick={handleSignOut} className="hover-lift">
-    <LogOut className="w-4 h-4 mr-2" />
-    Sair
-  </Button>
-</div>
-```
-
----
-
-## Layout Final do Header
+Inserir após "🎯 PERSONALIDADE:" uma nova seção:
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│  Selecione uma Unidade              [Resetar] [Sair]           │
-│  Escolha a unidade que deseja gerenciar                        │
-└─────────────────────────────────────────────────────────────────┘
+🔄 VARIAÇÕES (use alternativas para não parecer robótico):
+- Confirmações: "Perfeito!", "Anotado!", "Entendi!", "Certo!", "Beleza!"
+- Compreensão: "Entendo!", "Compreendo!", "Claro!", "Com certeza!"
+- Agradecimentos: "Obrigado!", "Valeu!", "Agradeço!"
+- Transições: "Agora...", "Então...", "Legal, então..."
+- NUNCA repita a mesma expressão duas vezes seguidas
 ```
 
 ---
 
-## Responsividade
+### 2. Adicionar Seção de Empatia
 
-Para mobile, os botões ficarão empilhados ou menores:
-- Em telas pequenas: mostrar apenas ícones (sem texto)
-- Em telas médias/grandes: ícone + texto
+Inserir após as variações:
 
-```tsx
-<Button variant="outline" onClick={handleReset} className="hover-lift text-destructive hover:bg-destructive/10">
-  <RotateCcw className="w-4 h-4 sm:mr-2" />
-  <span className="hidden sm:inline">Resetar</span>
-</Button>
+```text
+💚 EMPATIA (demonstre que entende o cliente):
+- Se cliente está com pressa: "Entendo a pressa! Vou ser rápido."
+- Se cliente está confuso: "Sem problema! Deixa eu explicar melhor."
+- Se cliente muda de ideia: "Claro, sem problema! Podemos ajustar."
+- Se cliente reclama: "Entendo sua frustração. Vou resolver isso."
+- SEMPRE valide o sentimento antes de responder
 ```
 
 ---
 
-## Resumo
+### 3. Atualizar Exemplos de Respostas
 
-| Item | Descrição |
-|------|-----------|
-| Arquivo | `src/pages/SelectUnit.tsx` |
-| Ícone | `RotateCcw` do lucide-react |
-| Ação | `localStorage.clear()` + `sessionStorage.clear()` + `signOut()` + `reload()` |
-| Estilo | Botão destrutivo (vermelho) |
+Substituir a seção "✅ EXEMPLOS DE RESPOSTAS CORRETAS:" por:
+
+```text
+✅ EXEMPLOS DE RESPOSTAS CORRETAS:
+- "Perfeito! Vou mostrar nosso cardápio 📋"
+- "Anotado! O X-Bacon custa R$ 38,90 e vem com hambúrguer, bacon e queijo!"
+- "Entendi! Qual o seu endereço para entrega?"
+- "Certo! Vai precisar de troco? O total ficou R$ 89,80"
+- "Recebi seu áudio! 🎤 Poderia repetir por texto?"
+- "Sem problema! Podemos trocar o item se preferir."
+- "Entendo a pressa! Já estou finalizando seu pedido."
+```
+
+---
+
+### 4. Atualizar Saudação (Etapa 1)
+
+De:
+```text
+Exemplo: "Olá! Bem-vindo! 👋 Com quem eu falo?"
+```
+
+Para:
+```text
+Exemplo: "Olá! Bem-vindo ao nosso restaurante! 👋 Com quem tenho o prazer de falar?"
+```
+
+---
+
+### 5. Atualizar Etapa do Cardápio (Etapa 2)
+
+De:
+```text
+Exemplo: "Prazer, [Nome]! Posso mostrar nosso cardápio ou você já sabe o que deseja?"
+```
+
+Para:
+```text
+Exemplo: "Prazer em te atender, [Nome]! 😊 Posso mostrar nosso cardápio ou você já sabe o que gostaria?"
+```
+
+---
+
+## Resumo das Mudanças
+
+| Área | Antes | Depois |
+|------|-------|--------|
+| Variações | Não existia | 5+ alternativas para cada tipo de resposta |
+| Empatia | Básica | Seção dedicada com exemplos situacionais |
+| Saudação | Genérica | Mais acolhedora |
+| Exemplos | 5 exemplos | 7 exemplos com variações |
+
+---
+
+## Resultado Esperado
+
+O bot irá:
+- Usar diferentes expressões a cada interação
+- Demonstrar compreensão antes de responder
+- Parecer mais natural e menos repetitivo
+- Manter o tom formal e profissional
