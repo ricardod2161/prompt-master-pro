@@ -1045,6 +1045,7 @@ export type Database = {
           created_at: string
           id: string
           instance_name: string | null
+          settings_password: string | null
           system_prompt: string | null
           unit_id: string
           updated_at: string
@@ -1057,6 +1058,7 @@ export type Database = {
           created_at?: string
           id?: string
           instance_name?: string | null
+          settings_password?: string | null
           system_prompt?: string | null
           unit_id: string
           updated_at?: string
@@ -1069,6 +1071,7 @@ export type Database = {
           created_at?: string
           id?: string
           instance_name?: string | null
+          settings_password?: string | null
           system_prompt?: string | null
           unit_id?: string
           updated_at?: string

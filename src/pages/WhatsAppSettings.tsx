@@ -10,19 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   MessageSquare,
   Settings,
   Bot,
-  Wifi,
-  WifiOff,
   Phone,
   User,
   Clock,
@@ -39,6 +29,11 @@ import {
   Zap,
   ExternalLink,
   AlertCircle,
+  Lock,
+  Unlock,
+  Shield,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useUnit } from "@/contexts/UnitContext";
 import {
@@ -76,6 +71,21 @@ export default function WhatsAppSettings() {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [copied, setCopied] = useState(false);
 
+  // Password protection state
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [showPasswordInput, setShowPasswordInput] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  
+  // Password configuration state
+  const [enablePasswordProtection, setEnablePasswordProtection] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const hasPasswordProtection = !!settings?.settings_password;
+
   // Load settings into form
   useEffect(() => {
     if (settings) {
@@ -85,8 +95,72 @@ export default function WhatsAppSettings() {
       setBotEnabled(settings.bot_enabled || false);
       setWelcomeMessage(settings.welcome_message || "");
       setSystemPrompt(settings.system_prompt || "");
+      setEnablePasswordProtection(!!settings.settings_password);
     }
   }, [settings]);
+
+  const handleUnlock = () => {
+    if (passwordInput === settings?.settings_password) {
+      setIsUnlocked(true);
+      setPasswordError("");
+      setPasswordInput("");
+    } else {
+      setPasswordError("Senha incorreta");
+    }
+  };
+
+  const handleSavePasswordSettings = () => {
+    if (enablePasswordProtection) {
+      if (!newPassword) {
+        toast({
+          variant: "destructive",
+          title: "Erro",
+          description: "Digite uma senha para ativar a proteção.",
+        });
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        toast({
+          variant: "destructive",
+          title: "Erro",
+          description: "As senhas não coincidem.",
+        });
+        return;
+      }
+      if (newPassword.length < 4) {
+        toast({
+          variant: "destructive",
+          title: "Erro",
+          description: "A senha deve ter pelo menos 4 caracteres.",
+        });
+        return;
+      }
+    }
+
+    const passwordValue = enablePasswordProtection ? newPassword : null;
+
+    if (settings?.id) {
+      updateSettings.mutate(
+        { id: settings.id, settings_password: passwordValue },
+        {
+          onSuccess: () => {
+            setNewPassword("");
+            setConfirmPassword("");
+          },
+        }
+      );
+    } else {
+      createSettings.mutate(
+        { settings_password: passwordValue },
+        {
+          onSuccess: () => {
+            setNewPassword("");
+            setConfirmPassword("");
+          },
+        }
+      );
+    }
+  };
 
   const handleCopyWebhook = async () => {
     await navigator.clipboard.writeText(WEBHOOK_URL);
@@ -151,6 +225,64 @@ export default function WhatsAppSettings() {
     return (
       <div className="p-4 md:p-6 space-y-6">
         <LoadingSkeleton />
+      </div>
+    );
+  }
+
+  // Lock screen for password protected settings
+  if (hasPasswordProtection && !isUnlocked) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md border shadow-lg">
+          <CardHeader className="text-center pb-2">
+            <div className="mx-auto p-4 bg-primary/10 rounded-full w-fit mb-4">
+              <Lock className="h-8 w-8 text-primary" />
+            </div>
+            <CardTitle className="text-xl">Configurações Protegidas</CardTitle>
+            <CardDescription>
+              Esta página está protegida por senha. Digite a senha para acessar as configurações.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="password-input">Senha</Label>
+              <div className="relative">
+                <Input
+                  id="password-input"
+                  type={showPasswordInput ? "text" : "password"}
+                  placeholder="Digite a senha"
+                  value={passwordInput}
+                  onChange={(e) => {
+                    setPasswordInput(e.target.value);
+                    setPasswordError("");
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
+                  className={passwordError ? "border-destructive" : ""}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                  onClick={() => setShowPasswordInput(!showPasswordInput)}
+                >
+                  {showPasswordInput ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
+              {passwordError && (
+                <p className="text-sm text-destructive">{passwordError}</p>
+              )}
+            </div>
+            <Button onClick={handleUnlock} className="w-full bg-green-600 hover:bg-green-700">
+              <Unlock className="h-4 w-4 mr-2" />
+              Desbloquear
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -250,7 +382,7 @@ export default function WhatsAppSettings() {
 
         {/* Tabs */}
         <Tabs defaultValue="api" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto p-1 bg-muted/50">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto p-1 bg-muted/50">
             <TabsTrigger value="api" className="flex items-center gap-2 py-3 data-[state=active]:bg-background data-[state=active]:shadow-sm">
               <Settings className="h-4 w-4" />
               <span className="hidden sm:inline">API</span>
@@ -266,6 +398,10 @@ export default function WhatsAppSettings() {
             <TabsTrigger value="webhook" className="flex items-center gap-2 py-3 data-[state=active]:bg-background data-[state=active]:shadow-sm">
               <Link className="h-4 w-4" />
               <span className="hidden sm:inline">Webhook</span>
+            </TabsTrigger>
+            <TabsTrigger value="security" className="flex items-center gap-2 py-3 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+              <Shield className="h-4 w-4" />
+              <span className="hidden sm:inline">Segurança</span>
             </TabsTrigger>
           </TabsList>
 
@@ -703,6 +839,155 @@ Sempre confirme os pedidos antes de finalizar.`}
                       </p>
                     </div>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Security Tab */}
+          <TabsContent value="security" className="space-y-6">
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-orange-500/10 rounded-lg">
+                    <Shield className="h-5 w-5 text-orange-500" />
+                  </div>
+                  <div>
+                    <CardTitle>Proteção por Senha</CardTitle>
+                    <CardDescription>
+                      Proteja as configurações do WhatsApp com uma senha de acesso
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between rounded-xl border-2 p-5 transition-colors hover:bg-muted/30">
+                  <div className="space-y-1">
+                    <Label htmlFor="enable-password" className="text-base font-medium">
+                      Ativar Proteção por Senha
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Quando ativado, será necessário digitar uma senha para acessar esta página
+                    </p>
+                  </div>
+                  <Switch
+                    id="enable-password"
+                    checked={enablePasswordProtection}
+                    onCheckedChange={(checked) => {
+                      setEnablePasswordProtection(checked);
+                      if (!checked) {
+                        setNewPassword("");
+                        setConfirmPassword("");
+                      }
+                    }}
+                    className="data-[state=checked]:bg-orange-600"
+                  />
+                </div>
+
+                {enablePasswordProtection && (
+                  <>
+                    <Separator />
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="new-password" className="text-sm font-medium">
+                          {hasPasswordProtection ? "Nova Senha" : "Senha"}
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            id="new-password"
+                            type={showNewPassword ? "text" : "password"}
+                            placeholder="Digite a senha"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            className="pr-10"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                            onClick={() => setShowNewPassword(!showNewPassword)}
+                          >
+                            {showNewPassword ? (
+                              <EyeOff className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <Eye className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Mínimo de 4 caracteres
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="confirm-password" className="text-sm font-medium">
+                          Confirmar Senha
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            id="confirm-password"
+                            type={showConfirmPassword ? "text" : "password"}
+                            placeholder="Confirme a senha"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            className="pr-10"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          >
+                            {showConfirmPassword ? (
+                              <EyeOff className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <Eye className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <Button
+                  onClick={handleSavePasswordSettings}
+                  disabled={createSettings.isPending || updateSettings.isPending}
+                  className="h-11 bg-orange-600 hover:bg-orange-700"
+                >
+                  {(createSettings.isPending || updateSettings.isPending) ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  Salvar Configurações de Segurança
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Security Info */}
+            <Card className="border shadow-sm bg-muted/30">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-blue-500" />
+                  Informações sobre a proteção
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  {[
+                    { title: "Proteção por sessão", desc: "A senha é solicitada cada vez que você acessa esta página" },
+                    { title: "Sem recuperação", desc: "Se esquecer a senha, você precisará acessar o banco de dados para removê-la" },
+                    { title: "Compartilhamento", desc: "Compartilhe a senha apenas com pessoas autorizadas a configurar o WhatsApp" },
+                    { title: "Alteração", desc: "Você pode alterar ou remover a senha a qualquer momento nesta aba" },
+                  ].map((item) => (
+                    <div key={item.title} className="space-y-1">
+                      <p className="text-sm font-medium">{item.title}</p>
+                      <p className="text-xs text-muted-foreground">{item.desc}</p>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
