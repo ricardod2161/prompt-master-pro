@@ -13,6 +13,7 @@ export interface WhatsAppSettings {
   bot_enabled: boolean | null;
   welcome_message: string | null;
   system_prompt: string | null;
+  settings_password: string | null;
   created_at: string;
   updated_at: string;
 }
