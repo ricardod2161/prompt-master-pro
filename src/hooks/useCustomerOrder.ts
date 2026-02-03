@@ -25,6 +25,12 @@ export function useCustomerOrder(tableId: string) {
   const tableQuery = useQuery({
     queryKey: ["public-table", tableId],
     queryFn: async () => {
+      // Validate UUID format first
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(tableId)) {
+        throw new Error("ID de mesa inválido");
+      }
+
       const { data, error } = await supabase
         .from("tables")
         .select(`
@@ -32,12 +38,15 @@ export function useCustomerOrder(tableId: string) {
           unit:units(*)
         `)
         .eq("id", tableId)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
+      if (!data) throw new Error("Mesa não encontrada");
+      
       return data as Tables<"tables"> & { unit: Tables<"units"> };
     },
     enabled: !!tableId,
+    retry: 1,
   });
 
   // Fetch products for the unit
