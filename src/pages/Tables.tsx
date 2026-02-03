@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
 import { 
   QrCode, Plus, Trash2, Eye, Users, Clock, UtensilsCrossed, 
-  Download, Filter, Grid3X3, Copy, ExternalLink, RefreshCw,
-  AlertCircle, Check, Loader2
+  Filter, Grid3X3, RefreshCw, AlertCircle, Check, Loader2,
+  Sparkles
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -16,35 +16,53 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useTables, useCreateTable, useDeleteTable, useUpdateTableStatus, useGenerateQRCode, type Table, type TableStatus } from "@/hooks/useTables";
 import { useOrders } from "@/hooks/useOrders";
+import { useUnit } from "@/contexts/UnitContext";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { TableQRCodeDialog } from "@/components/tables/TableQRCodeDialog";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-// Status configuration
-const statusConfig: Record<TableStatus, { label: string; color: string; bgColor: string; borderColor: string; iconBg: string }> = {
+// Status configuration with premium styling
+const statusConfig: Record<TableStatus, { 
+  label: string; 
+  color: string; 
+  bgColor: string; 
+  borderColor: string; 
+  iconBg: string;
+  gradient: string;
+  shadowColor: string;
+  pulseClass?: string;
+}> = {
   free: { 
     label: "Livre", 
     color: "text-emerald-600 dark:text-emerald-400", 
     bgColor: "bg-emerald-500/10",
-    borderColor: "border-emerald-500/30 hover:border-emerald-500",
-    iconBg: "bg-emerald-500/20"
+    borderColor: "border-emerald-500/30 hover:border-emerald-500/60",
+    iconBg: "bg-emerald-500/20",
+    gradient: "from-emerald-500/5 via-transparent to-emerald-500/10",
+    shadowColor: "shadow-emerald-500/10 hover:shadow-emerald-500/20",
   },
   occupied: { 
     label: "Ocupada", 
     color: "text-blue-600 dark:text-blue-400", 
     bgColor: "bg-blue-500/10",
-    borderColor: "border-blue-500/30 hover:border-blue-500",
-    iconBg: "bg-blue-500/20"
+    borderColor: "border-blue-500/30 hover:border-blue-500/60",
+    iconBg: "bg-blue-500/20",
+    gradient: "from-blue-500/5 via-transparent to-blue-500/10",
+    shadowColor: "shadow-blue-500/10 hover:shadow-blue-500/20",
   },
   pending_order: { 
     label: "Aguardando", 
     color: "text-amber-600 dark:text-amber-400", 
     bgColor: "bg-amber-500/10",
-    borderColor: "border-amber-500/30 hover:border-amber-500",
-    iconBg: "bg-amber-500/20"
+    borderColor: "border-amber-500/30 hover:border-amber-500/60",
+    iconBg: "bg-amber-500/20",
+    gradient: "from-amber-500/5 via-transparent to-amber-500/10",
+    shadowColor: "shadow-amber-500/10 hover:shadow-amber-500/20",
+    pulseClass: "animate-pulse-glow",
   },
 };
 
@@ -111,31 +129,48 @@ function TableCard({
   return (
     <Card
       className={cn(
-        "cursor-pointer transition-all duration-200 border-2 hover:shadow-lg group relative overflow-hidden",
+        "cursor-pointer transition-all duration-300 border-2 group relative overflow-hidden",
+        "hover:scale-[1.02] hover:shadow-xl",
         config.borderColor,
-        config.bgColor,
-        isUpdating && "opacity-50 pointer-events-none"
+        config.shadowColor,
+        "shadow-md",
+        isUpdating && "opacity-50 pointer-events-none",
+        config.pulseClass
       )}
       onClick={onToggleStatus}
     >
+      {/* Gradient overlay */}
+      <div className={cn(
+        "absolute inset-0 bg-gradient-to-br opacity-50 pointer-events-none",
+        config.gradient
+      )} />
+      
+      {/* Top shine effect */}
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+      
       {isUpdating && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/50 z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-background/50 z-10 backdrop-blur-sm">
           <Loader2 className="h-5 w-5 animate-spin text-primary" />
         </div>
       )}
       
-      <CardContent className="p-3 sm:p-4">
+      <CardContent className="p-3 sm:p-4 relative z-10">
         {/* Header */}
         <div className="flex items-start justify-between mb-2 sm:mb-3">
           <div className="min-w-0 flex-1">
-            <h3 className="text-lg sm:text-xl font-bold truncate">Mesa {table.number}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg sm:text-xl font-bold truncate">Mesa {table.number}</h3>
+              {status === "pending_order" && (
+                <Sparkles className="h-4 w-4 text-amber-500 animate-pulse" />
+              )}
+            </div>
             <Badge 
               variant="outline" 
               className={cn(
-                "text-[10px] sm:text-xs mt-1 font-medium",
+                "text-[10px] sm:text-xs mt-1 font-semibold backdrop-blur-sm",
                 config.color, 
                 config.bgColor,
-                "border-current/30"
+                "border-current/40"
               )}
             >
               {config.label}
@@ -144,7 +179,7 @@ function TableCard({
           {status !== "free" && occupiedTime && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
+                <div className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground bg-background/60 backdrop-blur-sm px-2 py-1 rounded-full border border-border/50">
                   <Clock className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                   <span className="hidden xs:inline">{occupiedTime}</span>
                 </div>
@@ -157,7 +192,7 @@ function TableCard({
         {/* Active Order Info */}
         {activeOrder && (
           <div 
-            className="mb-2 sm:mb-3 p-2 rounded-md bg-background/60 backdrop-blur-sm border border-border/50 text-sm"
+            className="mb-2 sm:mb-3 p-2.5 rounded-lg bg-background/70 backdrop-blur-md border border-border/50 text-sm shadow-sm hover:bg-background/80 transition-colors"
             onClick={(e) => {
               e.stopPropagation();
               onViewOrder?.();
@@ -167,15 +202,20 @@ function TableCard({
               <span className="font-semibold text-xs sm:text-sm truncate">
                 Pedido #{activeOrder.order_number}
               </span>
-              <Badge variant="secondary" className="text-[10px] sm:text-xs font-bold text-primary flex-shrink-0">
+              <Badge className="text-[10px] sm:text-xs font-bold bg-primary/10 text-primary hover:bg-primary/20 flex-shrink-0">
                 R$ {activeOrder.total_price.toFixed(2)}
               </Badge>
             </div>
-            <div className="flex items-center justify-between mt-1">
+            <div className="flex items-center justify-between mt-1.5">
               <p className="text-[10px] sm:text-xs text-muted-foreground">
                 {format(new Date(activeOrder.created_at), "HH:mm", { locale: ptBR })}
               </p>
-              <Badge variant="outline" className="text-[10px] capitalize">
+              <Badge variant="outline" className={cn(
+                "text-[10px] capitalize",
+                activeOrder.status === "pending" && "text-amber-500 border-amber-500/50",
+                activeOrder.status === "preparing" && "text-blue-500 border-blue-500/50",
+                activeOrder.status === "ready" && "text-emerald-500 border-emerald-500/50"
+              )}>
                 {activeOrder.status === "pending" ? "Pendente" : 
                  activeOrder.status === "preparing" ? "Preparando" : 
                  activeOrder.status === "ready" ? "Pronto" : activeOrder.status}
@@ -185,23 +225,24 @@ function TableCard({
         )}
 
         {/* Action Buttons */}
-        <div className="flex gap-1.5 sm:gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
+        <div className="flex gap-1.5 sm:gap-2 opacity-90 group-hover:opacity-100 transition-opacity">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 h-8 sm:h-9 text-xs"
+                className="flex-1 h-8 sm:h-9 text-xs bg-background/60 backdrop-blur-sm hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation();
                   onGenerateQR();
                 }}
               >
-                <QrCode className="h-3 w-3 sm:h-3.5 sm:w-3.5 mr-1" />
-                <span className="hidden sm:inline">QR</span>
+                <QrCode className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                <span className="hidden sm:inline">QR Code</span>
+                <span className="sm:hidden">QR</span>
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Gerar QR Code</TooltipContent>
+            <TooltipContent>Gerar QR Code Escaneável</TooltipContent>
           </Tooltip>
           
           {activeOrder && (
@@ -210,7 +251,7 @@ function TableCard({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex-1 h-8 sm:h-9 text-xs"
+                  className="flex-1 h-8 sm:h-9 text-xs bg-background/60 backdrop-blur-sm"
                   onClick={(e) => {
                     e.stopPropagation();
                     onViewOrder?.();
@@ -231,7 +272,7 @@ function TableCard({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 sm:h-9 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    className="h-8 sm:h-9 text-destructive hover:text-destructive hover:bg-destructive/10 bg-background/60 backdrop-blur-sm"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Trash2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
@@ -443,122 +484,6 @@ function CreateTablesDialog({
   );
 }
 
-// ============= QR CODE DIALOG =============
-function QRCodeDialog({
-  open,
-  onOpenChange,
-  tableNumber,
-  qrCode
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  tableNumber: number | null;
-  qrCode: string | null;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    if (qrCode) {
-      navigator.clipboard.writeText(qrCode);
-      setCopied(true);
-      toast({ title: "Link copiado!" });
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleDownload = () => {
-    const svgContent = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 280" width="240" height="280">
-        <rect fill="white" width="240" height="280" rx="12"/>
-        <rect fill="#f8fafc" x="20" y="20" width="200" height="200" rx="8"/>
-        <rect fill="#1e293b" x="40" y="40" width="40" height="40" rx="4"/>
-        <rect fill="#1e293b" x="160" y="40" width="40" height="40" rx="4"/>
-        <rect fill="#1e293b" x="40" y="160" width="40" height="40" rx="4"/>
-        <rect fill="#1e293b" x="100" y="100" width="40" height="40"/>
-        <rect fill="#1e293b" x="60" y="100" width="20" height="20"/>
-        <rect fill="#1e293b" x="160" y="100" width="20" height="20"/>
-        <rect fill="#1e293b" x="100" y="60" width="20" height="20"/>
-        <rect fill="#1e293b" x="100" y="160" width="20" height="20"/>
-        <text x="120" y="248" text-anchor="middle" font-size="16" font-weight="bold" font-family="Arial" fill="#1e293b">Mesa ${tableNumber}</text>
-        <text x="120" y="268" text-anchor="middle" font-size="10" font-family="Arial" fill="#64748b">Escaneie para pedir</text>
-      </svg>
-    `;
-    const blob = new Blob([svgContent], { type: "image/svg+xml" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `mesa-${tableNumber}-qrcode.svg`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast({ title: "QR Code baixado!" });
-  };
-
-  const handleOpenLink = () => {
-    if (qrCode) {
-      window.open(qrCode, "_blank");
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md w-[95vw]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <QrCode className="h-5 w-5 text-primary" />
-            QR Code - Mesa {tableNumber}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          {/* QR Preview */}
-          <div className="p-6 sm:p-8 bg-white rounded-xl flex flex-col items-center justify-center shadow-inner">
-            <div className="w-40 h-40 sm:w-48 sm:h-48 bg-gradient-to-br from-slate-100 to-slate-50 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300">
-              <QrCode className="h-20 w-20 sm:h-24 sm:w-24 text-slate-800 mb-2" />
-              <span className="text-sm font-bold text-slate-800">Mesa {tableNumber}</span>
-            </div>
-          </div>
-
-          {/* Link Input */}
-          <div className="flex gap-2">
-            <Input 
-              value={qrCode || ""} 
-              readOnly 
-              className="flex-1 text-xs sm:text-sm font-mono bg-muted" 
-            />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  onClick={handleCopy}
-                  className={cn(copied && "text-green-500 border-green-500")}
-                >
-                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Copiar Link</TooltipContent>
-            </Tooltip>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="outline" onClick={handleOpenLink} className="h-10">
-              <ExternalLink className="h-4 w-4 mr-2" />
-              Abrir Link
-            </Button>
-            <Button onClick={handleDownload} className="h-10">
-              <Download className="h-4 w-4 mr-2" />
-              Baixar QR
-            </Button>
-          </div>
-
-          <p className="text-xs text-center text-muted-foreground">
-            Imprima e coloque na mesa para seus clientes fazerem pedidos
-          </p>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 // ============= STATUS LEGEND =============
 function StatusLegend() {
@@ -582,6 +507,7 @@ function StatusLegend() {
 export default function Tables() {
   const { data: tables = [], isLoading, refetch } = useTables();
   const { data: orders = [] } = useOrders();
+  const { selectedUnit } = useUnit();
   const createTable = useCreateTable();
   const deleteTable = useDeleteTable();
   const updateTableStatus = useUpdateTableStatus();
@@ -792,11 +718,12 @@ export default function Tables() {
         onCreateBatch={handleCreateBatch}
       />
 
-      <QRCodeDialog
+      <TableQRCodeDialog
         open={qrDialogOpen}
         onOpenChange={setQrDialogOpen}
         tableNumber={selectedTableQR?.number || null}
         qrCode={selectedTableQR?.qr_code || null}
+        restaurantName={selectedUnit?.name || "Restaurante"}
       />
     </div>
   );
