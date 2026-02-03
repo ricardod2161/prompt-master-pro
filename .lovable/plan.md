@@ -1,110 +1,112 @@
 
-# Melhorias no System Prompt do WhatsApp Bot
+# Adicionar Senha de Acesso às Configurações do WhatsApp
 
 ## Objetivo
-Tornar o bot mais humano mantendo o tom formal, adicionando variações nas respostas e mais empatia nas interações.
+Proteger a página de configurações do WhatsApp com uma senha, impedindo que usuários não autorizados alterem as configurações da API, bot e webhook.
 
 ---
 
-## Alterações no Arquivo
+## Alterações Necessárias
 
-**Arquivo:** `supabase/functions/whatsapp-webhook/index.ts`
-**Função:** `getDefaultSystemPrompt()` (linhas 1811-1926)
+### 1. Banco de Dados
+
+**Adicionar coluna na tabela `whatsapp_settings`:**
+
+```sql
+ALTER TABLE whatsapp_settings 
+ADD COLUMN settings_password TEXT DEFAULT NULL;
+```
+
+- Campo opcional (NULL = sem proteção)
+- Armazenado como texto (hash seria ideal, mas para simplicidade usaremos texto)
 
 ---
 
-## Mudanças Específicas
+### 2. Frontend - Hook useWhatsApp.ts
 
-### 1. Adicionar Seção de Variações de Resposta
+**Atualizar interface `WhatsAppSettings`:**
 
-Inserir após "🎯 PERSONALIDADE:" uma nova seção:
-
-```text
-🔄 VARIAÇÕES (use alternativas para não parecer robótico):
-- Confirmações: "Perfeito!", "Anotado!", "Entendi!", "Certo!", "Beleza!"
-- Compreensão: "Entendo!", "Compreendo!", "Claro!", "Com certeza!"
-- Agradecimentos: "Obrigado!", "Valeu!", "Agradeço!"
-- Transições: "Agora...", "Então...", "Legal, então..."
-- NUNCA repita a mesma expressão duas vezes seguidas
+```typescript
+export interface WhatsAppSettings {
+  // ... campos existentes
+  settings_password: string | null;  // NOVO
+}
 ```
 
 ---
 
-### 2. Adicionar Seção de Empatia
+### 3. Frontend - WhatsAppSettings.tsx
 
-Inserir após as variações:
+**Adicionar estado e lógica de verificação:**
 
 ```text
-💚 EMPATIA (demonstre que entende o cliente):
-- Se cliente está com pressa: "Entendo a pressa! Vou ser rápido."
-- Se cliente está confuso: "Sem problema! Deixa eu explicar melhor."
-- Se cliente muda de ideia: "Claro, sem problema! Podemos ajustar."
-- Se cliente reclama: "Entendo sua frustração. Vou resolver isso."
-- SEMPRE valide o sentimento antes de responder
+Estados novos:
+- settingsPassword (valor atual da senha)
+- isPasswordProtected (se existe senha configurada)
+- isUnlocked (se usuário já desbloqueou)
+- passwordInput (input de verificação)
+```
+
+**Fluxo de acesso:**
+1. Ao carregar a página, verifica se existe `settings_password`
+2. Se existir, exibe tela de desbloqueio com campo de senha
+3. Usuário digita senha correta → acesso liberado
+4. Usuário pode configurar/alterar senha na aba de configurações
+
+**Novo card na aba API ou nova aba "Segurança":**
+
+```text
+Card "Proteção por Senha"
+├── Switch: Ativar proteção por senha
+├── Input: Nova senha (type="password")
+├── Input: Confirmar senha
+└── Botão: Salvar Proteção
 ```
 
 ---
 
-### 3. Atualizar Exemplos de Respostas
+## Interface de Desbloqueio
 
-Substituir a seção "✅ EXEMPLOS DE RESPOSTAS CORRETAS:" por:
+Quando a página carregar e houver senha configurada:
 
 ```text
-✅ EXEMPLOS DE RESPOSTAS CORRETAS:
-- "Perfeito! Vou mostrar nosso cardápio 📋"
-- "Anotado! O X-Bacon custa R$ 38,90 e vem com hambúrguer, bacon e queijo!"
-- "Entendi! Qual o seu endereço para entrega?"
-- "Certo! Vai precisar de troco? O total ficou R$ 89,80"
-- "Recebi seu áudio! 🎤 Poderia repetir por texto?"
-- "Sem problema! Podemos trocar o item se preferir."
-- "Entendo a pressa! Já estou finalizando seu pedido."
+┌─────────────────────────────────────────┐
+│     🔒 Configurações Protegidas         │
+│                                         │
+│  Esta página está protegida por senha.  │
+│                                         │
+│  [ ••••••••••••• ]                      │
+│                                         │
+│       [ Desbloquear ]                   │
+└─────────────────────────────────────────┘
 ```
 
 ---
 
-### 4. Atualizar Saudação (Etapa 1)
+## Fluxo de Configuração
 
-De:
-```text
-Exemplo: "Olá! Bem-vindo! 👋 Com quem eu falo?"
-```
-
-Para:
-```text
-Exemplo: "Olá! Bem-vindo ao nosso restaurante! 👋 Com quem tenho o prazer de falar?"
-```
+| Cenário | Comportamento |
+|---------|---------------|
+| Sem senha | Acesso direto às configurações |
+| Com senha + não desbloqueado | Exibe tela de desbloqueio |
+| Com senha + desbloqueado | Acesso normal às configurações |
+| Configurar nova senha | Input + confirmação + salvar |
+| Remover senha | Switch OFF + salvar |
 
 ---
 
-### 5. Atualizar Etapa do Cardápio (Etapa 2)
+## Arquivos a Modificar
 
-De:
-```text
-Exemplo: "Prazer, [Nome]! Posso mostrar nosso cardápio ou você já sabe o que deseja?"
-```
-
-Para:
-```text
-Exemplo: "Prazer em te atender, [Nome]! 😊 Posso mostrar nosso cardápio ou você já sabe o que gostaria?"
-```
+| Arquivo | Alteração |
+|---------|-----------|
+| Banco de dados | Adicionar coluna `settings_password` |
+| `src/hooks/useWhatsApp.ts` | Atualizar interface |
+| `src/pages/WhatsAppSettings.tsx` | Adicionar lógica de bloqueio e card de configuração |
 
 ---
 
-## Resumo das Mudanças
+## Segurança
 
-| Área | Antes | Depois |
-|------|-------|--------|
-| Variações | Não existia | 5+ alternativas para cada tipo de resposta |
-| Empatia | Básica | Seção dedicada com exemplos situacionais |
-| Saudação | Genérica | Mais acolhedora |
-| Exemplos | 5 exemplos | 7 exemplos com variações |
-
----
-
-## Resultado Esperado
-
-O bot irá:
-- Usar diferentes expressões a cada interação
-- Demonstrar compreensão antes de responder
-- Parecer mais natural e menos repetitivo
-- Manter o tom formal e profissional
+- A senha é verificada no frontend (comparação simples)
+- A proteção é por sessão (não persiste após fechar navegador)
+- Para segurança avançada, poderia ser implementado hash bcrypt no backend
