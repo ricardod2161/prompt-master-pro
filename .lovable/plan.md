@@ -1,81 +1,63 @@
-# ✅ Correção do Prompt do WhatsApp Bot - CONCLUÍDO
 
-## Problemas Corrigidos
+# Correção: Pedido de Mesa Não Vai para Cozinha
 
-### 1. ✅ Bot inventando nomes de produtos
-**Solução implementada:**
-- Adicionada regra crítica #1 no prompt: "SEMPRE use os nomes EXATOS do cardápio"
-- Implementada função `normalizeProductName()` para normalizar buscas
-- Implementada função `findBestProductMatch()` com 4 estratégias de matching:
-  1. Match exato normalizado
-  2. Contém/está contido
-  3. Todas palavras significativas
-  4. Maioria das palavras (≥60%)
+## Problema Identificado
 
-### 2. ✅ Confusão na etapa do troco
-**Solução implementada:**
-- Adicionada regra crítica #2 no prompt: "número = valor de pagamento, NÃO confirmação"
-- Fluxo clarificado: após receber número do troco → mostrar resumo → aguardar confirmação explícita
-- Exemplos práticos no prompt
+O trigger `generate_tracking_token()` que roda ao criar pedidos de mesa usa `gen_random_bytes(16)` para gerar o token de rastreamento. Porém:
 
-### 3. ✅ Busca parcial frágil
-**Solução implementada:**
-- `buscarProduto()` agora usa busca flexível com fallback
-- `confirmarPedido()` usa `findBestProductMatch()` ao invés de `ilike` simples
-- Log detalhado de matches para debugging
+- A função tem `SET search_path TO 'public'`
+- `gen_random_bytes()` está no schema `extensions`
+- Resultado: O PostgreSQL não encontra a função e o INSERT falha
 
-### 4. ✅ Resumo obrigatório antes de confirmação
-**Solução implementada:**
-- Regra crítica #3 no prompt: "NUNCA confirmar sem mostrar resumo"
-- Lista clara de respostas que SÃO e NÃO SÃO confirmação
+**Erro nos logs:**
+```
+function gen_random_bytes(integer) does not exist
+```
 
----
+## Solução
 
-## Arquivos Modificados
+Atualizar a função `generate_tracking_token()` para usar o nome completo `extensions.gen_random_bytes(16)`.
+
+### Migração SQL
+
+```sql
+CREATE OR REPLACE FUNCTION public.generate_tracking_token()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+BEGIN
+  -- Gerar token apenas para pedidos de mesa
+  IF NEW.channel = 'table' AND NEW.tracking_token IS NULL THEN
+    -- Usar schema completo para evitar erro de search_path
+    NEW.tracking_token := encode(extensions.gen_random_bytes(16), 'hex');
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+```
+
+## Arquivos a Modificar
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `supabase/functions/whatsapp-webhook/index.ts` | Adicionadas funções `normalizeProductName()` e `findBestProductMatch()` |
-| `supabase/functions/whatsapp-webhook/index.ts` | `buscarProduto()` com busca flexível |
-| `supabase/functions/whatsapp-webhook/index.ts` | `confirmarPedido()` com matching tolerante |
-| `supabase/functions/whatsapp-webhook/index.ts` | `getDefaultSystemPrompt()` com 3 regras críticas destacadas |
+| **Migração SQL** | Atualizar função `generate_tracking_token()` |
 
----
+## Fluxo Após Correção
 
-## Fluxo Correto Após Correção
-
-```
-Bot: "O total é R$ 34,90. Vai precisar de troco? Para quanto vai pagar?"
-Cliente: "50"
-
-Bot: "Perfeito! Troco para R$ 50,00.
-
-📋 *RESUMO DO SEU PEDIDO*
-
-👤 *Cliente:* Ricardo
-📍 *Modalidade:* Entrega
-🏠 *Endereço:* Rua Antônio Caetano, 215, Centro
-
-📦 *Itens:*
-• 1x Prato Feito - R$ 20,00
-• 1x Suco Natural Laranja - R$ 14,90
-
-💰 *Total:* R$ 34,90
-💳 *Pagamento:* Dinheiro
-💵 *Troco para:* R$ 50,00
-💰 *Troco:* R$ 15,10
-
-✅ Posso confirmar o pedido?"
-
-Cliente: "Sim"
-
-[AGORA usa confirmar_pedido com os nomes EXATOS]
+```text
+1. Cliente abre carrinho na mesa
+2. Seleciona forma de pagamento
+3. Clica "Enviar Pedido"
+4. Trigger gera tracking_token com extensions.gen_random_bytes()
+5. Pedido criado com sucesso
+6. Redirecionado para página de acompanhamento
+7. Pedido aparece no KDS da cozinha
 ```
 
----
+## Detalhes Técnicos
 
-## Próximos Passos Sugeridos
+A função `gen_random_bytes` é parte da extensão `pgcrypto`. No Supabase, extensões são instaladas no schema `extensions`. Quando uma função tem `SET search_path TO 'public'` (boa prática de segurança), ela não consegue resolver funções de outros schemas sem qualificação completa.
 
-1. **Testar o bot** com pedidos via WhatsApp para validar as correções
-2. **Verificar logs** para garantir que os produtos estão sendo matched corretamente
-3. **Ajustar prompt personalizado** se o restaurante tiver um configurado
+A solução mais segura é usar o nome totalmente qualificado `extensions.gen_random_bytes()` ao invés de alterar o search_path, mantendo a segurança da função.
