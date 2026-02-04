@@ -550,6 +550,7 @@ export type Database = {
       }
       orders: {
         Row: {
+          change_for: number | null
           channel: Database["public"]["Enums"]["order_channel"]
           created_at: string
           customer_name: string | null
@@ -557,6 +558,7 @@ export type Database = {
           id: string
           notes: string | null
           order_number: number
+          payment_method: string | null
           status: Database["public"]["Enums"]["order_status"] | null
           table_id: string | null
           total_price: number
@@ -565,6 +567,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          change_for?: number | null
           channel: Database["public"]["Enums"]["order_channel"]
           created_at?: string
           customer_name?: string | null
@@ -572,6 +575,7 @@ export type Database = {
           id?: string
           notes?: string | null
           order_number?: number
+          payment_method?: string | null
           status?: Database["public"]["Enums"]["order_status"] | null
           table_id?: string | null
           total_price?: number
@@ -580,6 +584,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          change_for?: number | null
           channel?: Database["public"]["Enums"]["order_channel"]
           created_at?: string
           customer_name?: string | null
@@ -587,6 +592,7 @@ export type Database = {
           id?: string
           notes?: string | null
           order_number?: number
+          payment_method?: string | null
           status?: Database["public"]["Enums"]["order_status"] | null
           table_id?: string | null
           total_price?: number
