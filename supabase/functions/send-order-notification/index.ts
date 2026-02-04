@@ -291,6 +291,10 @@ serve(async (req) => {
     let pixCode: string | null = null;
     if (unitSettings?.pix_key && order.total_price > 0) {
       try {
+        console.log("PIX DEBUG - Chave original:", unitSettings.pix_key);
+        console.log("PIX DEBUG - Tipo detectado:", detectPixKeyType(unitSettings.pix_key));
+        console.log("PIX DEBUG - Chave formatada:", formatPixKey(unitSettings.pix_key));
+        
         pixCode = generatePixCode(
           unitSettings.pix_key,
           unitSettings.pix_merchant_name || unitInfo?.name || "RESTAURANTE",
@@ -298,6 +302,8 @@ serve(async (req) => {
           order.total_price,
           `PED${order.order_number}`
         );
+        
+        console.log("PIX DEBUG - Código gerado:", pixCode);
       } catch (e) {
         console.error("Error generating Pix code:", e);
       }
