@@ -1,241 +1,130 @@
 
 # Plano de Comercialização e Aplicativo Instalável
 
-## 1. Resumo Executivo
-
-O RestaurantOS está **90% pronto** para comercialização. Identifiquei alguns ajustes de segurança críticos e melhorias necessárias antes do lançamento. Após isso, implementaremos o PWA (app instalável) e prepararemos para a Play Store.
+## Status: ✅ IMPLEMENTADO
 
 ---
 
-## 2. Análise de Prontidão Comercial
+## Implementações Concluídas
 
-### Pontos Fortes (O que já está funcionando)
+### ✅ Fase 1: Segurança
+- [x] Adicionada coluna `tracking_token` para rastreamento seguro de pedidos
+- [x] Trigger automático para gerar tokens em pedidos de mesa
+- [x] Função `is_valid_order_access()` para validação de acesso
+- [x] Política RLS restritiva para update de mesas
+- [x] Limite de 5 unidades por usuário (trigger `check_unit_limit`)
 
-| Módulo | Status | Observação |
-|--------|--------|------------|
-| PDV (Ponto de Venda) | OK | Completo e funcional |
-| KDS (Cozinha) | OK | Fluxo de preparo operacional |
-| Cardápio Digital + QR Code | OK | Pedidos via mesa funcionando |
-| Sistema de Assinaturas | OK | 3 planos Stripe integrados |
-| WhatsApp Bot | OK | Notificações configuradas |
-| Dashboard Analytics | OK | Métricas em tempo real |
-| Controle de Caixa | OK | Abertura/fechamento |
-| Delivery | OK | Gestão de entregadores |
-| Estoque | OK | Controle de produtos |
-| Multi-unidade | OK | Suporte a múltiplas lojas |
+### ✅ Fase 2: Compliance
+- [x] Página `/privacy` - Política de Privacidade (LGPD)
+- [x] Página `/terms` - Termos de Uso
+- [x] Meta tags OG atualizadas no index.html
+- [x] Meta tags Twitter Card
+- [x] Tags PWA (theme-color, apple-mobile-web-app)
 
-### Problemas de Segurança a Corrigir
+### ✅ Fase 3: PWA
+- [x] `vite-plugin-pwa` instalado e configurado
+- [x] Manifest com nome, descrição, cores
+- [x] Service Worker com cache de API Supabase
+- [x] Ícones: `pwa-512x512.png`, `apple-touch-icon.png`
+- [x] Página `/install` com instruções para Android, iOS e Desktop
 
-**Críticos (Bloqueia Comercialização)**:
-
-1. **Dados de pedidos públicos** - Clientes podem ver pedidos de outras pessoas
-   - Tabela `orders` permite SELECT público com dados sensíveis (telefones, nomes)
-   - **Solução**: Restringir acesso apenas a usuários autenticados da unidade
-
-2. **Qualquer pessoa pode criar pedidos falsos** - Sem validação no QR Code
-   - **Solução**: Implementar validação de sessão/token para pedidos
-
-3. **Mesas podem ser manipuladas** - Status pode ser alterado por qualquer um
-   - **Solução**: Restringir UPDATE apenas para sessões de pedido válidas
-
-**Médios (Recomendado antes do lançamento)**:
-
-4. **Credenciais WhatsApp expostas** - View pública pode mostrar tokens
-5. **Criação ilimitada de unidades** - Usuários podem criar muitas unidades
-
-### Melhorias de UX Recomendadas
-
-1. **Meta tags incompletas** - OG tags ainda com valores padrão do Lovable
-2. **Política de privacidade** - Necessária para LGPD e Play Store
-3. **Termos de uso** - Exigido para comercialização
+### ✅ Fase 4: Capacitor
+- [x] Dependências instaladas: @capacitor/core, @capacitor/cli, @capacitor/android, @capacitor/ios
+- [x] `capacitor.config.ts` configurado com:
+  - appId: `app.lovable.faae96baaf6c4264be661a79bc2fe650`
+  - appName: `RestaurantOS`
+  - Hot-reload via sandbox URL
 
 ---
 
-## 3. Transformação em App Instalável (PWA)
+## Próximos Passos do Usuário
 
-### O que será implementado
+### Para PWA (Imediato):
+1. **Publicar o app** clicando em "Publish"
+2. **Testar instalação** acessando pelo celular e seguindo instruções em `/install`
 
-```text
-+-------------------+     +------------------+     +------------------+
-|   NAVEGADOR       | --> |   INSTALAÇÃO     | --> |   APP NATIVO     |
-|                   |     |   (PWA)          |     |   (Aparência)    |
-+-------------------+     +------------------+     +------------------+
-|  Acessa pelo URL  |     |  Add to Home     |     |  Ícone na tela   |
-|  restaurantos.app |     |  Screen prompt   |     |  Abre fullscreen |
-|                   |     |  Works offline   |     |  Splash screen   |
-+-------------------+     +------------------+     +------------------+
+### Para Play Store:
+1. **Criar conta** Google Play Developer ($25 único): https://play.google.com/console
+2. **Exportar para GitHub** via botão "Export to GitHub"
+3. **Clonar e instalar dependências**:
+   ```bash
+   git clone <seu-repo>
+   cd <seu-repo>
+   npm install
+   ```
+4. **Adicionar plataforma Android**:
+   ```bash
+   npx cap add android
+   ```
+5. **Build e sincronizar**:
+   ```bash
+   npm run build
+   npx cap sync
+   ```
+6. **Abrir no Android Studio**:
+   ```bash
+   npx cap open android
+   ```
+7. **Gerar AAB assinado**: Build → Generate Signed Bundle/APK
+8. **Submeter para revisão** no Google Play Console
+
+### Assets Necessários para Play Store:
+| Item | Tamanho | Status |
+|------|---------|--------|
+| Ícone hi-res | 512x512 | ✅ `/public/pwa-512x512.png` |
+| Feature graphic | 1024x500 | ⏳ Criar |
+| Screenshots celular | 1080x1920 | ⏳ Capturar |
+| Screenshots tablet | 1200x1920 | ⏳ Capturar |
+| Descrição curta | 80 chars | ⏳ Redigir |
+| Descrição longa | 4000 chars | ⏳ Redigir |
+| Política de Privacidade | URL | ✅ `/privacy` |
+
+---
+
+## Arquivos Criados/Modificados
+
 ```
-
-### Componentes PWA
-
-1. **Manifest.json** - Define nome, ícones, cores do app
-2. **Service Worker** - Cache para funcionamento offline
-3. **Ícones** - Múltiplos tamanhos para iOS/Android
-4. **Splash screens** - Tela de carregamento personalizada
-5. **Página /install** - Guia de instalação para usuários
-
-### Configuração Técnica
-
-```text
-vite.config.ts
-├── vite-plugin-pwa (nova dependência)
-├── manifest configuration
-├── service worker registration
-└── workbox caching strategies
-
 public/
-├── pwa-192x192.png
-├── pwa-512x512.png
-├── apple-touch-icon.png
-└── maskable-icon.png
+├── pwa-512x512.png          (novo)
+├── apple-touch-icon.png     (novo)
 
 src/pages/
-└── Install.tsx (nova página de instalação)
+├── Privacy.tsx              (novo)
+├── Terms.tsx                (novo)
+├── Install.tsx              (novo)
+
+capacitor.config.ts          (novo)
+vite.config.ts               (atualizado - PWA plugin)
+index.html                   (atualizado - meta tags)
+src/App.tsx                  (atualizado - rotas)
 ```
 
 ---
 
-## 4. Preparação para Play Store (Capacitor)
+## Configuração Final
 
-### Requisitos da Google Play
-
-| Requisito | Status | Ação |
-|-----------|--------|------|
-| APK/AAB assinado | Pendente | Capacitor build |
-| Política de Privacidade | Pendente | Criar página |
-| Ícone 512x512 | Pendente | Criar asset |
-| Screenshots | Pendente | Capturar do app |
-| Descrição da loja | Pendente | Redigir textos |
-| Classificação etária | Pendente | Formulário Google |
-
-### Arquitetura Capacitor
-
-```text
-RestaurantOS/
-├── src/                    # Código React existente
-├── public/                 # Assets PWA
-├── capacitor.config.ts     # Configuração Capacitor
-├── android/                # Projeto Android Studio
-│   ├── app/
-│   │   ├── src/main/
-│   │   │   ├── AndroidManifest.xml
-│   │   │   └── res/        # Ícones Android
-│   │   └── build.gradle
-│   └── ...
-└── ios/                    # Projeto Xcode (opcional)
-```
-
-### Dependências a Instalar
-
-- @capacitor/core
-- @capacitor/cli
-- @capacitor/android
-- @capacitor/ios (opcional)
-
----
-
-## 5. Etapas de Implementação
-
-### Fase 1: Segurança (Prioridade Máxima)
-1. Corrigir RLS da tabela `orders` - restringir SELECT
-2. Adicionar validação de sessão para pedidos QR Code
-3. Proteger UPDATE da tabela `tables`
-4. Verificar view `whatsapp_settings_public`
-
-### Fase 2: Compliance
-5. Criar página de Política de Privacidade
-6. Criar página de Termos de Uso
-7. Atualizar meta tags do index.html
-
-### Fase 3: PWA
-8. Instalar e configurar vite-plugin-pwa
-9. Criar ícones em múltiplos tamanhos
-10. Configurar manifest.json
-11. Implementar service worker
-12. Criar página /install com instruções
-
-### Fase 4: Capacitor (Para Play Store)
-13. Instalar dependências Capacitor
-14. Configurar capacitor.config.ts
-15. Gerar projeto Android
-16. Criar assets para a loja
-17. Build e testes locais
-
----
-
-## 6. Próximos Passos (Ação do Usuário)
-
-Após a implementação, você precisará:
-
-1. **Para PWA**: Publicar o app e testar instalação no celular
-2. **Para Play Store**:
-   - Criar conta Google Play Developer ($25 único)
-   - Exportar projeto para GitHub
-   - Rodar `npm install` localmente
-   - Executar `npx cap add android`
-   - Abrir no Android Studio
-   - Gerar AAB assinado
-   - Submeter para revisão
-
----
-
-## 7. Seção Técnica
-
-### Políticas RLS Propostas
-
-```sql
--- Restringir orders para usuários autenticados da unidade
-DROP POLICY IF EXISTS "Public can read orders" ON public.orders;
-CREATE POLICY "Unit members can view orders"
-ON public.orders FOR SELECT
-USING (
-  has_unit_access(auth.uid(), unit_id) 
-  OR id = (SELECT order_id FROM current_order_session())
-);
-
--- Pedidos públicos apenas para rastreamento por ID específico
-CREATE POLICY "Public can track own order"
-ON public.orders FOR SELECT
-TO public
-USING (
-  id::text = current_setting('app.current_order_id', true)
-);
-```
-
-### Configuração PWA (vite.config.ts)
-
+### vite.config.ts (PWA)
 ```typescript
-import { VitePWA } from 'vite-plugin-pwa'
-
-export default defineConfig({
-  plugins: [
-    VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'robots.txt'],
-      manifest: {
-        name: 'RestaurantOS',
-        short_name: 'RestaurantOS',
-        description: 'Sistema de Gestão para Restaurantes',
-        theme_color: '#000000',
-        background_color: '#000000',
-        display: 'standalone',
-        icons: [...]
-      }
-    })
-  ]
+VitePWA({
+  registerType: "autoUpdate",
+  manifest: {
+    name: "RestaurantOS",
+    short_name: "RestaurantOS",
+    display: "standalone",
+    theme_color: "#000000"
+  }
 })
 ```
 
-### Capacitor Config
-
+### capacitor.config.ts
 ```typescript
-const config: CapacitorConfig = {
-  appId: 'com.restaurantos.app',
+{
+  appId: 'app.lovable.faae96baaf6c4264be661a79bc2fe650',
   appName: 'RestaurantOS',
   webDir: 'dist',
   server: {
-    androidScheme: 'https'
+    url: 'https://faae96ba-af6c-4264-be66-1a79bc2fe650.lovableproject.com?forceHideBadge=true',
+    cleartext: true
   }
-};
+}
 ```
-

@@ -33,6 +33,9 @@ import SubscriptionSuccess from "./pages/SubscriptionSuccess";
 import Admin from "./pages/Admin";
 import OrderTracking from "./pages/OrderTracking";
 import NotFound from "./pages/NotFound";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
+import Install from "./pages/Install";
 
 const queryClient = new QueryClient();
 
@@ -61,6 +64,9 @@ const App = () => (
                 <Route path="/order/:tableId" element={<CustomerOrder />} />
                 <Route path="/track/:orderId" element={<OrderTracking />} />
                 <Route path="/subscription-success" element={<SubscriptionSuccess />} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/terms" element={<Terms />} />
+                <Route path="/install" element={<Install />} />
 
                 {/* Protected routes with layout */}
                 <Route element={<AppLayout />}>
