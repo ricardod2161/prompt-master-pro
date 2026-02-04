@@ -166,6 +166,29 @@ export default function OrderTracking() {
     }).format(value);
   }, []);
 
+  // Format Pix key for display (CPF, CNPJ, phone, email, or random)
+  const formatPixKey = useCallback((key: string) => {
+    const cleanKey = key.replace(/\D/g, "");
+    
+    // CPF: 11 digits
+    if (cleanKey.length === 11 && /^\d+$/.test(cleanKey)) {
+      return cleanKey.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+    }
+    
+    // CNPJ: 14 digits
+    if (cleanKey.length === 14 && /^\d+$/.test(cleanKey)) {
+      return cleanKey.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+    }
+    
+    // Phone: starts with +55 or has 10-11 digits
+    if (/^\+?55\d{10,11}$/.test(key.replace(/\D/g, "")) || (cleanKey.length >= 10 && cleanKey.length <= 11)) {
+      return key;
+    }
+    
+    // Email or EVP (random key) - return as-is
+    return key;
+  }, []);
+
   // Loading
   if (isLoading) {
     return <LoadingSkeleton />;
@@ -305,26 +328,24 @@ export default function OrderTracking() {
 
         {/* Pix Payment Section */}
         {pixCode && !isCancelled && (
-          <Card className="border-border/50 overflow-hidden">
-            <div className="bg-gradient-to-r from-emerald-500/10 to-emerald-500/5 p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <QrCode className="h-5 w-5 text-emerald-600" />
-                <h3 className="font-bold text-emerald-700 dark:text-emerald-400">
-                  Pagamento via Pix
-                </h3>
+          <Card className="border-2 border-emerald-500/30 overflow-hidden shadow-lg">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 p-4 text-white">
+              <div className="flex items-center justify-center gap-2">
+                <div className="p-2 bg-white/20 rounded-full">
+                  <QrCode className="h-6 w-6" />
+                </div>
+                <h3 className="text-xl font-bold">PAGUE COM PIX</h3>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Escaneie o QR Code ou copie o código
-              </p>
             </div>
 
-            <CardContent className="pt-6 space-y-4">
+            <CardContent className="pt-6 space-y-5">
               {/* QR Code */}
               <div className="flex justify-center">
-                <div className="p-4 bg-white rounded-2xl shadow-sm">
+                <div className="p-4 bg-white rounded-2xl shadow-md border-2 border-emerald-100">
                   <QRCodeSVG
                     value={pixCode}
-                    size={180}
+                    size={200}
                     level="M"
                     includeMargin={false}
                   />
@@ -332,28 +353,73 @@ export default function OrderTracking() {
               </div>
 
               {/* Total */}
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground">Valor a pagar</p>
-                <p className="text-3xl font-black text-primary">
+              <div className="text-center py-2">
+                <p className="text-sm text-muted-foreground mb-1">Valor a pagar</p>
+                <p className="text-4xl font-black text-emerald-600">
                   {formatCurrency(order.total_price)}
                 </p>
               </div>
 
-              {/* Copy button */}
+              {/* Pix Copia e Cola Section */}
+              <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-xl p-4 border border-emerald-200 dark:border-emerald-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <Copy className="h-4 w-4 text-emerald-600" />
+                  <span className="font-semibold text-emerald-700 dark:text-emerald-400 text-sm">
+                    PIX COPIA E COLA
+                  </span>
+                </div>
+                
+                {/* Clickable code area */}
+                <button
+                  onClick={handleCopyPix}
+                  className="w-full p-4 bg-white dark:bg-background rounded-lg border-2 border-dashed border-emerald-300 dark:border-emerald-700 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 transition-all active:scale-[0.99] group"
+                >
+                  <div className="max-h-24 overflow-y-auto">
+                    <p className="text-xs font-mono text-muted-foreground break-all text-left leading-relaxed">
+                      {pixCode}
+                    </p>
+                  </div>
+                  <div className="mt-3 flex items-center justify-center gap-2 text-emerald-600 font-medium">
+                    <Copy className="h-4 w-4 group-hover:animate-pulse" />
+                    <span className="text-sm">Toque para copiar</span>
+                  </div>
+                </button>
+              </div>
+
+              {/* Main copy button */}
               <Button
                 onClick={handleCopyPix}
-                className="w-full h-12 rounded-full bg-emerald-600 hover:bg-emerald-700"
+                className="w-full h-14 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-lg font-semibold shadow-lg shadow-emerald-500/25"
               >
-                <Copy className="h-4 w-4 mr-2" />
+                <Copy className="h-5 w-5 mr-2" />
                 Copiar código Pix
               </Button>
 
-              {/* Pix code preview (truncated) */}
-              <div className="p-3 bg-muted/50 rounded-lg">
-                <p className="text-xs text-muted-foreground text-center font-mono break-all line-clamp-2">
-                  {pixCode}
+              {/* Beneficiary info */}
+              <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                  Dados do beneficiário
                 </p>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Nome:</span>
+                  <span className="text-sm font-medium">
+                    {unitSettings?.pix_merchant_name || unitInfo?.name || "RESTAURANTE"}
+                  </span>
+                </div>
+                {unitSettings?.pix_key && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Chave:</span>
+                    <span className="text-sm font-mono">
+                      {formatPixKey(unitSettings.pix_key)}
+                    </span>
+                  </div>
+                )}
               </div>
+
+              {/* Instructions */}
+              <p className="text-xs text-center text-muted-foreground">
+                Abra o app do seu banco, escolha Pix e cole o código ou escaneie o QR Code
+              </p>
             </CardContent>
           </Card>
         )}
