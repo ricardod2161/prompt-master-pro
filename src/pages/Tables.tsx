@@ -83,16 +83,16 @@ function TableMetrics({ tables }: { tables: Table[] }) {
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       {metricsData.map((metric) => (
         <Card key={metric.label} className="border-border/50 hover:shadow-md transition-shadow">
-          <CardContent className="p-3 sm:p-4 flex items-center gap-3">
-            <div className={cn("p-2 sm:p-2.5 rounded-lg", metric.bgColor, metric.color)}>
-              <metric.icon className="h-4 w-4 sm:h-5 sm:w-5" />
+          <CardContent className="p-4 sm:p-5 flex items-center gap-3">
+            <div className={cn("p-2.5 sm:p-3 rounded-xl", metric.bgColor, metric.color)}>
+              <metric.icon className="h-5 w-5 sm:h-6 sm:w-6" />
             </div>
             <div className="min-w-0">
-              <p className="text-xl sm:text-2xl font-bold">{metric.value}</p>
-              <p className="text-xs text-muted-foreground truncate">{metric.label}</p>
+              <p className="text-2xl sm:text-3xl font-bold">{metric.value}</p>
+              <p className="text-sm text-muted-foreground truncate">{metric.label}</p>
             </div>
           </CardContent>
         </Card>
@@ -154,20 +154,20 @@ function TableCard({
         </div>
       )}
       
-      <CardContent className="p-3 sm:p-4 relative z-10">
+      <CardContent className="p-4 sm:p-5 relative z-10">
         {/* Header */}
-        <div className="flex items-start justify-between mb-2 sm:mb-3">
+        <div className="flex items-start justify-between mb-3 sm:mb-4">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h3 className="text-lg sm:text-xl font-bold truncate">Mesa {table.number}</h3>
+              <h3 className="text-xl sm:text-2xl font-bold truncate">Mesa {table.number}</h3>
               {status === "pending_order" && (
-                <Sparkles className="h-4 w-4 text-amber-500 animate-pulse" />
+                <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500 animate-pulse" />
               )}
             </div>
             <Badge 
               variant="outline" 
               className={cn(
-                "text-[10px] sm:text-xs mt-1 font-semibold backdrop-blur-sm",
+                "text-xs sm:text-sm mt-1.5 font-semibold backdrop-blur-sm",
                 config.color, 
                 config.bgColor,
                 "border-current/40"
@@ -179,8 +179,8 @@ function TableCard({
           {status !== "free" && occupiedTime && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground bg-background/60 backdrop-blur-sm px-2 py-1 rounded-full border border-border/50">
-                  <Clock className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-background/60 backdrop-blur-sm px-2.5 py-1.5 rounded-full border border-border/50">
+                  <Clock className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                   <span className="hidden xs:inline">{occupiedTime}</span>
                 </div>
               </TooltipTrigger>
@@ -192,26 +192,26 @@ function TableCard({
         {/* Active Order Info */}
         {activeOrder && (
           <div 
-            className="mb-2 sm:mb-3 p-2.5 rounded-lg bg-background/70 backdrop-blur-md border border-border/50 text-sm shadow-sm hover:bg-background/80 transition-colors"
+            className="mb-3 sm:mb-4 p-3 sm:p-3.5 rounded-xl bg-background/70 backdrop-blur-md border border-border/50 shadow-sm hover:bg-background/80 transition-colors"
             onClick={(e) => {
               e.stopPropagation();
               onViewOrder?.();
             }}
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold text-xs sm:text-sm truncate">
+              <span className="font-semibold text-sm truncate">
                 Pedido #{activeOrder.order_number}
               </span>
-              <Badge className="text-[10px] sm:text-xs font-bold bg-primary/10 text-primary hover:bg-primary/20 flex-shrink-0">
+              <Badge className="text-xs sm:text-sm font-bold bg-primary/10 text-primary hover:bg-primary/20 flex-shrink-0">
                 R$ {activeOrder.total_price.toFixed(2)}
               </Badge>
             </div>
-            <div className="flex items-center justify-between mt-1.5">
-              <p className="text-[10px] sm:text-xs text-muted-foreground">
+            <div className="flex items-center justify-between mt-2">
+              <p className="text-xs text-muted-foreground">
                 {format(new Date(activeOrder.created_at), "HH:mm", { locale: ptBR })}
               </p>
               <Badge variant="outline" className={cn(
-                "text-[10px] capitalize",
+                "text-xs capitalize",
                 activeOrder.status === "pending" && "text-amber-500 border-amber-500/50",
                 activeOrder.status === "preparing" && "text-blue-500 border-blue-500/50",
                 activeOrder.status === "ready" && "text-emerald-500 border-emerald-500/50"
@@ -225,19 +225,19 @@ function TableCard({
         )}
 
         {/* Action Buttons */}
-        <div className="flex gap-1.5 sm:gap-2 opacity-90 group-hover:opacity-100 transition-opacity">
+        <div className="flex gap-2 sm:gap-2.5 opacity-90 group-hover:opacity-100 transition-opacity">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 h-8 sm:h-9 text-xs bg-background/60 backdrop-blur-sm hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors"
+                className="flex-1 h-9 sm:h-10 text-xs sm:text-sm bg-background/60 backdrop-blur-sm hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation();
                   onGenerateQR();
                 }}
               >
-                <QrCode className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                <QrCode className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5" />
                 <span className="hidden sm:inline">QR Code</span>
                 <span className="sm:hidden">QR</span>
               </Button>
@@ -251,13 +251,13 @@ function TableCard({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex-1 h-8 sm:h-9 text-xs bg-background/60 backdrop-blur-sm"
+                  className="flex-1 h-9 sm:h-10 text-xs sm:text-sm bg-background/60 backdrop-blur-sm"
                   onClick={(e) => {
                     e.stopPropagation();
                     onViewOrder?.();
                   }}
                 >
-                  <Eye className="h-3 w-3 sm:h-3.5 sm:w-3.5 mr-1" />
+                  <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5" />
                   <span className="hidden sm:inline">Ver</span>
                 </Button>
               </TooltipTrigger>
@@ -272,10 +272,10 @@ function TableCard({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 sm:h-9 text-destructive hover:text-destructive hover:bg-destructive/10 bg-background/60 backdrop-blur-sm"
+                    className="h-9 sm:h-10 text-destructive hover:text-destructive hover:bg-destructive/10 bg-background/60 backdrop-blur-sm"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <Trash2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                    <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </Button>
                 </AlertDialogTrigger>
               </TooltipTrigger>
@@ -684,7 +684,7 @@ export default function Tables() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5">
             {filteredTables.map((table) => (
               <TableCard
                 key={table.id}
