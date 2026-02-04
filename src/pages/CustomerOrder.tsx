@@ -836,6 +836,8 @@ export default function CustomerOrder() {
         ordersCount={ordersCount}
         itemsCount={billItemsCount}
         tableNumber={table.number}
+        tableId={table.id}
+        unitId={table.unit_id}
         onCloseBill={closeBill}
         closingBill={closingBill}
         billClosed={billClosed}

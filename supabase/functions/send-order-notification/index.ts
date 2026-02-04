@@ -28,11 +28,22 @@ interface BillData {
   customerPhone: string;
 }
 
+interface PartialPaymentData {
+  totalAmount: number;
+  paidAmount: number;
+  totalPaid: number;
+  remainingBalance: number;
+  customerName: string;
+  customerPhone: string;
+  splitType: string;
+  paymentsCount: number;
+}
+
 interface NotificationRequest {
   orderId: string;
-  status: "ready" | "delivering" | "delivered" | "confirmed" | "cancelled" | "bill_close";
+  status: "ready" | "delivering" | "delivered" | "confirmed" | "cancelled" | "bill_close" | "partial_payment";
   unitId: string;
-  billData?: BillData;
+  billData?: BillData | PartialPaymentData;
 }
 
 interface WhatsAppSettings {
@@ -184,6 +195,16 @@ function generatePixCode(
   payload += crc;
   
   return payload;
+}
+
+// Type guard to check if billData is BillData (has orders property)
+function isBillData(data: BillData | PartialPaymentData | undefined): data is BillData {
+  return data !== undefined && 'orders' in data;
+}
+
+// Type guard for partial payment data
+function isPartialPaymentData(data: BillData | PartialPaymentData | undefined): data is PartialPaymentData {
+  return data !== undefined && 'paidAmount' in data;
 }
 
 serve(async (req) => {
@@ -342,7 +363,7 @@ serve(async (req) => {
     switch (status) {
       case "bill_close":
         // Consolidated bill closing message
-        if (billData) {
+        if (isBillData(billData)) {
           const { orders: billOrders, totalAmount, customerName: billCustomerName, customerPhone: billPhone } = billData;
           
           // Override phone with billData phone
@@ -408,6 +429,107 @@ serve(async (req) => {
           message += `\nAgradecemos a preferência! 💚`;
         } else {
           message = `🧾 *Conta Fechada*\n\nObrigado pela preferência!`;
+        }
+        break;
+
+      case "partial_payment":
+        // Partial payment message
+        if (isPartialPaymentData(billData)) {
+          const { 
+            paidAmount, 
+            totalPaid, 
+            remainingBalance, 
+            customerName: payerName, 
+            customerPhone: payerPhone,
+            splitType,
+            totalAmount: partialTotalAmount,
+            paymentsCount
+          } = billData;
+          
+          // Override phone with payer phone
+          order.customer_phone = payerPhone;
+          
+          // Format currency values
+          const formattedPaid = new Intl.NumberFormat("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }).format(paidAmount);
+          
+          const formattedTotalPaid = new Intl.NumberFormat("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }).format(totalPaid);
+          
+          const formattedRemaining = new Intl.NumberFormat("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }).format(remainingBalance);
+          
+          const formattedTotalBill = new Intl.NumberFormat("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }).format(partialTotalAmount);
+          
+          // Generate Pix code for the paid amount
+          let partialPixCode: string | null = null;
+          if (unitSettings?.pix_key && paidAmount > 0) {
+            try {
+              partialPixCode = generatePixCode(
+                unitSettings.pix_key,
+                unitSettings.pix_merchant_name || unitInfo?.name || "RESTAURANTE",
+                unitSettings.pix_merchant_city || "BRASIL",
+                paidAmount,
+                `PGTO${paymentsCount}`
+              );
+            } catch (e) {
+              console.error("Error generating partial payment Pix code:", e);
+            }
+          }
+          
+          // Get split type label
+          const splitLabel = splitType === "equal" ? "Divisão por pessoas" 
+            : splitType === "by_order" ? "Divisão por pedido" 
+            : "Valor personalizado";
+          
+          if (remainingBalance <= 0.01) {
+            // Bill fully paid
+            message = `🎉 *Conta Totalmente Paga!*\n\n` +
+              `Olá ${payerName}! Você completou o pagamento da Mesa ${tableNumber || ""}.\n\n` +
+              `💰 *Seu pagamento: ${formattedPaid}*\n` +
+              `📋 ${splitLabel}\n\n` +
+              `━━━━━━━━━━━━━━━━\n` +
+              `✅ *Total pago: ${formattedTotalPaid}*\n` +
+              `📊 Conta: ${formattedTotalBill}\n` +
+              `━━━━━━━━━━━━━━━━\n`;
+            
+            if (partialPixCode) {
+              message += `\n📱 *Código Pix (comprovante):*\n\`\`\`${partialPixCode}\`\`\`\n`;
+            }
+            
+            message += `\n🙏 Obrigado pela preferência! Volte sempre! 💚`;
+          } else {
+            // Partial payment - still has remaining balance
+            message = `💳 *Pagamento Parcial - Mesa ${tableNumber || ""}*\n\n` +
+              `Olá ${payerName}! Seu pagamento foi registrado.\n\n` +
+              `💰 *Valor pago: ${formattedPaid}*\n` +
+              `📋 ${splitLabel}\n\n` +
+              `━━━━━━━━━━━━━━━━\n` +
+              `📊 *Status da Conta:*\n` +
+              `• Total: ${formattedTotalBill}\n` +
+              `• Pago: ${formattedTotalPaid}\n` +
+              `• Restante: ${formattedRemaining}\n` +
+              `━━━━━━━━━━━━━━━━\n`;
+            
+            if (partialPixCode) {
+              message += `\n📱 *Pague via Pix:*\n` +
+                `Copie o código abaixo:\n\n` +
+                `\`\`\`${partialPixCode}\`\`\`\n`;
+            }
+            
+            message += `\nObrigado! 💚`;
+          }
+        } else {
+          message = `💳 *Pagamento Registrado*\n\nObrigado!`;
         }
         break;
 
