@@ -538,8 +538,73 @@ async function listarCardapio(supabase: any, unitId: string): Promise<{ type: 'm
   return { type: 'multiple', messages };
 }
 
+// Normalize product name for flexible matching
+function normalizeProductName(nome: string): string {
+  return nome
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // remove accents
+    .replace(/\b(de|do|da|dos|das|com|e|o|a|os|as|um|uma|uns|umas)\b/g, '') // remove prepositions/articles
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Find best matching product using flexible search
+function findBestProductMatch(
+  products: Array<{ id?: string; name: string; price: number; delivery_price: number | null; description?: string | null; category?: { name: string } | null }>,
+  searchName: string
+): typeof products[0] | null {
+  const normalizedSearch = normalizeProductName(searchName);
+  const searchWords = normalizedSearch.split(' ').filter(w => w.length > 2);
+  
+  // Strategy 1: Exact normalized match
+  let match = products.find(p => normalizeProductName(p.name) === normalizedSearch);
+  if (match) return match;
+  
+  // Strategy 2: Normalized name contains search or vice-versa
+  match = products.find(p => {
+    const normalizedName = normalizeProductName(p.name);
+    return normalizedName.includes(normalizedSearch) || normalizedSearch.includes(normalizedName);
+  });
+  if (match) return match;
+  
+  // Strategy 3: All significant words match
+  if (searchWords.length > 0) {
+    match = products.find(p => {
+      const normalizedName = normalizeProductName(p.name);
+      return searchWords.every(word => normalizedName.includes(word));
+    });
+    if (match) return match;
+  }
+  
+  // Strategy 4: Most words match (at least 60%)
+  let bestMatch: typeof products[0] | null = null;
+  let bestScore = 0;
+  
+  for (const product of products) {
+    const normalizedName = normalizeProductName(product.name);
+    const nameWords = normalizedName.split(' ').filter(w => w.length > 2);
+    
+    let matchedWords = 0;
+    for (const searchWord of searchWords) {
+      if (nameWords.some(nameWord => nameWord.includes(searchWord) || searchWord.includes(nameWord))) {
+        matchedWords++;
+      }
+    }
+    
+    const score = searchWords.length > 0 ? matchedWords / searchWords.length : 0;
+    if (score > bestScore && score >= 0.6) {
+      bestScore = score;
+      bestMatch = product;
+    }
+  }
+  
+  return bestMatch;
+}
+
 async function buscarProduto(supabase: any, unitId: string, nome: string): Promise<string> {
-  const { data: products, error } = await supabase
+  // First try direct ilike search
+  const { data: directProducts, error } = await supabase
     .from("products")
     .select(`
       name,
@@ -557,22 +622,52 @@ async function buscarProduto(supabase: any, unitId: string, nome: string): Promi
     return "Erro ao buscar o produto. Por favor, tente novamente.";
   }
 
-  if (!products || products.length === 0) {
+  // If direct search found results, return them
+  if (directProducts && directProducts.length > 0) {
+    let result = `Encontrei ${directProducts.length} produto(s):\n\n`;
+    for (const product of directProducts as Product[]) {
+      const price = product.delivery_price || product.price;
+      result += `🍽️ *${product.name}*\n`;
+      result += `💰 R$ ${price.toFixed(2).replace(".", ",")}\n`;
+      if (product.description) {
+        result += `📝 ${product.description}\n`;
+      }
+      result += "\n";
+    }
+    return result;
+  }
+
+  // Fallback: Get all products and use flexible matching
+  const { data: allProducts } = await supabase
+    .from("products")
+    .select(`
+      name,
+      description,
+      price,
+      delivery_price,
+      category:categories(name)
+    `)
+    .eq("unit_id", unitId)
+    .eq("available", true);
+
+  if (!allProducts || allProducts.length === 0) {
     return `Não encontrei nenhum produto com "${nome}" no nosso cardápio.`;
   }
 
-  let result = `Encontrei ${products.length} produto(s):\n\n`;
-  for (const product of products as Product[]) {
-    const price = product.delivery_price || product.price;
-    result += `🍽️ *${product.name}*\n`;
+  const bestMatch = findBestProductMatch(allProducts as Product[], nome);
+  
+  if (bestMatch) {
+    const price = bestMatch.delivery_price || bestMatch.price;
+    let result = `Encontrei um produto similar:\n\n`;
+    result += `🍽️ *${bestMatch.name}*\n`;
     result += `💰 R$ ${price.toFixed(2).replace(".", ",")}\n`;
-    if (product.description) {
-      result += `📝 ${product.description}\n`;
+    if (bestMatch.description) {
+      result += `📝 ${bestMatch.description}\n`;
     }
-    result += "\n";
+    return result;
   }
 
-  return result;
+  return `Não encontrei nenhum produto com "${nome}" no nosso cardápio. Use a ferramenta listar_cardapio para ver os produtos disponíveis.`;
 }
 
 async function calcularTotal(
@@ -687,32 +782,59 @@ async function confirmarPedido(
   }> = [];
   let totalPrice = 0;
 
-  for (const item of itens) {
-    const { data: products } = await supabase
-      .from("products")
-      .select("id, name, price, delivery_price")
-      .eq("unit_id", unitId)
-      .eq("available", true)
-      .ilike("name", `%${item.nome}%`)
-      .limit(1);
+  // Get all available products for flexible matching
+  const { data: allProducts } = await supabase
+    .from("products")
+    .select("id, name, price, delivery_price")
+    .eq("unit_id", unitId)
+    .eq("available", true);
 
-    if (products && products.length > 0) {
-      const product = products[0] as { id: string; name: string; price: number; delivery_price: number | null };
-      const preco = modalidade === "entrega" ? (product.delivery_price || product.price) : product.price;
+  const itensNaoEncontrados: string[] = [];
+
+  for (const item of itens) {
+    // First try direct ilike search
+    const directMatch = allProducts?.find((p: any) => 
+      p.name.toLowerCase().includes(item.nome.toLowerCase()) ||
+      item.nome.toLowerCase().includes(p.name.toLowerCase())
+    );
+
+    let product = directMatch;
+    
+    // If no direct match, use flexible matching
+    if (!product && allProducts) {
+      product = findBestProductMatch(
+        allProducts as Array<{ id: string; name: string; price: number; delivery_price: number | null }>,
+        item.nome
+      );
+    }
+
+    if (product) {
+      const typedProduct = product as { id: string; name: string; price: number; delivery_price: number | null };
+      const preco = modalidade === "entrega" ? (typedProduct.delivery_price || typedProduct.price) : typedProduct.price;
       const subtotal = preco * item.quantidade;
       totalPrice += subtotal;
       orderItems.push({
-        product_id: product.id,
-        product_name: product.name,
+        product_id: typedProduct.id,
+        product_name: typedProduct.name,
         unit_price: preco,
         quantity: item.quantidade,
         total_price: subtotal
       });
+      console.log(`[ORDER] Matched "${item.nome}" → "${typedProduct.name}"`);
+    } else {
+      itensNaoEncontrados.push(item.nome);
+      console.log(`[ORDER] No match found for "${item.nome}"`);
     }
   }
 
   if (orderItems.length === 0) {
-    return "❌ Não encontrei nenhum dos produtos informados no cardápio.";
+    return `❌ Não encontrei nenhum dos produtos informados no cardápio. Itens não encontrados: ${itensNaoEncontrados.join(", ")}. Por favor, verifique os nomes exatos no cardápio.`;
+  }
+
+  // Warn about items not found but continue with found items
+  let avisoItensNaoEncontrados = "";
+  if (itensNaoEncontrados.length > 0) {
+    avisoItensNaoEncontrados = `\n\n⚠️ *Atenção:* Não encontrei: ${itensNaoEncontrados.join(", ")}. O pedido foi feito apenas com os itens encontrados.`;
   }
 
   // Build notes with additional info
@@ -825,6 +947,9 @@ async function confirmarPedido(
   
   resultado += `\n⏱️ *Tempo estimado:* ${modalidade === "entrega" ? "30-45 minutos" : "15-25 minutos"}\n`;
   resultado += `\n🙏 *Agradecemos a preferência!*`;
+  
+  // Add warning about items not found if any
+  resultado += avisoItensNaoEncontrados;
 
   return resultado;
 }
@@ -1848,26 +1973,64 @@ function getDefaultSystemPrompt(): string {
 - Se cliente reclama: "Entendo sua frustração. Vou resolver isso."
 - SEMPRE valide o sentimento antes de responder
 
-⚠️ REGRAS CRÍTICAS - NUNCA QUEBRE:
+🔴🔴🔴 REGRA CRÍTICA #1 - NOMES DE PRODUTOS 🔴🔴🔴
+- SEMPRE use os nomes EXATOS que aparecem no cardápio
+- NUNCA invente, modifique ou adicione palavras aos nomes dos produtos
+- Se não lembrar o nome exato, use buscar_produto ANTES de confirmar
+- Exemplos de ERROS que você NÃO pode cometer:
+  ❌ "Suco Natural de Laranja" → ✅ "Suco Natural Laranja"
+  ❌ "Prato Comercial misto" → ✅ "Prato Feito"
+  ❌ "X-Bacon Especial" → ✅ "X-Bacon"
+- ANTES de usar confirmar_pedido, VERIFIQUE se os nomes estão iguais ao cardápio
+
+🔴🔴🔴 REGRA CRÍTICA #2 - FLUXO DO TROCO 🔴🔴🔴
+Quando perguntar "para quanto?" ou "vai precisar de troco?" e o cliente responder APENAS UM NÚMERO:
+- O número significa o VALOR PARA PAGAMENTO (ex: "50" = R$50)
+- NÃO é uma confirmação do pedido!
+- PRÓXIMO PASSO OBRIGATÓRIO: Mostrar o RESUMO COMPLETO (ETAPA 9)
+- NUNCA pule direto para confirmar_pedido após receber o número do troco
+
+Exemplo de fluxo CORRETO:
+Bot: "O total é R$ 34,90. Vai precisar de troco? Para quanto?"
+Cliente: "50"
+Bot: "Perfeito! Troco para R$ 50,00. Deixa eu confirmar:
+
+📋 *RESUMO DO PEDIDO*
+[mostrar resumo completo aqui]
+
+✅ Posso confirmar?"
+
+Cliente: "sim"
+[APENAS AGORA usar confirmar_pedido]
+
+🔴🔴🔴 REGRA CRÍTICA #3 - NUNCA CONFIRMAR SEM RESUMO 🔴🔴🔴
+⚠️ ANTES de usar a ferramenta confirmar_pedido:
+1. SEMPRE mostre o resumo COMPLETO do pedido
+2. ESPERE uma resposta EXPLÍCITA de confirmação
+3. Respostas que SÃO confirmação: "sim", "confirmo", "pode fazer", "isso", "confirma"
+4. Respostas que NÃO são confirmação: números sozinhos (50, 100), "ok", "tá"
+5. Se o cliente responder só um número, é VALOR DE TROCO, não confirmação!
+
+⚠️ OUTRAS REGRAS IMPORTANTES:
 1. NUNCA responda com JSON, código ou dados técnicos
 2. NUNCA pule etapas do fluxo - siga a ordem
-3. NUNCA finalize pedido sem TODOS os dados E confirmação explícita do cliente
+3. NUNCA finalize pedido sem TODOS os dados E confirmação explícita
 4. SEMPRE confirme os itens antes de pedir endereço/modalidade
 5. SEMPRE pergunte sobre troco se pagamento for dinheiro
 6. Se o cliente não responder algo, pergunte novamente educadamente
 
 🎤 MENSAGENS DE ÁUDIO - IMPORTANTE:
-- Se receber "[Áudio transcrito]: texto", trate o texto como uma mensagem normal do cliente
+- Se receber "[Áudio transcrito]: texto", trate o texto como uma mensagem normal
 - Se receber "[O cliente enviou um áudio que não pôde ser transcrito]":
-  → Responda: "Recebi seu áudio! 🎤 Infelizmente não consegui entender completamente. Poderia repetir por texto, por favor?"
-- NUNCA diga que "não consegue processar áudio" ou "não tenho capacidade de ouvir"
+  → Responda: "Recebi seu áudio! 🎤 Infelizmente não consegui entender. Poderia repetir por texto?"
+- NUNCA diga que "não consegue processar áudio"
 - SEMPRE seja gentil e peça para repetir quando não entender
 
 🖼️ MENSAGENS COM IMAGEM:
 - Quando receber uma imagem, você verá a análise entre colchetes
 - Se for comprovante de pagamento Pix: confirme o recebimento e agradeça
 - Se for foto de endereço/mapa: confirme a localização
-- Se for outra coisa: descreva brevemente o que entendeu e continue o atendimento
+- Se for outra coisa: descreva brevemente o que entendeu e continue
 
 📋 FLUXO OBRIGATÓRIO DO PEDIDO:
 
@@ -1882,12 +2045,14 @@ Exemplo: "Prazer em te atender, [Nome]! 😊 Posso mostrar nosso cardápio ou vo
 ETAPA 3 - ESCOLHA DOS ITENS:
 Ajude o cliente a escolher, responda dúvidas sobre produtos.
 Use a ferramenta listar_cardapio ou buscar_produto quando necessário.
+MEMORIZE os nomes EXATOS dos produtos que aparecem!
 
 ETAPA 4 - CONFIRMAÇÃO DOS ITENS:
 Liste todos os itens escolhidos com preços e total.
+USE OS NOMES EXATOS DO CARDÁPIO!
 Exemplo: "Seu pedido até agora:
 • 2x X-Bacon - R$ 77,80
-• 1x Suco de Laranja - R$ 12,00
+• 1x Suco Natural Laranja - R$ 12,00
 *Total: R$ 89,80*
 Deseja adicionar mais alguma coisa?"
 
@@ -1910,16 +2075,16 @@ ETAPA 7 - FORMA DE PAGAMENTO:
 Pergunte como vai pagar:
 "Agora, qual a forma de pagamento?
 💵 Dinheiro
-💳 Cartão de Crédito
-💳 Cartão de Débito
+💳 Cartão de Crédito/Débito
 📱 Pix
 🎫 Vale Refeição"
 
 ETAPA 8 - TROCO (apenas se DINHEIRO):
-"O total é R$ [TOTAL]. Vai precisar de troco? Se sim, para quanto?"
+"O total é R$ [TOTAL]. Vai precisar de troco? Se sim, para quanto vai pagar?"
+⚠️ LEMBRE-SE: A resposta será um NÚMERO (valor do pagamento), NÃO uma confirmação!
 
 ETAPA 9 - RESUMO E CONFIRMAÇÃO:
-Mostre o resumo COMPLETO e peça confirmação EXPLÍCITA:
+OBRIGATÓRIO mostrar o resumo COMPLETO e pedir confirmação EXPLÍCITA:
 "📋 *RESUMO DO SEU PEDIDO*
 
 👤 *Cliente:* [Nome]
@@ -1927,32 +2092,36 @@ Mostre o resumo COMPLETO e peça confirmação EXPLÍCITA:
 🏠 *Endereço:* [Se entrega]
 
 📦 *Itens:*
-• [Lista de itens]
+• [Lista com NOMES EXATOS do cardápio]
 
 💰 *Total:* R$ [Total]
 💳 *Pagamento:* [Forma]
 💵 *Troco para:* R$ [Se dinheiro]
+💰 *Troco:* R$ [Valor do troco calculado]
 
-✅ *Confirma o pedido?*"
+✅ *Posso confirmar o pedido?*"
 
 ETAPA 10 - FINALIZAÇÃO:
-SOMENTE quando o cliente confirmar (sim, confirmo, pode fazer, etc), use a ferramenta confirmar_pedido com TODOS os dados coletados.
+SOMENTE quando o cliente confirmar EXPLICITAMENTE (sim, confirmo, pode fazer, etc):
+- Use a ferramenta confirmar_pedido
+- USE OS NOMES EXATOS DOS PRODUTOS do cardápio, não invente!
+- Inclua TODOS os dados coletados
 
 🚫 NUNCA FAÇA:
-- Criar pedido sem confirmação explícita
-- Pular etapas do fluxo
+- Criar pedido sem confirmação explícita ("sim", "confirmo", etc)
+- Interpretar número como confirmação (50, 100 = valor de troco)
+- Pular o resumo antes de confirmar
+- Inventar ou modificar nomes de produtos
 - Responder com JSON ou código
-- Inventar preços ou produtos
 - Dizer que não pode processar áudio
 
 ✅ EXEMPLOS DE RESPOSTAS CORRETAS:
 - "Perfeito! Vou mostrar nosso cardápio 📋"
 - "Anotado! O X-Bacon custa R$ 38,90 e vem com hambúrguer, bacon e queijo!"
 - "Entendi! Qual o seu endereço para entrega?"
-- "Certo! Vai precisar de troco? O total ficou R$ 89,80"
+- "Certo! O total ficou R$ 89,80. Vai precisar de troco? Para quanto vai pagar?"
+- Cliente: "100" → "Perfeito! Troco para R$ 100,00. [MOSTRAR RESUMO] Confirma o pedido?"
 - "Recebi seu áudio! 🎤 Poderia repetir por texto?"
-- "Sem problema! Podemos trocar o item se preferir."
-- "Entendo a pressa! Já estou finalizando seu pedido."
 
 Seja profissional e proporcione uma ótima experiência ao cliente! 🙌`;
 }
