@@ -8,6 +8,9 @@ export interface SubscriptionState {
   tier: SubscriptionTier | null;
   productId: string | null;
   subscriptionEnd: string | null;
+  status: string | null;
+  isTrialing: boolean;
+  trialEnd: string | null;
 }
 
 interface AuthContextType {
@@ -27,7 +30,10 @@ const defaultSubscription: SubscriptionState = {
   subscribed: false,
   tier: null,
   productId: null,
-  subscriptionEnd: null
+  subscriptionEnd: null,
+  status: null,
+  isTrialing: false,
+  trialEnd: null
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -59,7 +65,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         subscribed: data.subscribed || false,
         tier: data.tier as SubscriptionTier | null,
         productId: data.productId || null,
-        subscriptionEnd: data.subscriptionEnd || null
+        subscriptionEnd: data.subscriptionEnd || null,
+        status: data.status || null,
+        isTrialing: data.isTrialing || false,
+        trialEnd: data.trialEnd || null
       });
     } catch (error) {
       console.error('Failed to check subscription:', error);

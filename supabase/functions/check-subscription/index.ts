@@ -71,20 +71,33 @@ serve(async (req) => {
     const customerId = customers.data[0].id;
     logStep("Found Stripe customer", { customerId });
 
+    // Check for active OR trialing subscriptions
     const subscriptions = await stripe.subscriptions.list({
       customer: customerId,
-      status: "active",
-      limit: 1,
+      status: "all",
+      limit: 10,
     });
 
-    const hasActiveSub = subscriptions.data.length > 0;
+    // Find active or trialing subscription
+    const validSubscription = subscriptions.data.find(
+      (sub: { status: string }) => sub.status === 'active' || sub.status === 'trialing'
+    );
+
     let productId: string | null = null;
     let subscriptionEnd: string | null = null;
     let tier: string | null = null;
+    let status: string | null = null;
+    let isTrialing = false;
+    let trialEnd: string | null = null;
 
-    if (hasActiveSub) {
-      const subscription = subscriptions.data[0];
+    if (validSubscription) {
+      const subscription = validSubscription;
+      status = subscription.status;
+      isTrialing = subscription.status === 'trialing';
       subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
+      trialEnd = subscription.trial_end 
+        ? new Date(subscription.trial_end * 1000).toISOString() 
+        : null;
       productId = subscription.items.data[0].price.product as string;
       
       // Map product ID to tier
@@ -96,21 +109,27 @@ serve(async (req) => {
       
       tier = tierMap[productId] || null;
       
-      logStep("Active subscription found", { 
+      logStep("Valid subscription found", { 
         subscriptionId: subscription.id, 
+        status,
+        isTrialing,
+        trialEnd,
         endDate: subscriptionEnd,
         productId,
         tier
       });
     } else {
-      logStep("No active subscription found");
+      logStep("No valid subscription found");
     }
 
     return new Response(JSON.stringify({
-      subscribed: hasActiveSub,
+      subscribed: !!validSubscription,
       tier,
       productId,
-      subscriptionEnd
+      subscriptionEnd,
+      status,
+      isTrialing,
+      trialEnd
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
