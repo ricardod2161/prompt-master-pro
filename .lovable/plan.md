@@ -1,74 +1,32 @@
 
 
-# Plano: Preços Atualizados e Trial de 14 Dias
+# Correção: Botão "Falar com Vendas" do Enterprise
 
-## 1. Novos Preços Confirmados
+## Problema
 
-| Plano | Novo Preço |
-|-------|------------|
-| Starter | R$ 100/mês |
-| Pro | R$ 150/mês |
-| Enterprise | R$ 200/mês |
+O botão atualmente usa `window.open('mailto:...')` que resulta em página em branco para usuários sem cliente de email configurado.
 
----
+## Solução Proposta
 
-## 2. O Que Será Implementado
+Substituir o `mailto:` por um link do **WhatsApp**, que é mais acessível e comum no Brasil.
 
-### Fase 1: Atualizar Preços no Código
-- Modificar `src/lib/subscription-tiers.ts` com os novos valores
-- Atualizar a página de Pricing para exibir os preços corretos
+## Alteração
 
-### Fase 2: Edge Function - Retornar Status do Trial
-- Atualizar `check-subscription` para retornar:
-  - `status` (trialing, active, past_due, canceled)
-  - `isTrialing` (boolean)
-  - `trialEnd` (data de término do trial)
+**Arquivo:** `src/components/subscription/PricingCard.tsx`
 
-### Fase 3: AuthContext - Gerenciar Estado do Trial
-- Adicionar campos `isTrialing`, `trialEnd`, `status` ao estado de subscription
-- Atualizar a verificação para considerar status de trial
+**De:**
+```typescript
+onClick={() => window.open('mailto:contato@restaurantos.com.br?subject=Interesse no Plano Enterprise', '_blank')}
+```
 
-### Fase 4: Componente TrialBanner
-- Criar banner que mostra dias restantes do trial
-- Exibir no topo do app quando usuário está em período de teste
-
-### Fase 5: Bloqueio de Acesso
-- No `AppLayout`, verificar se assinatura está válida
-- Se trial expirado e sem pagamento → redirecionar para `/pricing`
-- Mensagem clara explicando que o período de teste acabou
-
----
-
-## 3. Fluxo de Acesso
-
-```text
-Usuário inicia trial
-       ↓
-  Dia 1-14: Acesso liberado + Banner "X dias restantes"
-       ↓
-  Dia 15 (sem pagamento): Bloqueio → Redireciona para /pricing
-       ↓
-  Usuário paga → Acesso restaurado
+**Para:**
+```typescript
+onClick={() => window.open('https://wa.me/5511999999999?text=Olá! Tenho interesse no Plano Enterprise do RestaurantOS', '_blank')}
 ```
 
 ---
 
-## 4. Ação Manual Necessária no Stripe
+## Pergunta
 
-Como não posso criar preços automaticamente, você precisará criar 3 novos preços no Stripe Dashboard com:
-- **trial_period_days: 14** em cada preço
-- Valores: R$ 100, R$ 150, R$ 200
-
-Depois me informe os novos `price_id` para eu atualizar no código.
-
----
-
-## 5. Arquivos a Serem Modificados
-
-1. `src/lib/subscription-tiers.ts` - Novos preços
-2. `supabase/functions/check-subscription/index.ts` - Retornar trial status
-3. `src/contexts/AuthContext.tsx` - Gerenciar estado do trial
-4. `src/components/subscription/TrialBanner.tsx` - NOVO: Banner de dias restantes
-5. `src/components/layout/AppLayout.tsx` - Bloqueio de acesso
-6. `src/pages/Pricing.tsx` - Exibir novos preços
+Qual número de WhatsApp você quer usar para o contato de vendas? Me passe o número com DDD (ex: 11999999999) para eu implementar.
 
