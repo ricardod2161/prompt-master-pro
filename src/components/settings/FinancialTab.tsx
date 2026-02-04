@@ -1,10 +1,12 @@
-import { DollarSign, CreditCard, Banknote, Wallet, Receipt, Truck, ShoppingBag, Save, Loader2 } from "lucide-react";
+import { DollarSign, CreditCard, Banknote, Wallet, Receipt, Truck, ShoppingBag, Save, Loader2, QrCode, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { SettingCard } from "./SettingCard";
 import { cn } from "@/lib/utils";
+import { detectPixKeyType, formatPixKeyForDisplay, isValidPixKey } from "@/lib/pix-generator";
+import { useMemo } from "react";
 
 interface PaymentMethods {
   cash: boolean;
@@ -19,6 +21,7 @@ interface FinancialSettings {
   delivery_fee: number;
   min_delivery_order: number;
   payment_methods: PaymentMethods;
+  pix_key?: string | null;
 }
 
 interface FinancialTabProps {
@@ -43,6 +46,30 @@ export function FinancialTab({ settings, onSettingsChange, onSave, isSaving }: F
       payment_methods: { ...settings.payment_methods, [key]: checked },
     });
   };
+
+  // Validate and detect Pix key type
+  const pixKeyInfo = useMemo(() => {
+    if (!settings.pix_key) return null;
+    
+    const type = detectPixKeyType(settings.pix_key);
+    const isValid = isValidPixKey(settings.pix_key);
+    
+    const typeLabels: Record<string, string> = {
+      cpf: "CPF",
+      cnpj: "CNPJ",
+      phone: "Telefone",
+      email: "Email",
+      random: "Chave Aleatória",
+      invalid: "Inválido",
+    };
+    
+    return {
+      type,
+      typeLabel: typeLabels[type] || "Desconhecido",
+      isValid,
+      formatted: isValid ? formatPixKeyForDisplay(settings.pix_key) : settings.pix_key,
+    };
+  }, [settings.pix_key]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -175,8 +202,77 @@ export function FinancialTab({ settings, onSettingsChange, onSave, isSaving }: F
             className="w-full sm:w-auto bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg shadow-primary/25"
           >
             {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-            Salvar Configurações Financeiras
+            Salvar Métodos de Pagamento
           </Button>
+        </div>
+      </SettingCard>
+
+      {/* Pix Key Configuration */}
+      <SettingCard
+        icon={QrCode}
+        title="Chave Pix"
+        description="Configure sua chave Pix para receber pagamentos via QR Code"
+        variant="glass"
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="pix-key" className="flex items-center gap-2 text-sm font-medium">
+              <QrCode className="h-4 w-4 text-muted-foreground" />
+              Chave Pix
+            </Label>
+            <Input
+              id="pix-key"
+              type="text"
+              placeholder="CPF, CNPJ, email, telefone ou chave aleatória"
+              value={settings.pix_key || ""}
+              onChange={(e) =>
+                onSettingsChange({
+                  ...settings,
+                  pix_key: e.target.value || null,
+                })
+              }
+              className="h-11 bg-background/50 border-border/50 focus:border-primary/50"
+            />
+            
+            {/* Pix key validation feedback */}
+            {settings.pix_key && (
+              <div className={cn(
+                "flex items-center gap-2 text-sm mt-2 p-3 rounded-lg",
+                pixKeyInfo?.isValid 
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
+                  : "bg-destructive/10 text-destructive"
+              )}>
+                {pixKeyInfo?.isValid ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>Chave válida: <strong>{pixKeyInfo?.typeLabel}</strong></span>
+                    <span className="text-muted-foreground">({pixKeyInfo?.formatted})</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="h-4 w-4" />
+                    <span>Formato de chave Pix inválido</span>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          
+          <p className="text-xs text-muted-foreground">
+            💡 A chave Pix será usada para gerar QR Codes de pagamento nos pedidos via mesa.
+            Os clientes poderão pagar diretamente pelo app do banco.
+          </p>
+
+          <div className="pt-4 border-t border-border/50">
+            <Button 
+              onClick={onSave} 
+              disabled={isSaving || (settings.pix_key && !pixKeyInfo?.isValid)} 
+              className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-600 shadow-lg shadow-emerald-500/25"
+            >
+              {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              Salvar Chave Pix
+            </Button>
+          </div>
         </div>
       </SettingCard>
     </div>

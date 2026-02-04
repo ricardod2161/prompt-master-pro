@@ -22,6 +22,7 @@ export function useCustomerOrder(tableId: string) {
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo>({ name: "", phone: "" });
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderNumber, setOrderNumber] = useState<number | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
 
   // Validate tableId format upfront
   const isValidTableId = useMemo(() => UUID_REGEX.test(tableId), [tableId]);
@@ -200,6 +201,7 @@ export function useCustomerOrder(tableId: string) {
       }
       setOrderSuccess(true);
       setOrderNumber(order.order_number);
+      setOrderId(order.id);
       clearCart();
       setCustomerInfo({ name: "", phone: "" });
     },
@@ -215,6 +217,7 @@ export function useCustomerOrder(tableId: string) {
   const resetOrder = useCallback(() => {
     setOrderSuccess(false);
     setOrderNumber(null);
+    setOrderId(null);
   }, []);
 
   return {
@@ -250,6 +253,7 @@ export function useCustomerOrder(tableId: string) {
     submitError: createOrderMutation.error,
     orderSuccess,
     orderNumber,
+    orderId,
     resetOrder,
   };
 }
