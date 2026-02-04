@@ -177,14 +177,30 @@ export default function Pricing() {
           <Button 
             variant="outline" 
             className="gap-2"
-            onClick={() => window.location.href = 'mailto:suporte@restaurantos.com.br'}
+            onClick={() => {
+              const link = document.createElement('a');
+              link.href = 'mailto:suporte@restaurantos.com.br';
+              link.target = '_blank';
+              link.rel = 'noopener noreferrer';
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }}
           >
             <HeadphonesIcon className="h-4 w-4" />
             Falar com Suporte
           </Button>
           <Button 
             className="gap-2"
-            onClick={() => window.location.href = 'mailto:ricardodelima1988@gmail.com?subject=Dúvidas sobre Planos&body=Olá! Gostaria de saber mais sobre os planos do RestaurantOS'}
+            onClick={() => {
+              const link = document.createElement('a');
+              link.href = 'mailto:ricardodelima1988@gmail.com?subject=Dúvidas sobre Planos&body=Olá! Gostaria de saber mais sobre os planos do RestaurantOS';
+              link.target = '_blank';
+              link.rel = 'noopener noreferrer';
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }}
           >
             <Sparkles className="h-4 w-4" />
             Enviar Email
