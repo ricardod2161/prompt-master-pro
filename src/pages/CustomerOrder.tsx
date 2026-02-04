@@ -1,7 +1,9 @@
 import { useState, useMemo, memo, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useCustomerOrder, CartItem } from "@/hooks/useCustomerOrder";
+import { useTableBill } from "@/hooks/useTableBill";
 import { PaymentMethodSelector } from "@/components/customer-order/PaymentMethodSelector";
+import { TableBillSheet } from "@/components/customer-order/TableBillSheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +40,7 @@ import {
   Phone,
   ArrowLeft,
   Sparkles,
+  Receipt,
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
@@ -424,6 +427,7 @@ export default function CustomerOrder() {
   const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [cartOpen, setCartOpen] = useState(false);
+  const [billOpen, setBillOpen] = useState(false);
 
   const {
     table,
@@ -452,6 +456,18 @@ export default function CustomerOrder() {
     orderId,
     resetOrder,
   } = useCustomerOrder(tableId || "");
+
+  // Use table bill hook
+  const {
+    orders: tableBillOrders,
+    billTotal,
+    ordersCount,
+    itemsCount: billItemsCount,
+    closeBill,
+    closingBill,
+    billClosed,
+    resetBillState,
+  } = useTableBill(tableId || "", table?.unit_id);
 
   // Redirect to tracking page when order is successful
   useEffect(() => {
@@ -541,10 +557,30 @@ export default function CustomerOrder() {
                 <span>Mesa {table.number}</span>
               </div>
             </div>
-            <Badge className="bg-primary/10 text-primary border-primary/20 rounded-full px-3">
-              <Sparkles className="h-3 w-3 mr-1.5" />
-              Digital
-            </Badge>
+            
+            {/* Bill button - shows when there are orders */}
+            <div className="flex items-center gap-2">
+              {ordersCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full glass border-primary/30 text-primary hover:bg-primary/10"
+                  onClick={() => setBillOpen(true)}
+                >
+                  <Receipt className="h-4 w-4 mr-1.5" />
+                  Ver Conta
+                  <Badge className="ml-2 h-5 px-1.5 bg-primary text-primary-foreground text-xs rounded-full">
+                    {ordersCount}
+                  </Badge>
+                </Button>
+              )}
+              {ordersCount === 0 && (
+                <Badge className="bg-primary/10 text-primary border-primary/20 rounded-full px-3">
+                  <Sparkles className="h-3 w-3 mr-1.5" />
+                  Digital
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
 
@@ -785,6 +821,25 @@ export default function CustomerOrder() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Table Bill Sheet */}
+      <TableBillSheet
+        open={billOpen}
+        onOpenChange={(open) => {
+          setBillOpen(open);
+          if (!open) {
+            resetBillState();
+          }
+        }}
+        orders={tableBillOrders}
+        billTotal={billTotal}
+        ordersCount={ordersCount}
+        itemsCount={billItemsCount}
+        tableNumber={table.number}
+        onCloseBill={closeBill}
+        closingBill={closingBill}
+        billClosed={billClosed}
+      />
     </div>
   );
 }
