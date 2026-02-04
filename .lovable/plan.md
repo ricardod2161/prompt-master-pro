@@ -1,120 +1,62 @@
 
-# Correção: Código Pix Correto no WhatsApp
 
-## Problema Identificado
+# Correção Definitiva do Código Pix
 
-Na edge function `send-order-notification`, a função `formatPixKey` tem um bug de lógica:
+## Diagnóstico
 
-| Tipo | Dígitos | O que acontece | Correto? |
-|------|---------|----------------|----------|
-| Telefone | 10-11 | Adiciona `+55` | ✅ |
-| CPF | **11** | Adiciona `+55` | ❌ ERRADO |
-| CNPJ | 14 | Mantém | ✅ |
-
-O CPF `38734543864` está virando `+5538734543864` porque a verificação de telefone vem primeiro.
-
-## Código Atual (Errado)
-
-```typescript
-function formatPixKey(key: string): string {
-  const cleanKey = key.replace(/\D/g, '');
-  
-  // Telefone verificado PRIMEIRO - pega CPF por engano!
-  if (/^\d{10,11}$/.test(cleanKey)) {
-    return `+55${cleanKey}`;  // CPF vira telefone errado
-  }
-  
-  // CPF/CNPJ - CPF nunca chega aqui
-  if (/^\d{11}$/.test(cleanKey) || /^\d{14}$/.test(cleanKey)) {
-    return cleanKey;
-  }
-  
-  return key.toLowerCase();
-}
+Analisando os logs, o código Pix gerado é:
 ```
+00020126330014br.gov.bcb.pix011138734543864...
+```
+
+Estrutura decodificada:
+- Campo 01 dentro de 26: Length=11, Value=38734543864 (CPF correto)
+- Chave no banco: `38734543864` (CPF de 11 dígitos)
+
+O código **parece** correto estruturalmente, mas pode haver um problema no CRC16 ou em algum detalhe de formatação.
 
 ## Solução
 
-Usar a mesma lógica do `src/lib/pix-generator.ts` que detecta corretamente o tipo da chave antes de formatar:
-
-```typescript
-function detectPixKeyType(key: string): string {
-  const cleanKey = key.replace(/\D/g, '');
-  
-  // CPF: exatamente 11 dígitos E começa com dígito válido (não pode ser 0)
-  if (/^\d{11}$/.test(cleanKey) && !cleanKey.startsWith('0')) {
-    return 'cpf';
-  }
-  
-  // CNPJ: 14 dígitos
-  if (/^\d{14}$/.test(cleanKey)) {
-    return 'cnpj';
-  }
-  
-  // Telefone: tem +55 explícito OU 10-11 dígitos começando com DDD válido
-  if (/^\+?55\d{10,11}$/.test(key.replace(/[\s\-()]/g, ''))) {
-    return 'phone';
-  }
-  
-  // Email
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key)) {
-    return 'email';
-  }
-  
-  return 'random';
-}
-
-function formatPixKey(key: string): string {
-  const type = detectPixKeyType(key);
-  
-  switch (type) {
-    case 'cpf':
-    case 'cnpj':
-      return key.replace(/\D/g, '');  // Só os números, SEM +55
-    case 'phone':
-      const cleanPhone = key.replace(/\D/g, '');
-      if (cleanPhone.startsWith('55')) return `+${cleanPhone}`;
-      return `+55${cleanPhone}`;
-    case 'email':
-      return key.toLowerCase();
-    default:
-      return key;
-  }
-}
-```
-
-## Alterações
+Adicionar **logs de debug** na edge function para identificar exatamente o que está sendo gerado, e depois verificar onde está o erro.
 
 ### Arquivo: `supabase/functions/send-order-notification/index.ts`
 
-1. Adicionar função `detectPixKeyType` (linhas ~81)
-2. Corrigir função `formatPixKey` para usar a detecção correta
+Adicionar logs antes de gerar o código Pix:
+
+```typescript
+// Dentro da função onde gera o pixCode
+if (unitSettings?.pix_key && order.total_price > 0) {
+  try {
+    console.log("PIX DEBUG - Chave original:", unitSettings.pix_key);
+    console.log("PIX DEBUG - Tipo detectado:", detectPixKeyType(unitSettings.pix_key));
+    console.log("PIX DEBUG - Chave formatada:", formatPixKey(unitSettings.pix_key));
+    
+    pixCode = generatePixCode(
+      unitSettings.pix_key,
+      unitSettings.pix_merchant_name || unitInfo?.name || "RESTAURANTE",
+      unitSettings.pix_merchant_city || "BRASIL",
+      order.total_price,
+      `PED${order.order_number}`
+    );
+    
+    console.log("PIX DEBUG - Código gerado:", pixCode);
+  } catch (e) {
+    console.error("Error generating Pix code:", e);
+  }
+}
+```
+
+### Teste de Validação
+
+Após o deploy, fazer um pedido de teste e verificar nos logs:
+1. Qual tipo está sendo detectado (deve ser `cpf`)
+2. Como a chave está sendo formatada (deve ser `38734543864` sem `+55`)
+3. O código completo gerado
 
 ## Resultado Esperado
 
-**Antes (errado):**
-```
-Chave: 38734543864 (CPF)
-Formatado: +5538734543864 (tratado como telefone)
-Código Pix: INVÁLIDO
-```
+Com os logs de debug, poderemos identificar exatamente onde está o problema:
+- Se o tipo não está sendo detectado como `cpf`
+- Se a chave está sendo formatada incorretamente
+- Se há algum problema no CRC16
 
-**Depois (correto):**
-```
-Chave: 38734543864 (CPF)
-Formatado: 38734543864 (mantido como CPF)
-Código Pix: VÁLIDO ✅
-```
-
-## Mensagem WhatsApp
-
-A mensagem já está formatada com destaque para o código Pix:
-
-```
-📱 *Pague via Pix:*
-Copie o código abaixo e cole no seu app de banco:
-
-```00020126360014br.gov.bcb.pix011438734543864...```
-```
-
-Com a correção, o código será gerado corretamente com a chave CPF.
