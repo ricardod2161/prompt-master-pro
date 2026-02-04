@@ -367,6 +367,48 @@ export type Database = {
           },
         ]
       }
+      leads: {
+        Row: {
+          created_at: string | null
+          email: string
+          employee_count: string | null
+          id: string
+          message: string | null
+          name: string
+          phone: string | null
+          restaurant_name: string | null
+          source: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          employee_count?: string | null
+          id?: string
+          message?: string | null
+          name: string
+          phone?: string | null
+          restaurant_name?: string | null
+          source?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          employee_count?: string | null
+          id?: string
+          message?: string | null
+          name?: string
+          phone?: string | null
+          restaurant_name?: string | null
+          source?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           action_url: string | null

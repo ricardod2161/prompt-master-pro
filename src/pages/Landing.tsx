@@ -8,6 +8,9 @@ import { PricingPreview } from "@/components/landing/PricingPreview";
 import { FAQSection } from "@/components/landing/FAQSection";
 import { CTASection } from "@/components/landing/CTASection";
 import { LandingFooter } from "@/components/landing/LandingFooter";
+import { InteractiveDemoSection } from "@/components/landing/InteractiveDemoSection";
+import { ContactFormSection } from "@/components/landing/ContactFormSection";
+import { FloatingWhatsApp } from "@/components/landing/FloatingWhatsApp";
 
 export default function Landing() {
   return (
@@ -26,6 +29,9 @@ export default function Landing() {
         {/* Features Section */}
         <FeaturesSection />
 
+        {/* Interactive Demo */}
+        <InteractiveDemoSection />
+
         {/* How It Works */}
         <HowItWorks />
 
@@ -34,6 +40,9 @@ export default function Landing() {
 
         {/* Pricing Preview */}
         <PricingPreview />
+
+        {/* Contact Form */}
+        <ContactFormSection />
 
         {/* FAQ */}
         <FAQSection />
@@ -44,6 +53,9 @@ export default function Landing() {
 
       {/* Footer */}
       <LandingFooter />
+
+      {/* Floating WhatsApp Button */}
+      <FloatingWhatsApp />
     </div>
   );
 }
