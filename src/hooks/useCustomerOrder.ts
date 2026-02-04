@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useCallback, useMemo } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -14,29 +14,29 @@ export type CustomerInfo = {
   phone: string;
 };
 
+// UUID validation regex - defined once
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function useCustomerOrder(tableId: string) {
-  const queryClient = useQueryClient();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo>({ name: "", phone: "" });
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderNumber, setOrderNumber] = useState<number | null>(null);
 
-  // Fetch table data
+  // Validate tableId format upfront
+  const isValidTableId = useMemo(() => UUID_REGEX.test(tableId), [tableId]);
+
+  // Fetch table data with optimized caching
   const tableQuery = useQuery({
     queryKey: ["public-table", tableId],
     queryFn: async () => {
-      // Validate UUID format first
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(tableId)) {
+      if (!isValidTableId) {
         throw new Error("ID de mesa inválido");
       }
 
       const { data, error } = await supabase
         .from("tables")
-        .select(`
-          *,
-          unit:units(*)
-        `)
+        .select(`*, unit:units(*)`)
         .eq("id", tableId)
         .maybeSingle();
 
@@ -45,52 +45,57 @@ export function useCustomerOrder(tableId: string) {
       
       return data as Tables<"tables"> & { unit: Tables<"units"> };
     },
-    enabled: !!tableId,
+    enabled: !!tableId && isValidTableId,
     retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes - table info rarely changes
+    gcTime: 10 * 60 * 1000, // 10 minutes cache
   });
 
-  // Fetch products for the unit
+  const unitId = tableQuery.data?.unit_id;
+
+  // Fetch products for the unit - optimized with longer cache
   const productsQuery = useQuery({
-    queryKey: ["public-products", tableQuery.data?.unit_id],
+    queryKey: ["public-products", unitId],
     queryFn: async () => {
-      if (!tableQuery.data?.unit_id) return [];
+      if (!unitId) return [];
 
       const { data, error } = await supabase
         .from("products")
-        .select(`
-          *,
-          category:categories(*)
-        `)
-        .eq("unit_id", tableQuery.data.unit_id)
+        .select(`*, category:categories(*)`)
+        .eq("unit_id", unitId)
         .eq("available", true)
         .order("name");
 
       if (error) throw error;
       return data;
     },
-    enabled: !!tableQuery.data?.unit_id,
+    enabled: !!unitId,
+    staleTime: 2 * 60 * 1000, // 2 minutes - products can change
+    gcTime: 5 * 60 * 1000, // 5 minutes cache
   });
 
-  // Fetch categories for the unit
+  // Fetch categories for the unit - optimized with longer cache
   const categoriesQuery = useQuery({
-    queryKey: ["public-categories", tableQuery.data?.unit_id],
+    queryKey: ["public-categories", unitId],
     queryFn: async () => {
-      if (!tableQuery.data?.unit_id) return [];
+      if (!unitId) return [];
 
       const { data, error } = await supabase
         .from("categories")
         .select("*")
-        .eq("unit_id", tableQuery.data.unit_id)
+        .eq("unit_id", unitId)
         .eq("active", true)
         .order("sort_order");
 
       if (error) throw error;
       return data;
     },
-    enabled: !!tableQuery.data?.unit_id,
+    enabled: !!unitId,
+    staleTime: 5 * 60 * 1000, // 5 minutes - categories rarely change
+    gcTime: 10 * 60 * 1000, // 10 minutes cache
   });
 
-  // Cart management
+  // Cart management - memoized callbacks
   const addToCart = useCallback((product: Tables<"products">, quantity: number = 1, notes?: string) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
@@ -125,17 +130,21 @@ export function useCustomerOrder(tableId: string) {
     setCart([]);
   }, []);
 
-  const cartTotal = cart.reduce(
-    (sum, item) => sum + item.product.price * item.quantity,
-    0
+  // Memoized cart calculations
+  const cartTotal = useMemo(() => 
+    cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0),
+    [cart]
   );
 
-  const cartItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const cartItemsCount = useMemo(() => 
+    cart.reduce((sum, item) => sum + item.quantity, 0),
+    [cart]
+  );
 
   // Create order mutation
   const createOrderMutation = useMutation({
     mutationFn: async () => {
-      if (!tableQuery.data?.unit_id || cart.length === 0) {
+      if (!unitId || cart.length === 0) {
         throw new Error("Dados inválidos para criar pedido");
       }
 
@@ -143,7 +152,7 @@ export function useCustomerOrder(tableId: string) {
       const { data: order, error: orderError } = await supabase
         .from("orders")
         .insert({
-          unit_id: tableQuery.data.unit_id,
+          unit_id: unitId,
           table_id: tableId,
           channel: "table" as const,
           status: "pending",
@@ -173,13 +182,14 @@ export function useCustomerOrder(tableId: string) {
 
       if (itemsError) throw itemsError;
 
-      // Update table status to occupied
-      const { error: tableError } = await supabase
+      // Update table status to occupied (fire and forget)
+      supabase
         .from("tables")
         .update({ status: "occupied" })
-        .eq("id", tableId);
-
-      if (tableError) console.error("Error updating table status:", tableError);
+        .eq("id", tableId)
+        .then(({ error }) => {
+          if (error) console.error("Error updating table status:", error);
+        });
 
       return order;
     },
