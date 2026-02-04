@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useUnit } from "@/contexts/UnitContext";
 import { toast } from "@/hooks/use-toast";
 
-type NotificationStatus = "ready" | "delivering" | "delivered";
+type NotificationStatus = "ready" | "delivering" | "delivered" | "confirmed" | "cancelled";
 
 interface SendNotificationParams {
   orderId: string;

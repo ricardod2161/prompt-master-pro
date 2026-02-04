@@ -9,7 +9,7 @@ const corsHeaders = {
 
 interface NotificationRequest {
   orderId: string;
-  status: "ready" | "delivering" | "delivered" | "confirmed";
+  status: "ready" | "delivering" | "delivered" | "confirmed" | "cancelled";
   unitId: string;
 }
 
@@ -379,6 +379,13 @@ serve(async (req) => {
           `Olá ${customerName}, seu pedido *#${order.order_number}* foi entregue com sucesso!\n\n` +
           `💚 Obrigado pela preferência!\n` +
           `Esperamos que aproveite! 😋`;
+        break;
+
+      case "cancelled":
+        message = `❌ *Pedido Cancelado*\n\n` +
+          `Olá ${customerName}, informamos que seu pedido *#${order.order_number}* foi cancelado.\n\n` +
+          `Se você não solicitou o cancelamento ou tem alguma dúvida, por favor entre em contato conosco.\n\n` +
+          `Pedimos desculpas pelo inconveniente. 🙏`;
         break;
     }
 

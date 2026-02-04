@@ -647,6 +647,10 @@ export default function Orders() {
           if (status === "ready" && previousStatus !== "ready") {
             sendNotification.mutate({ orderId, status: "ready" });
           }
+          // Send WhatsApp notification when order is cancelled
+          if (status === "cancelled" && previousStatus !== "cancelled") {
+            sendNotification.mutate({ orderId, status: "cancelled" });
+          }
         },
       }
     );
