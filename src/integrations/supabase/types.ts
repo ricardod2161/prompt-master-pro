@@ -58,6 +58,60 @@ export type Database = {
           },
         ]
       }
+      bill_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          customer_name: string | null
+          customer_phone: string
+          id: string
+          payment_method: string | null
+          split_details: Json | null
+          split_type: string | null
+          table_id: string
+          unit_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          customer_name?: string | null
+          customer_phone: string
+          id?: string
+          payment_method?: string | null
+          split_details?: Json | null
+          split_type?: string | null
+          table_id: string
+          unit_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          customer_name?: string | null
+          customer_phone?: string
+          id?: string
+          payment_method?: string | null
+          split_details?: Json | null
+          split_type?: string | null
+          table_id?: string
+          unit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bill_payments_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "tables"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bill_payments_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cash_movements: {
         Row: {
           amount: number

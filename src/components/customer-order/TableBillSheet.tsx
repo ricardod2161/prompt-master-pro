@@ -23,9 +23,11 @@ import {
   ChefHat,
   Loader2,
   PartyPopper,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
+import { SplitBillSheet } from "./SplitBillSheet";
 
 type OrderWithItems = Tables<"orders"> & {
   order_items: Tables<"order_items">[];
@@ -39,6 +41,8 @@ interface TableBillSheetProps {
   ordersCount: number;
   itemsCount: number;
   tableNumber: number;
+  tableId: string;
+  unitId: string | undefined;
   onCloseBill: (phone: string) => Promise<unknown>;
   closingBill: boolean;
   billClosed: boolean;
@@ -215,12 +219,15 @@ export const TableBillSheet = memo(function TableBillSheet({
   ordersCount,
   itemsCount,
   tableNumber,
+  tableId,
+  unitId,
   onCloseBill,
   closingBill,
   billClosed,
 }: TableBillSheetProps) {
   const [phone, setPhone] = useState("");
   const [showPhoneInput, setShowPhoneInput] = useState(false);
+  const [showSplitBill, setShowSplitBill] = useState(false);
 
   // Auto-close sheet after successful bill closure
   const handleAutoClose = useCallback(() => {
@@ -355,38 +362,72 @@ export const TableBillSheet = memo(function TableBillSheet({
                 </div>
               </div>
 
-              {/* Close Bill Button */}
-              <Button
-                className={cn(
-                  "w-full h-14 text-base font-bold rounded-xl",
-                  "bg-gradient-to-r from-primary to-primary/90",
-                  "shadow-lg shadow-primary/25 transition-all duration-300",
-                  "hover:shadow-xl hover:shadow-primary/30"
-                )}
-                size="lg"
-                onClick={handleCloseBill}
-                disabled={closingBill || orders.length === 0}
-              >
-                {closingBill ? (
-                  <>
-                    <Loader2 className="h-5 w-5 mr-3 animate-spin" />
-                    Enviando...
-                  </>
-                ) : showPhoneInput ? (
-                  <>
-                    <CheckCircle2 className="h-5 w-5 mr-3" />
-                    Confirmar e Receber no WhatsApp
-                  </>
-                ) : (
-                  <>
-                    <Receipt className="h-5 w-5 mr-3" />
-                    Fechar Conta
-                  </>
-                )}
-              </Button>
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                {/* Split Bill Button */}
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "flex-1 h-14 text-base font-bold rounded-xl",
+                    "border-2 border-border/50 transition-all duration-300",
+                    "hover:border-primary hover:bg-primary/5"
+                  )}
+                  size="lg"
+                  onClick={() => setShowSplitBill(true)}
+                  disabled={closingBill || orders.length === 0}
+                >
+                  <Users className="h-5 w-5 mr-2" />
+                  Dividir
+                </Button>
+
+                {/* Close Bill Button */}
+                <Button
+                  className={cn(
+                    "flex-1 h-14 text-base font-bold rounded-xl",
+                    "bg-gradient-to-r from-primary to-primary/90",
+                    "shadow-lg shadow-primary/25 transition-all duration-300",
+                    "hover:shadow-xl hover:shadow-primary/30"
+                  )}
+                  size="lg"
+                  onClick={handleCloseBill}
+                  disabled={closingBill || orders.length === 0}
+                >
+                  {closingBill ? (
+                    <>
+                      <Loader2 className="h-5 w-5 mr-3 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : showPhoneInput ? (
+                    <>
+                      <CheckCircle2 className="h-5 w-5 mr-3" />
+                      Confirmar
+                    </>
+                  ) : (
+                    <>
+                      <Receipt className="h-5 w-5 mr-3" />
+                      Fechar
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </SheetFooter>
         )}
+
+        {/* Split Bill Sheet */}
+        <SplitBillSheet
+          open={showSplitBill}
+          onOpenChange={setShowSplitBill}
+          orders={orders}
+          billTotal={billTotal}
+          tableId={tableId}
+          unitId={unitId}
+          tableNumber={tableNumber}
+          onBillFullyPaid={() => {
+            setShowSplitBill(false);
+            onOpenChange(false);
+          }}
+        />
       </SheetContent>
     </Sheet>
   );
