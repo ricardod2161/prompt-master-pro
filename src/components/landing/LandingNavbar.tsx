@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Menu, X, ChefHat } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Logo } from "@/components/brand/Logo";
 
 const NAV_LINKS = [
   { label: "Recursos", href: "#features" },
@@ -44,16 +45,8 @@ export function LandingNavbar() {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16 lg:h-20">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="relative">
-              <div className="absolute inset-0 bg-primary/20 rounded-xl blur-xl group-hover:bg-primary/30 transition-colors" />
-              <div className="relative bg-gradient-to-br from-primary to-primary/80 p-2 rounded-xl">
-                <ChefHat className="h-6 w-6 text-primary-foreground" />
-              </div>
-            </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-              RestaurantOS
-            </span>
+          <Link to="/">
+            <Logo size="sm" />
           </Link>
 
           {/* Desktop Navigation */}
