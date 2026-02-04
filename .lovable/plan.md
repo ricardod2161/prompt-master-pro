@@ -1,73 +1,87 @@
 
-# Correção: Botão "Voltar" na Tela de Acompanhamento
+# Correção: Fechar Conta com Limpeza Profissional da Mesa
 
 ## Problema Identificado
 
-Na tela de acompanhamento do pedido (`OrderTracking`), o botão "Voltar" usa `navigate(-1)` para voltar no histórico. Porém, quando o pedido é finalizado em `CustomerOrder`, a navegação usa `replace: true`, que **substitui** a entrada do histórico ao invés de adicionar uma nova.
+Quando o cliente fecha a conta:
+1. ✅ Mesa é atualizada para "free"
+2. ❌ Pedidos permanecem com status "pending/preparing/ready/delivered"
+3. ❌ Na próxima sessão, os pedidos antigos podem aparecer
 
-**Resultado:** O histórico não tem a página anterior, então `navigate(-1)` não funciona ou vai para uma página inesperada.
+## Solução Proposta
 
-## Fluxo Correto Esperado
+### 1. Atualizar Status dos Pedidos ao Fechar
 
-```text
-Cliente na Mesa → Faz Pedido 1 → Acompanha Pedido 1
-       ↑                              │
-       └────── Clica "Voltar" ────────┘
-       │
-       ├──► Faz Pedido 2 → Acompanha Pedido 2
-       │                        │
-       └─── Clica "Voltar" ─────┘
-       │
-       └──► Fecha Conta (soma todos pedidos)
-```
+No hook `useTableBill.ts`, ao fechar a conta:
+- Marcar todos os pedidos da mesa como "completed" (finalizado)
+- Isso garante que não apareçam na conta de um próximo cliente
 
-## Solução
+### 2. Invalidar Queries Corretamente
 
-### 1. Arquivo: `src/pages/OrderTracking.tsx`
+Após fechar:
+- Invalidar a query de pedidos da mesa
+- Limpar estados locais
 
-Mudar o botão "Voltar" para navegar diretamente para `/order/:tableId` ao invés de usar `navigate(-1)`:
+### 3. Feedback Visual Profissional
 
-**De:**
-```typescript
-<Button onClick={() => navigate(-1)}>
-  Voltar
-</Button>
-```
-
-**Para:**
-```typescript
-<Button onClick={() => {
-  if (order?.table_id) {
-    navigate(`/order/${order.table_id}`);
-  } else {
-    navigate(-1);
-  }
-}}>
-  Voltar
-</Button>
-```
-
-Isso garante que:
-- Se o pedido for de mesa → volta para o cardápio da mesa
-- Se não for de mesa → usa o histórico normal
-
-### 2. Arquivo: `src/hooks/useOrderTracking.ts`
-
-Verificar se o hook já retorna o `table_id` do pedido. Se não retornar, adicionar.
-
-## Resultado Esperado
-
-- Cliente faz pedido na mesa
-- É redirecionado para tela de acompanhamento
-- Clica em "Voltar"
-- Volta para o cardápio da mesa `/order/:tableId`
-- Pode fazer novos pedidos
-- Todos os pedidos acumulam na conta
-- Quando quiser, fecha a conta pelo botão "Ver Conta"
+- Mostrar confirmação de sucesso
+- Limpar a interface após 2-3 segundos
+- Permitir nova sessão de consumo
 
 ## Alterações Técnicas
 
-| Arquivo | Alteração |
-|---------|-----------|
-| `src/pages/OrderTracking.tsx` | Ajustar botão Voltar para navegar para `/order/:tableId` |
-| `src/hooks/useOrderTracking.ts` | Garantir que `table_id` está disponível no retorno |
+### Arquivo: `src/hooks/useTableBill.ts`
+
+```typescript
+// Dentro da mutação closeBill, após atualizar a mesa:
+
+// 1. Marcar todos os pedidos como completados
+const orderIds = orders.map(o => o.id);
+await supabase
+  .from("orders")
+  .update({ status: "completed" })
+  .in("id", orderIds);
+
+// 2. Atualizar mesa para livre
+await supabase
+  .from("tables")
+  .update({ status: "free" })
+  .eq("id", tableId);
+```
+
+### Arquivo: `src/components/customer-order/TableBillSheet.tsx`
+
+Melhorias na UI:
+- Auto-fechar o sheet após sucesso com delay
+- Limpar o campo de telefone após sucesso
+- Adicionar animação de feedback
+
+## Fluxo Final
+
+```text
+Cliente na Mesa
+      │
+      ├──► Pedido 1 (R$ 35,00) → status: pending → preparing → ready
+      ├──► Pedido 2 (R$ 22,50) → status: pending → preparing
+      │
+      ▼
+Clica "Ver Conta" → Vê total R$ 57,50
+      │
+      ▼
+Clica "Fechar Conta"
+      │
+      ├──► WhatsApp enviado com resumo + Pix
+      ├──► Pedidos atualizados para "completed"
+      ├──► Mesa atualizada para "free"
+      │
+      ▼
+Mesa limpa para próximo cliente
+```
+
+## Resultado Esperado
+
+1. Conta mostra corretamente todos os pedidos acumulados
+2. Ao fechar, cliente recebe resumo no WhatsApp
+3. Todos os pedidos são marcados como "completed"
+4. Mesa fica livre e limpa para próximo cliente
+5. Interface profissional com feedback visual adequado
