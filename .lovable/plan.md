@@ -1,25 +1,56 @@
 
-# Correção: Número do WhatsApp Enterprise
 
-## Problema Identificado
-O número do WhatsApp na linha 132 ainda está com o placeholder `5511999999999`, causando redirecionamento incorreto.
+# Plano: Atualizar Preços no Stripe
 
-## Solução
+## Situação Atual
 
-### Alteração Única
-**Arquivo:** `src/components/subscription/PricingCard.tsx` (linha 132)
+Os preços atuais no Stripe são:
+- **Starter**: R$ 99,00 (price_1Sw7D7KBKtRrb6BSDHI3wTSm)
+- **Pro**: R$ 199,00 (price_1Sw7F8KBKtRrb6BSXgHeKCsG)
+- **Enterprise**: R$ 399,00 (price_1Sw7GEKBKtRrb6BSdkqlVaLt)
 
-**De:**
-```typescript
-onClick={() => window.open('https://wa.me/5511999999999?text=Olá! Tenho interesse no Plano Enterprise do RestaurantOS', '_blank')}
-```
+Nenhum tem trial period configurado.
 
-**Para:**
-```typescript
-onClick={() => window.open('https://wa.me/5598982549505?text=Olá! Tenho interesse no Plano Enterprise do RestaurantOS', '_blank')}
-```
+---
+
+## O Que Será Feito
+
+### Criar 3 Novos Preços no Stripe
+
+Usarei a ferramenta do Stripe para criar novos preços com os valores corretos e período de trial:
+
+| Plano | Produto | Novo Preço | Trial |
+|-------|---------|------------|-------|
+| Starter | prod_Ttv3LNr32ThW8G | R$ 100/mês | 14 dias |
+| Pro | prod_Ttv5fsMXdkwI7k | R$ 150/mês | 14 dias |
+| Enterprise | prod_Ttv6ifEGhgCeOI | R$ 200/mês | 14 dias |
+
+### Atualizar Código com Novos Price IDs
+
+Após criar os preços, atualizarei o arquivo `src/lib/subscription-tiers.ts` com os novos `price_id` gerados.
+
+---
+
+## Limitação Importante
+
+A ferramenta de criação de preços não permite configurar `trial_period_days` automaticamente. Por isso:
+
+1. Criarei os preços com os valores corretos
+2. Você precisará adicionar o trial de 14 dias manualmente no Stripe Dashboard:
+   - Acesse cada preço
+   - Em "Free trial" configure 14 dias
+
+---
+
+## Arquivos a Modificar
+
+1. `src/lib/subscription-tiers.ts` - Atualizar os novos `priceId`
 
 ---
 
 ## Resultado Esperado
-Ao clicar em "Falar com Vendas" no plano Enterprise (R$ 200), o usuário será redirecionado diretamente para o WhatsApp com o número correto, pronto para iniciar conversa com a equipe de vendas.
+
+Após a implementação:
+- Checkout usará preços de R$ 100, R$ 150 e R$ 200
+- Clientes terão 14 dias de trial antes da primeira cobrança
+
