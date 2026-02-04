@@ -66,15 +66,15 @@ export function LandingFooter() {
             <div className="space-y-2 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 <Mail className="w-4 h-4" />
-                <span>contato@restaurantos.com.br</span>
+                <span>ricardodelima1988@gmail.com</span>
               </div>
               <div className="flex items-center gap-2">
                 <Phone className="w-4 h-4" />
-                <span>(11) 99999-9999</span>
+                <span>(98) 98254-9505</span>
               </div>
               <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4" />
-                <span>São Paulo, SP</span>
+                <span>Alexandria, RN - Brasil</span>
               </div>
             </div>
           </div>
