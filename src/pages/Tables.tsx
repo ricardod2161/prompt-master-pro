@@ -2,8 +2,9 @@ import { useState, useMemo } from "react";
 import { 
   QrCode, Plus, Trash2, Eye, Users, Clock, UtensilsCrossed, 
   Filter, Grid3X3, RefreshCw, AlertCircle, Check, Loader2,
-  Sparkles
+  Sparkles, ArrowLeft
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -504,6 +505,7 @@ function StatusLegend() {
 
 // ============= MAIN COMPONENT =============
 export default function Tables() {
+  const navigate = useNavigate();
   const { data: tables = [], isLoading, refetch } = useTables();
   const { data: orders = [] } = useOrders();
   const { selectedUnit } = useUnit();
@@ -596,11 +598,21 @@ export default function Tables() {
       <div className="flex-shrink-0 space-y-4 p-4 sm:p-6 pb-0 bg-background">
         {/* Title Row */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-          <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold">Gestão de Mesas</h1>
-            <p className="text-sm text-muted-foreground">
-              {tables.length} {tables.length === 1 ? 'mesa cadastrada' : 'mesas cadastradas'}
-            </p>
+          <div className="min-w-0 flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate("/dashboard")}
+              className="h-9 w-9 shrink-0"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold">Gestão de Mesas</h1>
+              <p className="text-sm text-muted-foreground">
+                {tables.length} {tables.length === 1 ? 'mesa cadastrada' : 'mesas cadastradas'}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Tooltip>
