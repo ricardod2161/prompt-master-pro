@@ -1,4 +1,4 @@
-import { Sparkles, RefreshCw, Shield, HeadphonesIcon, CreditCard, HelpCircle } from "lucide-react";
+import { Sparkles, RefreshCw, Shield, HeadphonesIcon, CreditCard, HelpCircle, Mail, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -173,38 +173,15 @@ export default function Pricing() {
         <p className="text-muted-foreground mb-6 max-w-lg mx-auto">
           Nossa equipe está pronta para ajudar você a escolher o melhor plano para seu restaurante.
         </p>
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Button 
-            variant="outline" 
-            className="gap-2"
-            onClick={() => {
-              const link = document.createElement('a');
-              link.href = 'mailto:suporte@restaurantos.com.br';
-              link.target = '_blank';
-              link.rel = 'noopener noreferrer';
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-            }}
-          >
-            <HeadphonesIcon className="h-4 w-4" />
-            Falar com Suporte
-          </Button>
-          <Button 
-            className="gap-2"
-            onClick={() => {
-              const link = document.createElement('a');
-              link.href = 'mailto:ricardodelima1988@gmail.com?subject=Dúvidas sobre Planos&body=Olá! Gostaria de saber mais sobre os planos do RestaurantOS';
-              link.target = '_blank';
-              link.rel = 'noopener noreferrer';
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-            }}
-          >
-            <Sparkles className="h-4 w-4" />
-            Enviar Email
-          </Button>
+        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+          <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-card border shadow-sm">
+            <Mail className="h-5 w-5 text-primary" />
+            <span className="font-medium text-sm sm:text-base select-all">ricardodelima1988@gmail.com</span>
+          </div>
+          <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-card border shadow-sm">
+            <Phone className="h-5 w-5 text-green-500" />
+            <span className="font-medium text-sm sm:text-base select-all">(98) 98254-9505</span>
+          </div>
         </div>
       </div>
     </div>

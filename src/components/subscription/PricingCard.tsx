@@ -122,26 +122,6 @@ export function PricingCard({
               </>
             )}
           </Button>
-        ) : tier === 'enterprise' ? (
-          <Button
-            variant={isPopular ? "default" : "outline"}
-            className={cn(
-              "w-full gap-2 h-11 font-semibold",
-              isPopular && "bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
-            )}
-            onClick={() => {
-              const link = document.createElement('a');
-              link.href = 'mailto:ricardodelima1988@gmail.com?subject=Interesse no Plano Enterprise&body=Olá! Tenho interesse no Plano Enterprise do RestaurantOS';
-              link.target = '_blank';
-              link.rel = 'noopener noreferrer';
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-            }}
-          >
-            <Crown className="h-4 w-4" />
-            Falar com Vendas
-          </Button>
         ) : (
           <Button
             variant={isPopular ? "default" : "outline"}
