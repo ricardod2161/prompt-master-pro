@@ -26,8 +26,12 @@ interface Order {
   customer_phone: string | null;
   channel: string;
   total_price: number;
-  delivery_order?: {
+  table_id: string | null;
+  delivery_orders?: Array<{
     address: string;
+  }> | null;
+  tables?: {
+    number: number;
   } | null;
 }
 
@@ -80,7 +84,7 @@ serve(async (req) => {
       );
     }
 
-    // Get order details
+    // Get order details with table info
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .select(`
@@ -90,6 +94,8 @@ serve(async (req) => {
         customer_phone,
         channel,
         total_price,
+        table_id,
+        tables(number),
         delivery_orders(address)
       `)
       .eq("id", orderId)
@@ -128,11 +134,20 @@ serve(async (req) => {
     const deliveryAddress = Array.isArray(order.delivery_orders) && order.delivery_orders.length > 0
       ? order.delivery_orders[0].address
       : null;
+    const tableNumber = Array.isArray(order.tables) && order.tables.length > 0 
+      ? order.tables[0].number 
+      : null;
     let message = "";
 
     switch (status) {
       case "ready":
-        if (order.channel === "delivery") {
+        if (order.channel === "table" && tableNumber) {
+          // Mensagem especial para pedidos de mesa
+          message = `🎉 *Olá ${customerName}!*\n\n` +
+            `Seu pedido *#${order.order_number}* na *Mesa ${tableNumber}* está *PRONTO*! ✅\n\n` +
+            `🍽️ Já estamos levando até você!\n\n` +
+            `Agradecemos a preferência! 💚`;
+        } else if (order.channel === "delivery") {
           message = `🎉 *Olá ${customerName}!*\n\n` +
             `Seu pedido *#${order.order_number}* está *PRONTO* e já está saindo para entrega! 🛵\n\n` +
             `📍 Endereço: ${deliveryAddress || "Conforme informado"}\n\n` +
