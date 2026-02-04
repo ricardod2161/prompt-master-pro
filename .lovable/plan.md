@@ -1,49 +1,48 @@
 
-# Correção Profissional do Sistema de Pix
+# Seleção de Forma de Pagamento no Cardápio Digital
 
-## Problemas Identificados
-
-### 1. Cidade do Comerciante Errada
-```typescript
-// Código atual em OrderTracking.tsx (linha 133)
-merchantCity: unitInfo?.address?.split(",")[0]?.trim() || "BRASIL"
-```
-Se o endereço é "Rua das Flores, 123", o sistema pega "Rua das Flores" como cidade, o que está ERRADO.
-
-### 2. Nome do Comerciante Inadequado
-O nome usado no Pix é o nome da unidade (`unitInfo?.name`), que pode ser diferente do nome registrado para receber Pix.
-
-### 3. Falta de Configuração Dedicada
-Não existem campos para configurar o nome e cidade do comerciante Pix de forma independente.
-
----
+## Problema Identificado
+O fluxo atual de pedido (`CustomerOrder.tsx`) não inclui seleção de forma de pagamento. O cliente finaliza o pedido sem informar como vai pagar.
 
 ## Solução Proposta
 
 ### Fase 1: Banco de Dados
-Adicionar novos campos na tabela `unit_settings`:
-- `pix_merchant_name` - Nome do beneficiário (como aparece no Pix)
-- `pix_merchant_city` - Cidade do beneficiário (obrigatório no padrão EMV)
+Adicionar campo `change_for` na tabela `orders` para armazenar o valor do troco (quando pagamento em dinheiro):
 
-### Fase 2: Interface de Configuração
-Atualizar `FinancialTab.tsx` para incluir:
-- Campo "Nome do Beneficiário Pix"
-- Campo "Cidade do Beneficiário"
-- Validações e feedback visual
-
-### Fase 3: Geração do Código Pix
-Atualizar `OrderTracking.tsx` para usar os novos campos:
-```typescript
-// ANTES (errado)
-merchantCity: unitInfo?.address?.split(",")[0]?.trim() || "BRASIL"
-
-// DEPOIS (correto)
-merchantCity: unitSettings?.pix_merchant_city || "BRASIL"
-merchantName: unitSettings?.pix_merchant_name || unitInfo?.name || "RESTAURANTE"
+```sql
+ALTER TABLE public.orders
+ADD COLUMN payment_method TEXT,
+ADD COLUMN change_for NUMERIC;
 ```
 
-### Fase 4: Edge Function
-Atualizar `send-order-notification/index.ts` para também usar os novos campos.
+### Fase 2: Interface do Cliente
+Adicionar seção de pagamento no carrinho (`CustomerOrder.tsx`) antes do botão "Enviar Pedido":
+
+**Design da Seleção:**
+- 3 opções visuais com ícones: 💵 Dinheiro | 📱 Pix | 💳 Cartão
+- Seleção obrigatória para finalizar pedido
+- Animação suave ao selecionar
+
+**Lógica Condicional:**
+| Forma Selecionada | Campo Adicional |
+|-------------------|-----------------|
+| Dinheiro | Input: "Pagar com R$" → Calcula e mostra troco |
+| Pix | Nenhum campo extra |
+| Cartão | Nenhum campo extra (crédito/débito) |
+
+### Fase 3: Hook de Pedido
+Atualizar `useCustomerOrder.ts`:
+- Adicionar estado `paymentMethod`
+- Adicionar estado `changeFor`
+- Incluir campos no insert da order
+- Validar que forma de pagamento foi selecionada
+
+### Fase 4: Exibição do Troco
+Quando dinheiro selecionado:
+```
+Pagar com: [R$ ____]
+Troco: R$ XX,XX
+```
 
 ---
 
@@ -51,21 +50,94 @@ Atualizar `send-order-notification/index.ts` para também usar os novos campos.
 
 | Arquivo | Alteração |
 |---------|-----------|
-| **Migração SQL** | Adicionar colunas `pix_merchant_name`, `pix_merchant_city` |
-| `src/hooks/useUnitSettings.ts` | Adicionar novos campos no tipo `UnitSettings` |
-| `src/components/settings/FinancialTab.tsx` | Adicionar inputs para nome e cidade Pix |
-| `src/pages/OrderTracking.tsx` | Usar os novos campos para gerar código Pix |
-| `src/hooks/useOrderTracking.ts` | Buscar novos campos do banco |
-| `supabase/functions/send-order-notification/index.ts` | Usar novos campos |
+| **Migração SQL** | Adicionar colunas `payment_method`, `change_for` |
+| `src/hooks/useCustomerOrder.ts` | Estados e lógica de pagamento |
+| `src/pages/CustomerOrder.tsx` | UI de seleção e input de troco |
 
 ---
 
-## Resultado Final
+## Fluxo do Usuário
 
-O código Pix gerado será:
-- **Nome do Beneficiário**: Configurável nas configurações (ex: "JOAO DA SILVA")
-- **Cidade**: Configurável nas configurações (ex: "SAO PAULO")
-- **Chave Pix**: Como já existe
-- **Valor**: Total do pedido
+```text
+1. Cliente adiciona produtos ao carrinho
+2. Abre carrinho
+3. Preenche nome/telefone (opcional)
+4. NOVO → Seleciona forma de pagamento
+5. Se DINHEIRO → Informa valor para troco
+6. Clica "Enviar Pedido"
+7. Redireciona para acompanhamento
+```
 
-Isso garantirá que o QR Code Pix funcione corretamente em qualquer banco.
+---
+
+## Detalhes Técnicos
+
+### Componente de Seleção de Pagamento
+```tsx
+// Novo componente dentro do carrinho
+<div className="glass rounded-2xl p-5 space-y-4">
+  <p className="font-semibold">Forma de Pagamento</p>
+  
+  <div className="grid grid-cols-3 gap-3">
+    <PaymentOption 
+      icon={<Banknote />} 
+      label="Dinheiro" 
+      selected={paymentMethod === 'cash'}
+      onClick={() => setPaymentMethod('cash')}
+    />
+    <PaymentOption 
+      icon={<QrCode />} 
+      label="Pix" 
+      selected={paymentMethod === 'pix'}
+      onClick={() => setPaymentMethod('pix')}
+    />
+    <PaymentOption 
+      icon={<CreditCard />} 
+      label="Cartão" 
+      selected={paymentMethod === 'credit'}
+      onClick={() => setPaymentMethod('credit')}
+    />
+  </div>
+  
+  {paymentMethod === 'cash' && (
+    <div className="animate-fade-in space-y-3">
+      <Input 
+        type="number"
+        placeholder="Pagar com R$"
+        value={changeFor}
+        onChange={(e) => setChangeFor(e.target.value)}
+      />
+      {changeFor > cartTotal && (
+        <p className="text-sm">
+          Troco: <span className="font-bold text-primary">
+            {formatCurrency(changeFor - cartTotal)}
+          </span>
+        </p>
+      )}
+    </div>
+  )}
+</div>
+```
+
+### Validação no Submit
+```typescript
+// Em useCustomerOrder.ts
+if (!paymentMethod) {
+  throw new Error("Selecione uma forma de pagamento");
+}
+
+if (paymentMethod === 'cash' && changeFor && changeFor < cartTotal) {
+  throw new Error("Valor insuficiente para pagamento");
+}
+```
+
+### Insert do Pedido
+```typescript
+const { data: order } = await supabase
+  .from("orders")
+  .insert({
+    // ... campos existentes
+    payment_method: paymentMethod,
+    change_for: paymentMethod === 'cash' ? changeFor : null,
+  })
+```
