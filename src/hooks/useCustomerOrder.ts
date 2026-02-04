@@ -218,6 +218,20 @@ export function useCustomerOrder(tableId: string) {
       setOrderSuccess(true);
       setOrderNumber(order.order_number);
       setOrderId(order.id);
+      
+      // Enviar notificação WhatsApp com Pix automaticamente
+      if (customerInfo.phone && unitId) {
+        supabase.functions.invoke("send-order-notification", {
+          body: {
+            orderId: order.id,
+            status: "confirmed",
+            unitId: unitId,
+          },
+        }).catch((err) => {
+          console.log("WhatsApp notification skipped:", err);
+        });
+      }
+      
       clearCart();
       setCustomerInfo({ name: "", phone: "" });
       setPaymentMethod(null);
