@@ -211,7 +211,13 @@ export default function OrderTracking() {
             variant="ghost"
             size="sm"
             className="rounded-full"
-            onClick={() => navigate(-1)}
+            onClick={() => {
+              if (order?.table_id) {
+                navigate(`/order/${order.table_id}`);
+              } else {
+                navigate(-1);
+              }
+            }}
           >
             <ArrowLeft className="h-4 w-4 mr-1" />
             Voltar
