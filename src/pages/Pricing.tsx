@@ -184,7 +184,7 @@ export default function Pricing() {
           </Button>
           <Button 
             className="gap-2"
-            onClick={() => window.open('https://wa.me/5511999999999?text=Olá! Gostaria de saber mais sobre os planos do RestaurantOS', '_blank')}
+            onClick={() => window.open('mailto:ricardodelima1988@gmail.com?subject=Dúvidas sobre Planos&body=Olá! Gostaria de saber mais sobre os planos do RestaurantOS', '_blank')}
           >
             <Sparkles className="h-4 w-4" />
             WhatsApp
