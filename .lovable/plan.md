@@ -1,63 +1,78 @@
 
-# Correção: Pedido de Mesa Não Vai para Cozinha
+# Correção: Notificação WhatsApp não chega no cliente
 
 ## Problema Identificado
 
-O trigger `generate_tracking_token()` que roda ao criar pedidos de mesa usa `gen_random_bytes(16)` para gerar o token de rastreamento. Porém:
-
-- A função tem `SET search_path TO 'public'`
-- `gen_random_bytes()` está no schema `extensions`
-- Resultado: O PostgreSQL não encontra a função e o INSERT falha
-
-**Erro nos logs:**
+O log da Evolution API mostra:
+```json
+{"status":400,"error":"Bad Request","response":{"message":[{"jid":"5584998570652@s.whatsapp.net","exists":false}]}}
 ```
-function gen_random_bytes(integer) does not exist
-```
+
+A API retorna `exists: false` porque o número está sendo enviado no formato incorreto.
+
+### Comparação de Código
+
+| Função | Campo `number` | Resultado |
+|--------|----------------|-----------|
+| `whatsapp-webhook` (funciona) | `5584998570652` | ✅ Sucesso |
+| `send-order-notification` (falha) | `5584998570652@s.whatsapp.net` | ❌ Bad Request |
 
 ## Solução
 
-Atualizar a função `generate_tracking_token()` para usar o nome completo `extensions.gen_random_bytes(16)`.
+Remover o sufixo `@s.whatsapp.net` do campo `number` na requisição da Evolution API.
 
-### Migração SQL
+### Alteração no Código
 
-```sql
-CREATE OR REPLACE FUNCTION public.generate_tracking_token()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $function$
-BEGIN
-  -- Gerar token apenas para pedidos de mesa
-  IF NEW.channel = 'table' AND NEW.tracking_token IS NULL THEN
-    -- Usar schema completo para evitar erro de search_path
-    NEW.tracking_token := encode(extensions.gen_random_bytes(16), 'hex');
-  END IF;
-  RETURN NEW;
-END;
-$function$;
+**Arquivo:** `supabase/functions/send-order-notification/index.ts`
+
+**Antes (linhas 394-417):**
+```typescript
+// Format phone number for WhatsApp
+let phone = order.customer_phone.replace(/\D/g, "");
+if (!phone.startsWith("55")) {
+  phone = "55" + phone;
+}
+const remoteJid = `${phone}@s.whatsapp.net`;  // ← PROBLEMA
+
+// ...
+body: JSON.stringify({
+  number: remoteJid,  // ← Enviando formato errado
+  text: message,
+}),
 ```
 
-## Arquivos a Modificar
+**Depois:**
+```typescript
+// Format phone number for WhatsApp
+let phone = order.customer_phone.replace(/\D/g, "");
+if (!phone.startsWith("55")) {
+  phone = "55" + phone;
+}
+// Removido: const remoteJid = `${phone}@s.whatsapp.net`;
+
+// ...
+body: JSON.stringify({
+  number: phone,  // ← Apenas o número, sem sufixo
+  text: message,
+}),
+```
+
+## Arquivo a Modificar
 
 | Arquivo | Alteração |
 |---------|-----------|
-| **Migração SQL** | Atualizar função `generate_tracking_token()` |
+| `supabase/functions/send-order-notification/index.ts` | Remover `@s.whatsapp.net` do campo `number` |
 
 ## Fluxo Após Correção
 
 ```text
-1. Cliente abre carrinho na mesa
-2. Seleciona forma de pagamento
-3. Clica "Enviar Pedido"
-4. Trigger gera tracking_token com extensions.gen_random_bytes()
-5. Pedido criado com sucesso
-6. Redirecionado para página de acompanhamento
-7. Pedido aparece no KDS da cozinha
+1. Cliente faz pedido na mesa com telefone
+2. Estabelecimento marca pedido como "Pronto"
+3. Sistema envia número: "5584998570652" (sem sufixo)
+4. Evolution API encontra o número no WhatsApp
+5. Mensagem entregue ao cliente ✅
 ```
 
-## Detalhes Técnicos
+## Observação Importante
 
-A função `gen_random_bytes` é parte da extensão `pgcrypto`. No Supabase, extensões são instaladas no schema `extensions`. Quando uma função tem `SET search_path TO 'public'` (boa prática de segurança), ela não consegue resolver funções de outros schemas sem qualificação completa.
-
-A solução mais segura é usar o nome totalmente qualificado `extensions.gen_random_bytes()` ao invés de alterar o search_path, mantendo a segurança da função.
+O erro `exists: false` também pode ocorrer se o número do cliente realmente não estiver cadastrado no WhatsApp. Porém, o formato incorreto está causando falhas mesmo para números válidos.
