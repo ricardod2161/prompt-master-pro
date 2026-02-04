@@ -316,22 +316,54 @@ serve(async (req) => {
           message = `🎉 *Olá ${customerName}!*\n\n` +
             `Seu pedido *#${order.order_number}* na *Mesa ${tableNumber}* está *PRONTO*! ✅\n\n` +
             `🍽️ Já estamos levando até você!\n\n` +
-            `Agradecemos a preferência! 💚`;
+            `💰 *Valor Total: ${formattedTotal}*\n`;
+          
+          if (pixCode) {
+            message += `\n📱 *Pague via Pix:*\n` +
+              `Copie o código abaixo e cole no seu app de banco:\n\n` +
+              `\`\`\`${pixCode}\`\`\`\n`;
+          }
+          
+          message += `\nAgradecemos a preferência! 💚`;
         } else if (order.channel === "delivery") {
           message = `🎉 *Olá ${customerName}!*\n\n` +
             `Seu pedido *#${order.order_number}* está *PRONTO* e já está saindo para entrega! 🛵\n\n` +
-            `📍 Endereço: ${deliveryAddress || "Conforme informado"}\n\n` +
-            `Em breve chegará até você!\n` +
+            `📍 *Endereço:* ${deliveryAddress || "Conforme informado"}\n\n` +
+            `💰 *Valor Total: ${formattedTotal}*\n`;
+          
+          if (pixCode) {
+            message += `\n📱 *Pague via Pix:*\n` +
+              `Copie o código abaixo e cole no seu app de banco:\n\n` +
+              `\`\`\`${pixCode}\`\`\`\n`;
+          }
+          
+          message += `\nEm breve chegará até você!\n` +
             `Agradecemos a preferência! 💚`;
         } else if (order.channel === "counter") {
           message = `🎉 *Olá ${customerName}!*\n\n` +
             `Seu pedido *#${order.order_number}* está *PRONTO*! ✅\n\n` +
-            `Você já pode retirar no balcão.\n` +
+            `💰 *Valor Total: ${formattedTotal}*\n`;
+          
+          if (pixCode) {
+            message += `\n📱 *Pague via Pix:*\n` +
+              `Copie o código abaixo e cole no seu app de banco:\n\n` +
+              `\`\`\`${pixCode}\`\`\`\n`;
+          }
+          
+          message += `\nVocê já pode retirar no balcão.\n` +
             `Agradecemos a preferência! 💚`;
         } else {
           message = `🎉 *Olá ${customerName}!*\n\n` +
             `Seu pedido *#${order.order_number}* está *PRONTO*! ✅\n\n` +
-            `Agradecemos a preferência! 💚`;
+            `💰 *Valor Total: ${formattedTotal}*\n`;
+          
+          if (pixCode) {
+            message += `\n📱 *Pague via Pix:*\n` +
+              `Copie o código abaixo e cole no seu app de banco:\n\n` +
+              `\`\`\`${pixCode}\`\`\`\n`;
+          }
+          
+          message += `\nAgradecemos a preferência! 💚`;
         }
         break;
 
