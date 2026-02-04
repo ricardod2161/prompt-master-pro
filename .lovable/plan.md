@@ -1,90 +1,118 @@
 
-# Melhorar Exibição do Pix para Cliente
+# Notificação Automática de Pix via WhatsApp para Pedidos de Mesa
 
-## Problemas Identificados
+## Objetivo
 
-1. **Exibição do código Pix pouco destacada**: O código "copia e cola" está em uma caixa pequena com texto truncado (`line-clamp-2`), dificultando a visualização e cópia manual
+Quando o cliente da mesa enviar o pedido com telefone cadastrado, ele receberá automaticamente uma mensagem WhatsApp com:
+- Confirmação do pedido
+- Número do pedido e mesa
+- Valor total
+- **Código Pix copia e cola** destacado para pagamento imediato
 
-2. **Campos Pix incompletos no banco de dados**: 
-   - `pix_key`: `38734543864` (CPF - configurado)
-   - `pix_merchant_name`: NULL (usando fallback)
-   - `pix_merchant_city`: NULL (usando fallback "BRASIL")
+## Arquitetura da Solução
 
-3. **UX de cópia pode ser melhorada**: O botão de copiar funciona, mas o código deveria estar mais visível caso o cliente queira copiar manualmente
-
-## Solução Proposta
-
-### 1. Redesenhar a Seção de Pix na Página de Rastreamento
-
-Melhorar o componente Pix em `src/pages/OrderTracking.tsx`:
-
-- Mostrar o código Pix completo em uma área expandível
-- Adicionar destaque visual verde (cor do Pix)
-- Mostrar instruções claras de como usar
-- Botão de copiar mais proeminente com feedback visual
-- Mostrar informações do beneficiário
-
-**Design proposto:**
-```
-┌────────────────────────────────────────┐
-│ 💚 PAGUE COM PIX                       │
-│                                        │
-│      ┌──────────────────────┐         │
-│      │     [QR CODE]        │         │
-│      │       180x180        │         │
-│      └──────────────────────┘         │
-│                                        │
-│      Valor: R$ 34,90                   │
-│                                        │
-│ ┌────────────────────────────────────┐│
-│ │ 📋 PIX COPIA E COLA               ││
-│ │                                    ││
-│ │ 38734543864   ││
-│ │ (código completo visível)         ││
-│ │                                    ││
-│ │      [ Toque para copiar ]        ││
-│ └────────────────────────────────────┘│
-│                                        │
-│ Beneficiário: SABOR & ARTE            │
-│ Chave: 387.345.438-64                 │
-└────────────────────────────────────────┘
+```text
+┌─────────────────────┐
+│  Cliente na Mesa    │
+│  (CustomerOrder)    │
+└─────────┬───────────┘
+          │ 1. Enviar Pedido
+          ▼
+┌─────────────────────┐
+│  useCustomerOrder   │──► 2. INSERT orders
+│  (Hook)             │
+└─────────┬───────────┘
+          │ 3. onSuccess
+          ▼
+┌─────────────────────┐
+│ send-order-         │──► 4. Gera código Pix EMV
+│ notification        │
+└─────────┬───────────┘
+          │ 5. Evolution API
+          ▼
+┌─────────────────────┐
+│  WhatsApp Cliente   │
+│  📱 Código Pix      │
+└─────────────────────┘
 ```
 
-### 2. Melhorar a Área de Código Copia e Cola
+## Mensagem WhatsApp Enviada
 
-- **Remover o `line-clamp-2`** que trunca o código
-- **Área clicável** que copia ao toque
-- **Feedback visual** ao copiar (animação + toast)
-- **Fundo destacado** em verde claro
-- **Mostrar código completo** com scroll horizontal se necessário
+```
+✅ *Pedido Confirmado!*
 
-### 3. Adicionar Informações do Beneficiário
+Olá João! Seu pedido *#42* na *Mesa 5* foi recebido!
 
-Mostrar para dar confiança ao cliente:
-- Nome do beneficiário (do `pix_merchant_name` ou nome da unidade)
-- Chave Pix formatada (CPF formatado: 387.345.438-64)
+💰 *Valor Total: R$ 67,90*
 
-## Arquivos a Modificar
+📱 *Pague via Pix:*
+Copie o código abaixo e cole no seu app de banco:
 
-| Arquivo | Alteração |
-|---------|-----------|
-| `src/pages/OrderTracking.tsx` | Redesenhar seção de Pix com destaque, código visível e área clicável |
+```00020126580014br.gov.bcb.pix0136...```
 
-## Resultado Esperado
+⏱️ Tempo estimado: 15-20 min
 
-O cliente verá:
-1. QR Code grande e claro para escanear
-2. Código Pix completo e visível para copiar
-3. Área clicável que copia automaticamente
-4. Informações do beneficiário para confiança
-5. Feedback visual confirmando a cópia
+Agradecemos a preferência! 💚
+```
+
+## Alterações Necessárias
+
+### 1. `src/hooks/useCustomerOrder.ts`
+
+Adicionar chamada à edge function após criar o pedido com sucesso:
+
+```typescript
+// No onSuccess da mutation
+onSuccess: (order) => {
+  // Feedback háptico
+  if (navigator.vibrate) {
+    navigator.vibrate(200);
+  }
+  
+  setOrderSuccess(true);
+  setOrderNumber(order.order_number);
+  setOrderId(order.id);
+  
+  // NOVO: Enviar notificação WhatsApp com Pix
+  if (customerInfo.phone && unitId) {
+    supabase.functions.invoke("send-order-notification", {
+      body: {
+        orderId: order.id,
+        status: "confirmed",
+        unitId: unitId,
+      },
+    }).catch((err) => {
+      console.log("Notification skipped:", err);
+    });
+  }
+  
+  clearCart();
+  // ...
+}
+```
+
+## Fluxo Completo do Cliente
+
+1. Cliente abre cardápio da mesa via QR Code
+2. Adiciona itens ao carrinho
+3. Preenche nome e **telefone**
+4. Seleciona forma de pagamento (Pix, Dinheiro ou Cartão)
+5. Clica "Enviar Pedido"
+6. **Recebe WhatsApp com código Pix** (se telefone informado)
+7. Abre página de tracking com QR Code para escanear
+8. Paga pelo app do banco
+9. Pedido aparece no KDS da cozinha
+
+## Responsividade
+
+A implementação usa a edge function existente que já é:
+- **Segura**: Usa service role key no servidor
+- **Assíncrona**: Não bloqueia o fluxo do cliente
+- **Silenciosa**: Erros são logados mas não mostrados ao cliente
 
 ## Detalhes Técnicos
 
-A implementação usará:
-- Botão/área clicável com `onClick` que copia para clipboard
-- `navigator.clipboard.writeText()` para cópia
-- `navigator.vibrate()` para feedback háptico
-- `toast.success()` para confirmação visual
-- Componente `ScrollArea` horizontal para códigos longos
-- Função `formatPixKeyForDisplay()` já existente para formatar a chave
+- A edge function `send-order-notification` já implementa toda a lógica de geração de código Pix EMV
+- O código Pix é gerado com os dados da configuração da unidade (`pix_key`, `pix_merchant_name`, `pix_merchant_city`)
+- A mensagem usa formatação Markdown do WhatsApp (negrito com asteriscos, código com crases)
+- Se o cliente não informar telefone ou WhatsApp não estiver configurado, a notificação é silenciosamente ignorada, nao quero esse pix que esta vindo nele quero o que eu adicionar
