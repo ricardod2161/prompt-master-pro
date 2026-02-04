@@ -9,7 +9,7 @@ const corsHeaders = {
 
 interface NotificationRequest {
   orderId: string;
-  status: "ready" | "delivering" | "delivered";
+  status: "ready" | "delivering" | "delivered" | "confirmed";
   unitId: string;
 }
 
@@ -17,6 +17,15 @@ interface WhatsAppSettings {
   api_url: string;
   api_token: string;
   instance_name: string;
+}
+
+interface UnitSettings {
+  pix_key: string | null;
+}
+
+interface Unit {
+  name: string;
+  address: string | null;
 }
 
 interface Order {
@@ -33,6 +42,93 @@ interface Order {
   tables?: {
     number: number;
   } | null;
+}
+
+// Pix EMV code generator functions
+function crc16(str: string): string {
+  let crc = 0xFFFF;
+  
+  for (let i = 0; i < str.length; i++) {
+    crc ^= str.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++) {
+      if (crc & 0x8000) {
+        crc = (crc << 1) ^ 0x1021;
+      } else {
+        crc = crc << 1;
+      }
+    }
+  }
+  
+  return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
+}
+
+function formatField(id: string, value: string): string {
+  const length = value.length.toString().padStart(2, '0');
+  return `${id}${length}${value}`;
+}
+
+function normalizeString(str: string): string {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9 ]/g, '')
+    .substring(0, 25)
+    .toUpperCase();
+}
+
+function formatPixKey(key: string): string {
+  const cleanKey = key.replace(/\D/g, '');
+  
+  // Phone
+  if (/^\d{10,11}$/.test(cleanKey)) {
+    return `+55${cleanKey}`;
+  }
+  
+  // CPF or CNPJ
+  if (/^\d{11}$/.test(cleanKey) || /^\d{14}$/.test(cleanKey)) {
+    return cleanKey;
+  }
+  
+  // Email or random key
+  return key.toLowerCase();
+}
+
+function generatePixCode(
+  pixKey: string,
+  merchantName: string,
+  merchantCity: string,
+  amount: number,
+  transactionId: string
+): string {
+  const formattedKey = formatPixKey(pixKey);
+  
+  let merchantAccount = formatField('00', 'br.gov.bcb.pix');
+  merchantAccount += formatField('01', formattedKey);
+  
+  let payload = '';
+  payload += formatField('00', '01');
+  payload += formatField('26', merchantAccount);
+  payload += formatField('52', '0000');
+  payload += formatField('53', '986');
+  
+  if (amount > 0) {
+    payload += formatField('54', amount.toFixed(2));
+  }
+  
+  payload += formatField('58', 'BR');
+  payload += formatField('59', normalizeString(merchantName));
+  payload += formatField('60', normalizeString(merchantCity));
+  
+  if (transactionId) {
+    const additionalData = formatField('05', transactionId.substring(0, 25).toUpperCase());
+    payload += formatField('62', additionalData);
+  }
+  
+  payload += '6304';
+  const crc = crc16(payload);
+  payload += crc;
+  
+  return payload;
 }
 
 serve(async (req) => {
@@ -83,6 +179,23 @@ serve(async (req) => {
         }
       );
     }
+
+    // Get unit settings (pix_key) and unit info
+    const [unitSettingsResult, unitInfoResult] = await Promise.all([
+      supabase
+        .from("unit_settings")
+        .select("pix_key")
+        .eq("unit_id", unitId)
+        .maybeSingle(),
+      supabase
+        .from("units")
+        .select("name, address")
+        .eq("id", unitId)
+        .maybeSingle(),
+    ]);
+
+    const unitSettings = unitSettingsResult.data as UnitSettings | null;
+    const unitInfo = unitInfoResult.data as Unit | null;
 
     // Get order details with table info
     const { data: order, error: orderError } = await supabase
@@ -137,9 +250,66 @@ serve(async (req) => {
     const tableNumber = Array.isArray(order.tables) && order.tables.length > 0 
       ? order.tables[0].number 
       : null;
+    
+    // Generate tracking URL
+    const trackingUrl = `${Deno.env.get("SUPABASE_URL")?.replace('.supabase.co', '.lovable.app').replace('https://', 'https://id-preview--') || ''}/track/${order.id}`;
+    
+    // Generate Pix code if available
+    let pixCode: string | null = null;
+    if (unitSettings?.pix_key && order.total_price > 0) {
+      try {
+        pixCode = generatePixCode(
+          unitSettings.pix_key,
+          unitInfo?.name || "Restaurante",
+          unitInfo?.address?.split(",")[0]?.trim() || "BRASIL",
+          order.total_price,
+          `PED${order.order_number}`
+        );
+      } catch (e) {
+        console.error("Error generating Pix code:", e);
+      }
+    }
+    
+    // Format currency
+    const formattedTotal = new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(order.total_price);
+    
     let message = "";
 
     switch (status) {
+      case "confirmed":
+        // Order confirmation message with Pix payment option
+        if (order.channel === "table" && tableNumber) {
+          message = `✅ *Pedido Confirmado!*\n\n` +
+            `Olá ${customerName}! Seu pedido *#${order.order_number}* na *Mesa ${tableNumber}* foi recebido!\n\n` +
+            `💰 *Valor Total: ${formattedTotal}*\n`;
+          
+          if (pixCode) {
+            message += `\n📱 *Pague via Pix:*\n` +
+              `Copie o código abaixo e cole no seu app de banco:\n\n` +
+              `\`\`\`${pixCode}\`\`\`\n`;
+          }
+          
+          message += `\n⏱️ Tempo estimado: 15-20 min\n\n` +
+            `Agradecemos a preferência! 💚`;
+        } else if (order.channel === "delivery") {
+          message = `✅ *Pedido Confirmado!*\n\n` +
+            `Olá ${customerName}! Seu pedido *#${order.order_number}* foi recebido!\n\n` +
+            `💰 *Valor Total: ${formattedTotal}*\n` +
+            `📍 *Endereço:* ${deliveryAddress || "Conforme informado"}\n\n` +
+            `⏱️ Tempo estimado: 30-45 min\n\n` +
+            `Agradecemos a preferência! 💚`;
+        } else {
+          message = `✅ *Pedido Confirmado!*\n\n` +
+            `Olá ${customerName}! Seu pedido *#${order.order_number}* foi recebido!\n\n` +
+            `💰 *Valor Total: ${formattedTotal}*\n\n` +
+            `⏱️ Tempo estimado: 15-20 min\n\n` +
+            `Agradecemos a preferência! 💚`;
+        }
+        break;
+
       case "ready":
         if (order.channel === "table" && tableNumber) {
           // Mensagem especial para pedidos de mesa

@@ -31,6 +31,7 @@ import Settings from "./pages/Settings";
 import Pricing from "./pages/Pricing";
 import SubscriptionSuccess from "./pages/SubscriptionSuccess";
 import Admin from "./pages/Admin";
+import OrderTracking from "./pages/OrderTracking";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -58,6 +59,7 @@ const App = () => (
                 <Route path="/login" element={<Login />} />
                 <Route path="/select-unit" element={<SelectUnit />} />
                 <Route path="/order/:tableId" element={<CustomerOrder />} />
+                <Route path="/track/:orderId" element={<OrderTracking />} />
                 <Route path="/subscription-success" element={<SubscriptionSuccess />} />
 
                 {/* Protected routes with layout */}

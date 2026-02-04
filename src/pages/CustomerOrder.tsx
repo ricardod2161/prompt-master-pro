@@ -1,5 +1,5 @@
 import { useState, useMemo, memo, useCallback, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useCustomerOrder, CartItem } from "@/hooks/useCustomerOrder";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -420,6 +420,7 @@ const EmptyCartState = memo(function EmptyCartState({ onClose }: { onClose: () =
 // Main component
 export default function CustomerOrder() {
   const { tableId } = useParams<{ tableId: string }>();
+  const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [cartOpen, setCartOpen] = useState(false);
 
@@ -443,8 +444,20 @@ export default function CustomerOrder() {
     submitError,
     orderSuccess,
     orderNumber,
+    orderId,
     resetOrder,
   } = useCustomerOrder(tableId || "");
+
+  // Redirect to tracking page when order is successful
+  useEffect(() => {
+    if (orderSuccess && orderId) {
+      // Small delay for haptic feedback to complete
+      const timer = setTimeout(() => {
+        navigate(`/track/${orderId}`, { replace: true });
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [orderSuccess, orderId, navigate]);
 
   // Show error toast when submission fails
   useEffect(() => {
@@ -494,14 +507,17 @@ export default function CustomerOrder() {
     );
   }
 
-  // Success state
+  // Success state - show brief loading while redirecting to tracking
   if (orderSuccess) {
     return (
-      <OrderSuccess
-        orderNumber={orderNumber}
-        tableName={`Mesa ${table.number}`}
-        onNewOrder={resetOrder}
-      />
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center">
+        <div className="text-center space-y-4 animate-pulse">
+          <div className="h-16 w-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto">
+            <CheckCircle2 className="h-8 w-8 text-primary" />
+          </div>
+          <p className="text-muted-foreground">Redirecionando para acompanhamento...</p>
+        </div>
+      </div>
     );
   }
 

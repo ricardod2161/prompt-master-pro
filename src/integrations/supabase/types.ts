@@ -782,6 +782,7 @@ export type Database = {
           min_delivery_order: number | null
           opening_hours: Json | null
           payment_methods: Json | null
+          pix_key: string | null
           primary_color: string | null
           service_fee_percentage: number | null
           sidebar_color: string | null
@@ -809,6 +810,7 @@ export type Database = {
           min_delivery_order?: number | null
           opening_hours?: Json | null
           payment_methods?: Json | null
+          pix_key?: string | null
           primary_color?: string | null
           service_fee_percentage?: number | null
           sidebar_color?: string | null
@@ -836,6 +838,7 @@ export type Database = {
           min_delivery_order?: number | null
           opening_hours?: Json | null
           payment_methods?: Json | null
+          pix_key?: string | null
           primary_color?: string | null
           service_fee_percentage?: number | null
           sidebar_color?: string | null
