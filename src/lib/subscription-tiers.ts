@@ -21,7 +21,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     name: "Starter",
     productId: "prod_Ttv3LNr32ThW8G",
     priceId: "price_1Sw7D7KBKtRrb6BSDHI3wTSm",
-    price: 99,
+    price: 100,
     features: [
       "PDV completo",
       "Cardápio Digital",
@@ -41,7 +41,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     name: "Pro",
     productId: "prod_Ttv5fsMXdkwI7k",
     priceId: "price_1Sw7F8KBKtRrb6BSXgHeKCsG",
-    price: 199,
+    price: 150,
     popular: true,
     features: [
       "Tudo do Starter",
@@ -63,7 +63,7 @@ export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, TierConfig> = {
     name: "Enterprise",
     productId: "prod_Ttv6ifEGhgCeOI",
     priceId: "price_1Sw7GEKBKtRrb6BSdkqlVaLt",
-    price: 399,
+    price: 200,
     features: [
       "Tudo do Pro",
       "Unidades ilimitadas",

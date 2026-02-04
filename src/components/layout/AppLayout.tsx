@@ -7,6 +7,7 @@ import { AppSidebar } from "./AppSidebar";
 import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
 import { SubscriptionBadge } from "@/components/subscription/SubscriptionBadge";
+import { TrialBanner } from "@/components/subscription/TrialBanner";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -54,8 +55,14 @@ export function AppLayout() {
       navigate("/");
     } else if (!authLoading && !unitLoading && user && !selectedUnit) {
       navigate("/select-unit");
+    } else if (!authLoading && user && selectedUnit && location.pathname !== '/pricing') {
+      // Check if subscription is expired (not trialing and not active)
+      const { status, subscribed } = subscription;
+      if (status && status !== 'active' && status !== 'trialing') {
+        navigate("/pricing");
+      }
     }
-  }, [user, selectedUnit, authLoading, unitLoading, navigate]);
+  }, [user, selectedUnit, authLoading, unitLoading, navigate, subscription, location.pathname]);
 
   if (authLoading || unitLoading) {
     return (
@@ -73,6 +80,13 @@ export function AppLayout() {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
+        {/* Trial Banner */}
+        {subscription.isTrialing && (
+          <TrialBanner 
+            trialEnd={subscription.trialEnd} 
+            tier={subscription.tier} 
+          />
+        )}
         <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
