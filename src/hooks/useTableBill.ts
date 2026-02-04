@@ -94,16 +94,31 @@ export function useTableBill(tableId: string, unitId: string | undefined) {
         // Don't throw - we still want to close the bill
       }
 
-      // Update table status to free
-      await supabase
+      // 1. Mark all orders as delivered (finalizes the session)
+      const orderIds = orders.map(o => o.id);
+      if (orderIds.length > 0) {
+        const { error: ordersError } = await supabase
+          .from("orders")
+          .update({ status: "delivered" })
+          .in("id", orderIds);
+
+        if (ordersError) {
+          console.error("Error updating orders status:", ordersError);
+          // Continue anyway - the main goal is to free the table
+        }
+      }
+
+      // 2. Update table status to free
+      const { error: tableError } = await supabase
         .from("tables")
         .update({ status: "free" })
         .eq("id", tableId);
 
-      // Optionally mark all orders as completed (could add a "paid" status later)
-      // For now, just leave them as-is in the system
+      if (tableError) {
+        console.error("Error updating table status:", tableError);
+      }
 
-      return { success: true };
+      return { success: true, ordersCompleted: orderIds.length };
     },
     onSuccess: () => {
       setBillClosed(true);
