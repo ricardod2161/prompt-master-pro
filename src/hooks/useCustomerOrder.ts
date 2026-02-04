@@ -14,6 +14,8 @@ export type CustomerInfo = {
   phone: string;
 };
 
+export type PaymentMethod = "cash" | "pix" | "credit" | null;
+
 // UUID validation regex - defined once
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -23,6 +25,8 @@ export function useCustomerOrder(tableId: string) {
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderNumber, setOrderNumber] = useState<number | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(null);
+  const [changeFor, setChangeFor] = useState<string>("");
 
   // Validate tableId format upfront
   const isValidTableId = useMemo(() => UUID_REGEX.test(tableId), [tableId]);
@@ -149,6 +153,16 @@ export function useCustomerOrder(tableId: string) {
         throw new Error("Dados inválidos para criar pedido");
       }
 
+      if (!paymentMethod) {
+        throw new Error("Selecione uma forma de pagamento");
+      }
+
+      const changeForValue = parseFloat(changeFor) || null;
+      
+      if (paymentMethod === "cash" && changeForValue && changeForValue < cartTotal) {
+        throw new Error("Valor insuficiente para pagamento");
+      }
+
       // Create order
       const { data: order, error: orderError } = await supabase
         .from("orders")
@@ -160,6 +174,8 @@ export function useCustomerOrder(tableId: string) {
           total_price: cartTotal,
           customer_name: customerInfo.name || null,
           customer_phone: customerInfo.phone || null,
+          payment_method: paymentMethod,
+          change_for: paymentMethod === "cash" ? changeForValue : null,
         })
         .select()
         .single();
@@ -204,6 +220,8 @@ export function useCustomerOrder(tableId: string) {
       setOrderId(order.id);
       clearCart();
       setCustomerInfo({ name: "", phone: "" });
+      setPaymentMethod(null);
+      setChangeFor("");
     },
     onError: (error) => {
       console.error("Error creating order:", error);
@@ -246,6 +264,12 @@ export function useCustomerOrder(tableId: string) {
     // Customer info
     customerInfo,
     setCustomerInfo,
+
+    // Payment
+    paymentMethod,
+    setPaymentMethod,
+    changeFor,
+    setChangeFor,
 
     // Order submission
     submitOrder,

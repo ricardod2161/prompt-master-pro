@@ -1,6 +1,7 @@
 import { useState, useMemo, memo, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useCustomerOrder, CartItem } from "@/hooks/useCustomerOrder";
+import { PaymentMethodSelector } from "@/components/customer-order/PaymentMethodSelector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -439,6 +440,10 @@ export default function CustomerOrder() {
     cartItemsCount,
     customerInfo,
     setCustomerInfo,
+    paymentMethod,
+    setPaymentMethod,
+    changeFor,
+    setChangeFor,
     submitOrder,
     isSubmitting,
     submitError,
@@ -712,6 +717,17 @@ export default function CustomerOrder() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Payment Method Selection */}
+                  <div className="pb-4">
+                    <PaymentMethodSelector
+                      paymentMethod={paymentMethod}
+                      onPaymentMethodChange={setPaymentMethod}
+                      changeFor={changeFor}
+                      onChangeForChange={setChangeFor}
+                      cartTotal={cartTotal}
+                    />
+                  </div>
                 </>
               )}
             </div>
@@ -743,7 +759,13 @@ export default function CustomerOrder() {
                     "hover:shadow-xl hover:shadow-primary/30"
                   )}
                   size="lg"
-                  onClick={submitOrder}
+                  onClick={() => {
+                    if (!paymentMethod) {
+                      toast.error("Selecione uma forma de pagamento");
+                      return;
+                    }
+                    submitOrder();
+                  }}
                   disabled={isSubmitting || cart.length === 0}
                 >
                   {isSubmitting ? (
