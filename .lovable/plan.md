@@ -1,118 +1,120 @@
 
-# Notificação Automática de Pix via WhatsApp para Pedidos de Mesa
+# Correção: Código Pix Correto no WhatsApp
 
-## Objetivo
+## Problema Identificado
 
-Quando o cliente da mesa enviar o pedido com telefone cadastrado, ele receberá automaticamente uma mensagem WhatsApp com:
-- Confirmação do pedido
-- Número do pedido e mesa
-- Valor total
-- **Código Pix copia e cola** destacado para pagamento imediato
+Na edge function `send-order-notification`, a função `formatPixKey` tem um bug de lógica:
 
-## Arquitetura da Solução
+| Tipo | Dígitos | O que acontece | Correto? |
+|------|---------|----------------|----------|
+| Telefone | 10-11 | Adiciona `+55` | ✅ |
+| CPF | **11** | Adiciona `+55` | ❌ ERRADO |
+| CNPJ | 14 | Mantém | ✅ |
 
-```text
-┌─────────────────────┐
-│  Cliente na Mesa    │
-│  (CustomerOrder)    │
-└─────────┬───────────┘
-          │ 1. Enviar Pedido
-          ▼
-┌─────────────────────┐
-│  useCustomerOrder   │──► 2. INSERT orders
-│  (Hook)             │
-└─────────┬───────────┘
-          │ 3. onSuccess
-          ▼
-┌─────────────────────┐
-│ send-order-         │──► 4. Gera código Pix EMV
-│ notification        │
-└─────────┬───────────┘
-          │ 5. Evolution API
-          ▼
-┌─────────────────────┐
-│  WhatsApp Cliente   │
-│  📱 Código Pix      │
-└─────────────────────┘
-```
+O CPF `38734543864` está virando `+5538734543864` porque a verificação de telefone vem primeiro.
 
-## Mensagem WhatsApp Enviada
-
-```
-✅ *Pedido Confirmado!*
-
-Olá João! Seu pedido *#42* na *Mesa 5* foi recebido!
-
-💰 *Valor Total: R$ 67,90*
-
-📱 *Pague via Pix:*
-Copie o código abaixo e cole no seu app de banco:
-
-```00020126580014br.gov.bcb.pix0136...```
-
-⏱️ Tempo estimado: 15-20 min
-
-Agradecemos a preferência! 💚
-```
-
-## Alterações Necessárias
-
-### 1. `src/hooks/useCustomerOrder.ts`
-
-Adicionar chamada à edge function após criar o pedido com sucesso:
+## Código Atual (Errado)
 
 ```typescript
-// No onSuccess da mutation
-onSuccess: (order) => {
-  // Feedback háptico
-  if (navigator.vibrate) {
-    navigator.vibrate(200);
+function formatPixKey(key: string): string {
+  const cleanKey = key.replace(/\D/g, '');
+  
+  // Telefone verificado PRIMEIRO - pega CPF por engano!
+  if (/^\d{10,11}$/.test(cleanKey)) {
+    return `+55${cleanKey}`;  // CPF vira telefone errado
   }
   
-  setOrderSuccess(true);
-  setOrderNumber(order.order_number);
-  setOrderId(order.id);
-  
-  // NOVO: Enviar notificação WhatsApp com Pix
-  if (customerInfo.phone && unitId) {
-    supabase.functions.invoke("send-order-notification", {
-      body: {
-        orderId: order.id,
-        status: "confirmed",
-        unitId: unitId,
-      },
-    }).catch((err) => {
-      console.log("Notification skipped:", err);
-    });
+  // CPF/CNPJ - CPF nunca chega aqui
+  if (/^\d{11}$/.test(cleanKey) || /^\d{14}$/.test(cleanKey)) {
+    return cleanKey;
   }
   
-  clearCart();
-  // ...
+  return key.toLowerCase();
 }
 ```
 
-## Fluxo Completo do Cliente
+## Solução
 
-1. Cliente abre cardápio da mesa via QR Code
-2. Adiciona itens ao carrinho
-3. Preenche nome e **telefone**
-4. Seleciona forma de pagamento (Pix, Dinheiro ou Cartão)
-5. Clica "Enviar Pedido"
-6. **Recebe WhatsApp com código Pix** (se telefone informado)
-7. Abre página de tracking com QR Code para escanear
-8. Paga pelo app do banco
-9. Pedido aparece no KDS da cozinha
+Usar a mesma lógica do `src/lib/pix-generator.ts` que detecta corretamente o tipo da chave antes de formatar:
 
-## Responsividade
+```typescript
+function detectPixKeyType(key: string): string {
+  const cleanKey = key.replace(/\D/g, '');
+  
+  // CPF: exatamente 11 dígitos E começa com dígito válido (não pode ser 0)
+  if (/^\d{11}$/.test(cleanKey) && !cleanKey.startsWith('0')) {
+    return 'cpf';
+  }
+  
+  // CNPJ: 14 dígitos
+  if (/^\d{14}$/.test(cleanKey)) {
+    return 'cnpj';
+  }
+  
+  // Telefone: tem +55 explícito OU 10-11 dígitos começando com DDD válido
+  if (/^\+?55\d{10,11}$/.test(key.replace(/[\s\-()]/g, ''))) {
+    return 'phone';
+  }
+  
+  // Email
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key)) {
+    return 'email';
+  }
+  
+  return 'random';
+}
 
-A implementação usa a edge function existente que já é:
-- **Segura**: Usa service role key no servidor
-- **Assíncrona**: Não bloqueia o fluxo do cliente
-- **Silenciosa**: Erros são logados mas não mostrados ao cliente
+function formatPixKey(key: string): string {
+  const type = detectPixKeyType(key);
+  
+  switch (type) {
+    case 'cpf':
+    case 'cnpj':
+      return key.replace(/\D/g, '');  // Só os números, SEM +55
+    case 'phone':
+      const cleanPhone = key.replace(/\D/g, '');
+      if (cleanPhone.startsWith('55')) return `+${cleanPhone}`;
+      return `+55${cleanPhone}`;
+    case 'email':
+      return key.toLowerCase();
+    default:
+      return key;
+  }
+}
+```
 
-## Detalhes Técnicos
+## Alterações
 
-- A edge function `send-order-notification` já implementa toda a lógica de geração de código Pix EMV
-- O código Pix é gerado com os dados da configuração da unidade (`pix_key`, `pix_merchant_name`, `pix_merchant_city`)
-- A mensagem usa formatação Markdown do WhatsApp (negrito com asteriscos, código com crases)
-- Se o cliente não informar telefone ou WhatsApp não estiver configurado, a notificação é silenciosamente ignorada, nao quero esse pix que esta vindo nele quero o que eu adicionar
+### Arquivo: `supabase/functions/send-order-notification/index.ts`
+
+1. Adicionar função `detectPixKeyType` (linhas ~81)
+2. Corrigir função `formatPixKey` para usar a detecção correta
+
+## Resultado Esperado
+
+**Antes (errado):**
+```
+Chave: 38734543864 (CPF)
+Formatado: +5538734543864 (tratado como telefone)
+Código Pix: INVÁLIDO
+```
+
+**Depois (correto):**
+```
+Chave: 38734543864 (CPF)
+Formatado: 38734543864 (mantido como CPF)
+Código Pix: VÁLIDO ✅
+```
+
+## Mensagem WhatsApp
+
+A mensagem já está formatada com destaque para o código Pix:
+
+```
+📱 *Pague via Pix:*
+Copie o código abaixo e cole no seu app de banco:
+
+```00020126360014br.gov.bcb.pix011438734543864...```
+```
+
+Com a correção, o código será gerado corretamente com a chave CPF.
