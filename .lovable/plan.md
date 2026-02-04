@@ -1,78 +1,90 @@
 
-# Correção: Notificação WhatsApp não chega no cliente
+# Melhorar Exibição do Pix para Cliente
 
-## Problema Identificado
+## Problemas Identificados
 
-O log da Evolution API mostra:
-```json
-{"status":400,"error":"Bad Request","response":{"message":[{"jid":"5584998570652@s.whatsapp.net","exists":false}]}}
+1. **Exibição do código Pix pouco destacada**: O código "copia e cola" está em uma caixa pequena com texto truncado (`line-clamp-2`), dificultando a visualização e cópia manual
+
+2. **Campos Pix incompletos no banco de dados**: 
+   - `pix_key`: `38734543864` (CPF - configurado)
+   - `pix_merchant_name`: NULL (usando fallback)
+   - `pix_merchant_city`: NULL (usando fallback "BRASIL")
+
+3. **UX de cópia pode ser melhorada**: O botão de copiar funciona, mas o código deveria estar mais visível caso o cliente queira copiar manualmente
+
+## Solução Proposta
+
+### 1. Redesenhar a Seção de Pix na Página de Rastreamento
+
+Melhorar o componente Pix em `src/pages/OrderTracking.tsx`:
+
+- Mostrar o código Pix completo em uma área expandível
+- Adicionar destaque visual verde (cor do Pix)
+- Mostrar instruções claras de como usar
+- Botão de copiar mais proeminente com feedback visual
+- Mostrar informações do beneficiário
+
+**Design proposto:**
+```
+┌────────────────────────────────────────┐
+│ 💚 PAGUE COM PIX                       │
+│                                        │
+│      ┌──────────────────────┐         │
+│      │     [QR CODE]        │         │
+│      │       180x180        │         │
+│      └──────────────────────┘         │
+│                                        │
+│      Valor: R$ 34,90                   │
+│                                        │
+│ ┌────────────────────────────────────┐│
+│ │ 📋 PIX COPIA E COLA               ││
+│ │                                    ││
+│ │ 38734543864   ││
+│ │ (código completo visível)         ││
+│ │                                    ││
+│ │      [ Toque para copiar ]        ││
+│ └────────────────────────────────────┘│
+│                                        │
+│ Beneficiário: SABOR & ARTE            │
+│ Chave: 387.345.438-64                 │
+└────────────────────────────────────────┘
 ```
 
-A API retorna `exists: false` porque o número está sendo enviado no formato incorreto.
+### 2. Melhorar a Área de Código Copia e Cola
 
-### Comparação de Código
+- **Remover o `line-clamp-2`** que trunca o código
+- **Área clicável** que copia ao toque
+- **Feedback visual** ao copiar (animação + toast)
+- **Fundo destacado** em verde claro
+- **Mostrar código completo** com scroll horizontal se necessário
 
-| Função | Campo `number` | Resultado |
-|--------|----------------|-----------|
-| `whatsapp-webhook` (funciona) | `5584998570652` | ✅ Sucesso |
-| `send-order-notification` (falha) | `5584998570652@s.whatsapp.net` | ❌ Bad Request |
+### 3. Adicionar Informações do Beneficiário
 
-## Solução
+Mostrar para dar confiança ao cliente:
+- Nome do beneficiário (do `pix_merchant_name` ou nome da unidade)
+- Chave Pix formatada (CPF formatado: 387.345.438-64)
 
-Remover o sufixo `@s.whatsapp.net` do campo `number` na requisição da Evolution API.
-
-### Alteração no Código
-
-**Arquivo:** `supabase/functions/send-order-notification/index.ts`
-
-**Antes (linhas 394-417):**
-```typescript
-// Format phone number for WhatsApp
-let phone = order.customer_phone.replace(/\D/g, "");
-if (!phone.startsWith("55")) {
-  phone = "55" + phone;
-}
-const remoteJid = `${phone}@s.whatsapp.net`;  // ← PROBLEMA
-
-// ...
-body: JSON.stringify({
-  number: remoteJid,  // ← Enviando formato errado
-  text: message,
-}),
-```
-
-**Depois:**
-```typescript
-// Format phone number for WhatsApp
-let phone = order.customer_phone.replace(/\D/g, "");
-if (!phone.startsWith("55")) {
-  phone = "55" + phone;
-}
-// Removido: const remoteJid = `${phone}@s.whatsapp.net`;
-
-// ...
-body: JSON.stringify({
-  number: phone,  // ← Apenas o número, sem sufixo
-  text: message,
-}),
-```
-
-## Arquivo a Modificar
+## Arquivos a Modificar
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `supabase/functions/send-order-notification/index.ts` | Remover `@s.whatsapp.net` do campo `number` |
+| `src/pages/OrderTracking.tsx` | Redesenhar seção de Pix com destaque, código visível e área clicável |
 
-## Fluxo Após Correção
+## Resultado Esperado
 
-```text
-1. Cliente faz pedido na mesa com telefone
-2. Estabelecimento marca pedido como "Pronto"
-3. Sistema envia número: "5584998570652" (sem sufixo)
-4. Evolution API encontra o número no WhatsApp
-5. Mensagem entregue ao cliente ✅
-```
+O cliente verá:
+1. QR Code grande e claro para escanear
+2. Código Pix completo e visível para copiar
+3. Área clicável que copia automaticamente
+4. Informações do beneficiário para confiança
+5. Feedback visual confirmando a cópia
 
-## Observação Importante
+## Detalhes Técnicos
 
-O erro `exists: false` também pode ocorrer se o número do cliente realmente não estiver cadastrado no WhatsApp. Porém, o formato incorreto está causando falhas mesmo para números válidos.
+A implementação usará:
+- Botão/área clicável com `onClick` que copia para clipboard
+- `navigator.clipboard.writeText()` para cópia
+- `navigator.vibrate()` para feedback háptico
+- `toast.success()` para confirmação visual
+- Componente `ScrollArea` horizontal para códigos longos
+- Função `formatPixKeyForDisplay()` já existente para formatar a chave
