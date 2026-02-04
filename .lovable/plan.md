@@ -1,130 +1,131 @@
 
-# Plano de Comercialização e Aplicativo Instalável
+# Plano: Ajuste de Preços e Trial de 14 Dias
 
-## Status: ✅ IMPLEMENTADO
+## 1. Resumo
 
----
-
-## Implementações Concluídas
-
-### ✅ Fase 1: Segurança
-- [x] Adicionada coluna `tracking_token` para rastreamento seguro de pedidos
-- [x] Trigger automático para gerar tokens em pedidos de mesa
-- [x] Função `is_valid_order_access()` para validação de acesso
-- [x] Política RLS restritiva para update de mesas
-- [x] Limite de 5 unidades por usuário (trigger `check_unit_limit`)
-
-### ✅ Fase 2: Compliance
-- [x] Página `/privacy` - Política de Privacidade (LGPD)
-- [x] Página `/terms` - Termos de Uso
-- [x] Meta tags OG atualizadas no index.html
-- [x] Meta tags Twitter Card
-- [x] Tags PWA (theme-color, apple-mobile-web-app)
-
-### ✅ Fase 3: PWA
-- [x] `vite-plugin-pwa` instalado e configurado
-- [x] Manifest com nome, descrição, cores
-- [x] Service Worker com cache de API Supabase
-- [x] Ícones: `pwa-512x512.png`, `apple-touch-icon.png`
-- [x] Página `/install` com instruções para Android, iOS e Desktop
-
-### ✅ Fase 4: Capacitor
-- [x] Dependências instaladas: @capacitor/core, @capacitor/cli, @capacitor/android, @capacitor/ios
-- [x] `capacitor.config.ts` configurado com:
-  - appId: `app.lovable.faae96baaf6c4264be661a79bc2fe650`
-  - appName: `RestaurantOS`
-  - Hot-reload via sandbox URL
+Vou criar novos preços no Stripe com trial de 14 dias e atualizar o sistema para bloquear acesso após o período de teste se não houver pagamento.
 
 ---
 
-## Próximos Passos do Usuário
+## 2. Sugestão de Novos Preços
 
-### Para PWA (Imediato):
-1. **Publicar o app** clicando em "Publish"
-2. **Testar instalação** acessando pelo celular e seguindo instruções em `/install`
+Baseado no mercado brasileiro de sistemas para restaurantes, sugiro uma redução:
 
-### Para Play Store:
-1. **Criar conta** Google Play Developer ($25 único): https://play.google.com/console
-2. **Exportar para GitHub** via botão "Export to GitHub"
-3. **Clonar e instalar dependências**:
-   ```bash
-   git clone <seu-repo>
-   cd <seu-repo>
-   npm install
-   ```
-4. **Adicionar plataforma Android**:
-   ```bash
-   npx cap add android
-   ```
-5. **Build e sincronizar**:
-   ```bash
-   npm run build
-   npx cap sync
-   ```
-6. **Abrir no Android Studio**:
-   ```bash
-   npx cap open android
-   ```
-7. **Gerar AAB assinado**: Build → Generate Signed Bundle/APK
-8. **Submeter para revisão** no Google Play Console
+| Plano | Preço Atual | Preço Sugerido | Redução |
+|-------|-------------|----------------|---------|
+| Starter | R$ 99 | R$ 69 | -30% |
+| Pro | R$ 199 | R$ 149 | -25% |
+| Enterprise | R$ 399 | R$ 299 | -25% |
 
-### Assets Necessários para Play Store:
-| Item | Tamanho | Status |
-|------|---------|--------|
-| Ícone hi-res | 512x512 | ✅ `/public/pwa-512x512.png` |
-| Feature graphic | 1024x500 | ⏳ Criar |
-| Screenshots celular | 1080x1920 | ⏳ Capturar |
-| Screenshots tablet | 1200x1920 | ⏳ Capturar |
-| Descrição curta | 80 chars | ⏳ Redigir |
-| Descrição longa | 4000 chars | ⏳ Redigir |
-| Política de Privacidade | URL | ✅ `/privacy` |
+Esses preços ficam competitivos com concorrentes como iFood Gestor, Sischef, etc.
 
 ---
 
-## Arquivos Criados/Modificados
+## 3. Implementação do Trial de 14 Dias
 
-```
-public/
-├── pwa-512x512.png          (novo)
-├── apple-touch-icon.png     (novo)
+### O Que Será Feito
 
-src/pages/
-├── Privacy.tsx              (novo)
-├── Terms.tsx                (novo)
-├── Install.tsx              (novo)
+1. **Criar novos preços no Stripe** com `trial_period_days: 14`
+2. **Atualizar `subscription-tiers.ts`** com os novos IDs de preço
+3. **Melhorar o bloqueio de acesso** no `AuthContext` para verificar status de trial
 
-capacitor.config.ts          (novo)
-vite.config.ts               (atualizado - PWA plugin)
-index.html                   (atualizado - meta tags)
-src/App.tsx                  (atualizado - rotas)
+### Como o Trial Funciona
+
+```text
+Dia 1-14 (Trial)          Dia 15+ (Sem Pagamento)
++-------------------+     +----------------------+
+| Acesso completo   |     | Bloqueio automático  |
+| ao plano escolhido| --> | Redireciona para     |
+| Sem cobrança      |     | página de pricing    |
++-------------------+     +----------------------+
+                                    |
+                                    v
+                          +----------------------+
+                          | Usuário paga         |
+                          | Acesso restaurado    |
+                          +----------------------+
 ```
 
 ---
 
-## Configuração Final
+## 4. Etapas de Implementação
 
-### vite.config.ts (PWA)
+### Fase 1: Criar Novos Preços no Stripe
+- Criar 3 novos preços com valores reduzidos
+- Configurar `trial_period_days: 14` em cada preço
+
+### Fase 2: Atualizar Código
+- Atualizar `src/lib/subscription-tiers.ts` com novos price IDs
+- Atualizar valores exibidos na UI
+
+### Fase 3: Melhorar Controle de Acesso
+- Criar componente `TrialBanner` para mostrar dias restantes
+- Criar página `TrialExpired` para usuários com trial expirado
+- Atualizar `AuthContext` para verificar status de trial via Stripe
+
+---
+
+## 5. Lógica de Bloqueio
+
+Quando o Stripe retorna `subscription.status`:
+- `trialing` = acesso liberado, mostrar banner de dias restantes
+- `active` = acesso liberado, cliente pagante
+- `past_due` = acesso bloqueado, pagamento pendente
+- `canceled` = acesso bloqueado
+- Sem assinatura = redirecionar para /pricing
+
+---
+
+## 6. Seção Técnica
+
+### Atualização do check-subscription
+
 ```typescript
-VitePWA({
-  registerType: "autoUpdate",
-  manifest: {
-    name: "RestaurantOS",
-    short_name: "RestaurantOS",
-    display: "standalone",
-    theme_color: "#000000"
-  }
-})
+// Retornar status do trial junto com a assinatura
+const subscription = subscriptions.data[0];
+const isTrialing = subscription.status === 'trialing';
+const trialEnd = subscription.trial_end 
+  ? new Date(subscription.trial_end * 1000).toISOString() 
+  : null;
+
+return {
+  subscribed: true,
+  tier,
+  productId,
+  subscriptionEnd,
+  status: subscription.status,
+  isTrialing,
+  trialEnd
+};
 ```
 
-### capacitor.config.ts
+### Componente TrialBanner
+
 ```typescript
-{
-  appId: 'app.lovable.faae96baaf6c4264be661a79bc2fe650',
-  appName: 'RestaurantOS',
-  webDir: 'dist',
-  server: {
-    url: 'https://faae96ba-af6c-4264-be66-1a79bc2fe650.lovableproject.com?forceHideBadge=true',
-    cleartext: true
-  }
+// Exibir dias restantes do trial
+const daysLeft = Math.ceil((new Date(trialEnd) - new Date()) / (1000 * 60 * 60 * 24));
+// "Você tem X dias restantes no seu período de teste"
+```
+
+### Proteção de Rotas
+
+```typescript
+// No AppLayout ou rota protegida
+if (!subscription.subscribed && !subscription.isTrialing) {
+  return <Navigate to="/pricing" />;
 }
 ```
+
+---
+
+## 7. Confirmação Necessária
+
+Preciso que você confirme os novos valores antes de criar os preços:
+
+| Plano | Novo Preço |
+|-------|------------|
+| Starter | R$ 69/mês |
+| Pro | R$ 149/mês |
+| Enterprise | R$ 299/mês |
+
+Esses valores estão ok para você, ou prefere outros?
