@@ -1,4 +1,4 @@
-import { useState, useMemo, memo, useCallback } from "react";
+import { useState, useMemo, memo, useCallback, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useCustomerOrder, CartItem } from "@/hooks/useCustomerOrder";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { toast } from "sonner";
 import {
   Sheet,
   SheetContent,
@@ -439,10 +440,25 @@ export default function CustomerOrder() {
     setCustomerInfo,
     submitOrder,
     isSubmitting,
+    submitError,
     orderSuccess,
     orderNumber,
     resetOrder,
   } = useCustomerOrder(tableId || "");
+
+  // Show error toast when submission fails
+  useEffect(() => {
+    if (submitError) {
+      // Haptic feedback for error
+      if (navigator.vibrate) {
+        navigator.vibrate([100, 50, 100]);
+      }
+      toast.error("Erro ao enviar pedido", {
+        description: "Não foi possível enviar seu pedido. Por favor, tente novamente.",
+        duration: 5000,
+      });
+    }
+  }, [submitError]);
 
   // Memoized filtered products
   const filteredProducts = useMemo(() => 

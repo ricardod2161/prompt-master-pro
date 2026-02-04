@@ -194,10 +194,17 @@ export function useCustomerOrder(tableId: string) {
       return order;
     },
     onSuccess: (order) => {
+      // Haptic feedback for success
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(200);
+      }
       setOrderSuccess(true);
       setOrderNumber(order.order_number);
       clearCart();
       setCustomerInfo({ name: "", phone: "" });
+    },
+    onError: (error) => {
+      console.error("Error creating order:", error);
     },
   });
 
