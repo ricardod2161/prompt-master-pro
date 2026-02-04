@@ -12,6 +12,7 @@ const TESTIMONIALS = [
     avatar: "CS",
     rating: 5,
     text: "O RestaurantOS transformou completamente nossa operação. Antes perdíamos pedidos e tínhamos confusão na cozinha. Agora tudo flui perfeitamente. Aumentamos nosso faturamento em 40% nos primeiros 3 meses.",
+    metric: "+40% faturamento",
   },
   {
     id: 2,
@@ -21,6 +22,7 @@ const TESTIMONIALS = [
     avatar: "AR",
     rating: 5,
     text: "A integração com WhatsApp foi um divisor de águas. Nossos clientes adoram fazer pedidos pelo celular e nós conseguimos atender muito mais gente sem aumentar a equipe.",
+    metric: "+60% pedidos",
   },
   {
     id: 3,
@@ -30,6 +32,7 @@ const TESTIMONIALS = [
     avatar: "PS",
     rating: 5,
     text: "O KDS é fantástico! Finalmente consigo ver todos os pedidos organizados por tempo e prioridade. A cozinha ficou muito mais eficiente e os pratos saem no tempo certo.",
+    metric: "-30% tempo",
   },
   {
     id: 4,
@@ -39,6 +42,47 @@ const TESTIMONIALS = [
     avatar: "MC",
     rating: 5,
     text: "O controle de estoque me salvou de vários prejuízos. Os alertas automáticos me avisam antes de acabar qualquer ingrediente. Nunca mais perdi uma venda por falta de produto.",
+    metric: "0 perdas",
+  },
+  {
+    id: 5,
+    name: "Roberto Oliveira",
+    role: "Dono",
+    restaurant: "Pizzaria Napolitana",
+    avatar: "RO",
+    rating: 5,
+    text: "Passamos de 80 para mais de 200 pedidos por dia com o sistema. A organização que o RestaurantOS trouxe para nossa operação foi incrível. Recomendo para qualquer pizzaria!",
+    metric: "+200 pedidos/dia",
+  },
+  {
+    id: 6,
+    name: "Juliana Mendes",
+    role: "Empreendedora",
+    restaurant: "Food Truck Gourmet",
+    avatar: "JM",
+    rating: 5,
+    text: "O PDV móvel é perfeito para o food truck! Atendo em eventos, feiras e na rua com a mesma facilidade. O sistema funciona offline e sincroniza quando volta a conexão.",
+    metric: "100% móvel",
+  },
+  {
+    id: 7,
+    name: "Fernando Lima",
+    role: "Gerente Geral",
+    restaurant: "Churrascaria Premium",
+    avatar: "FL",
+    rating: 5,
+    text: "Com os relatórios do RestaurantOS identificamos os pratos mais rentáveis e otimizamos nosso cardápio. O ticket médio aumentou 25% em apenas dois meses.",
+    metric: "+25% ticket médio",
+  },
+  {
+    id: 8,
+    name: "Camila Souza",
+    role: "Proprietária",
+    restaurant: "Padaria Artesanal",
+    avatar: "CA",
+    rating: 5,
+    text: "Implementamos o delivery do zero em apenas duas semanas usando o RestaurantOS. Hoje representa 40% do nosso faturamento. Foi a melhor decisão que tomei para o negócio.",
+    metric: "Delivery em 2 semanas",
   },
 ];
 
@@ -109,19 +153,26 @@ export function TestimonialsSection() {
                 </blockquote>
 
                 {/* Author */}
-                <div className="flex items-center gap-4">
-                  {/* Avatar */}
-                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center text-primary-foreground font-bold">
-                    {TESTIMONIALS[activeIndex].avatar}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    {/* Avatar */}
+                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center text-primary-foreground font-bold">
+                      {TESTIMONIALS[activeIndex].avatar}
+                    </div>
+
+                    <div>
+                      <div className="font-semibold text-foreground">
+                        {TESTIMONIALS[activeIndex].name}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {TESTIMONIALS[activeIndex].role} • {TESTIMONIALS[activeIndex].restaurant}
+                      </div>
+                    </div>
                   </div>
 
-                  <div>
-                    <div className="font-semibold text-foreground">
-                      {TESTIMONIALS[activeIndex].name}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {TESTIMONIALS[activeIndex].role} • {TESTIMONIALS[activeIndex].restaurant}
-                    </div>
+                  {/* Metric Badge */}
+                  <div className="hidden sm:block px-4 py-2 rounded-full bg-primary/10 text-primary font-semibold text-sm">
+                    {TESTIMONIALS[activeIndex].metric}
                   </div>
                 </div>
               </div>
@@ -168,6 +219,32 @@ export function TestimonialsSection() {
                 </Button>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Client Grid */}
+        <div className="mt-16 max-w-4xl mx-auto">
+          <p className="text-center text-sm text-muted-foreground mb-6">
+            Alguns dos restaurantes que confiam no RestaurantOS
+          </p>
+          <div className="grid grid-cols-4 md:grid-cols-8 gap-4">
+            {TESTIMONIALS.map((testimonial) => (
+              <button
+                key={testimonial.id}
+                onClick={() => {
+                  setIsAutoPlaying(false);
+                  setActiveIndex(testimonial.id - 1);
+                }}
+                className={cn(
+                  "aspect-square rounded-xl flex items-center justify-center font-bold text-sm transition-all",
+                  activeIndex === testimonial.id - 1
+                    ? "bg-primary text-primary-foreground scale-110 shadow-lg"
+                    : "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {testimonial.avatar}
+              </button>
+            ))}
           </div>
         </div>
       </div>
