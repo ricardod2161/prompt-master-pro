@@ -1,4 +1,4 @@
-import { useState, useMemo, memo } from "react";
+import { useState, useMemo, memo, useCallback, useEffect } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -173,9 +173,16 @@ const EmptyBillState = memo(function EmptyBillState() {
 // Bill closed success state
 const BillClosedSuccess = memo(function BillClosedSuccess({
   onClose,
+  onAutoClose,
 }: {
   onClose: () => void;
+  onAutoClose: () => void;
 }) {
+  // Trigger auto-close after mount
+  useEffect(() => {
+    onAutoClose();
+  }, [onAutoClose]);
+
   return (
     <div className="flex flex-col items-center justify-center py-16 px-4 text-center animate-scale-in">
       <div className="relative mb-6">
@@ -187,12 +194,14 @@ const BillClosedSuccess = memo(function BillClosedSuccess({
         </div>
       </div>
       <h3 className="text-xl font-bold mb-2">Conta Fechada!</h3>
-      <p className="text-sm text-muted-foreground max-w-[280px] mb-6">
+      <p className="text-sm text-muted-foreground max-w-[280px] mb-2">
         Enviamos o resumo da sua conta com o código Pix para seu WhatsApp. 
-        Obrigado pela preferência!
+      </p>
+      <p className="text-xs text-muted-foreground mb-6">
+        Obrigado pela preferência! Esta janela fechará automaticamente.
       </p>
       <Button onClick={onClose} variant="outline" className="rounded-full">
-        Fechar
+        Fechar Agora
       </Button>
     </div>
   );
@@ -212,6 +221,15 @@ export const TableBillSheet = memo(function TableBillSheet({
 }: TableBillSheetProps) {
   const [phone, setPhone] = useState("");
   const [showPhoneInput, setShowPhoneInput] = useState(false);
+
+  // Auto-close sheet after successful bill closure
+  const handleAutoClose = useCallback(() => {
+    setTimeout(() => {
+      setPhone("");
+      setShowPhoneInput(false);
+      onOpenChange(false);
+    }, 3000); // 3 seconds delay to show success message
+  }, [onOpenChange]);
 
   const formattedTotal = useMemo(
     () =>
@@ -275,7 +293,10 @@ export const TableBillSheet = memo(function TableBillSheet({
         <ScrollArea className="flex-1 min-h-0 overflow-hidden">
           <div className="px-6 py-4">
             {billClosed ? (
-              <BillClosedSuccess onClose={() => onOpenChange(false)} />
+              <BillClosedSuccess 
+                onClose={() => onOpenChange(false)} 
+                onAutoClose={handleAutoClose}
+              />
             ) : orders.length === 0 ? (
               <EmptyBillState />
             ) : (
