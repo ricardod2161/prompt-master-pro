@@ -828,6 +828,8 @@ export type Database = {
           opening_hours: Json | null
           payment_methods: Json | null
           pix_key: string | null
+          pix_merchant_city: string | null
+          pix_merchant_name: string | null
           primary_color: string | null
           service_fee_percentage: number | null
           sidebar_color: string | null
@@ -856,6 +858,8 @@ export type Database = {
           opening_hours?: Json | null
           payment_methods?: Json | null
           pix_key?: string | null
+          pix_merchant_city?: string | null
+          pix_merchant_name?: string | null
           primary_color?: string | null
           service_fee_percentage?: number | null
           sidebar_color?: string | null
@@ -884,6 +888,8 @@ export type Database = {
           opening_hours?: Json | null
           payment_methods?: Json | null
           pix_key?: string | null
+          pix_merchant_city?: string | null
+          pix_merchant_name?: string | null
           primary_color?: string | null
           service_fee_percentage?: number | null
           sidebar_color?: string | null

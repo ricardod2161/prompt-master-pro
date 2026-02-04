@@ -129,13 +129,13 @@ export default function OrderTracking() {
 
     return generatePixCode({
       pixKey: unitSettings.pix_key,
-      merchantName: unitInfo?.name || "Restaurante",
-      merchantCity: unitInfo?.address?.split(",")[0]?.trim() || "BRASIL",
+      merchantName: unitSettings.pix_merchant_name || unitInfo?.name || "RESTAURANTE",
+      merchantCity: unitSettings.pix_merchant_city || "BRASIL",
       amount: order.total_price,
       transactionId: `PED${order.order_number}`,
       description: `Pedido ${order.order_number}`,
     });
-  }, [unitSettings?.pix_key, unitInfo, order]);
+  }, [unitSettings, unitInfo, order]);
 
   // Copy Pix code to clipboard
   const handleCopyPix = useCallback(async () => {

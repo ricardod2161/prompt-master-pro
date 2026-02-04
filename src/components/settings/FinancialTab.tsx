@@ -1,4 +1,4 @@
-import { DollarSign, CreditCard, Banknote, Wallet, Receipt, Truck, ShoppingBag, Save, Loader2, QrCode, CheckCircle2, AlertCircle } from "lucide-react";
+import { DollarSign, CreditCard, Banknote, Wallet, Receipt, Truck, ShoppingBag, Save, Loader2, QrCode, CheckCircle2, AlertCircle, User, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +22,8 @@ interface FinancialSettings {
   min_delivery_order: number;
   payment_methods: PaymentMethods;
   pix_key?: string | null;
+  pix_merchant_name?: string | null;
+  pix_merchant_city?: string | null;
 }
 
 interface FinancialTabProps {
@@ -207,7 +209,6 @@ export function FinancialTab({ settings, onSettingsChange, onSave, isSaving }: F
         </div>
       </SettingCard>
 
-      {/* Pix Key Configuration */}
       <SettingCard
         icon={QrCode}
         title="Chave Pix"
@@ -257,6 +258,56 @@ export function FinancialTab({ settings, onSettingsChange, onSave, isSaving }: F
               </div>
             )}
           </div>
+
+          {/* Pix Merchant Name */}
+          <div className="space-y-2">
+            <Label htmlFor="pix-merchant-name" className="flex items-center gap-2 text-sm font-medium">
+              <User className="h-4 w-4 text-muted-foreground" />
+              Nome do Beneficiário
+            </Label>
+            <Input
+              id="pix-merchant-name"
+              type="text"
+              placeholder="Nome como registrado no Pix (ex: JOAO DA SILVA)"
+              value={settings.pix_merchant_name || ""}
+              onChange={(e) =>
+                onSettingsChange({
+                  ...settings,
+                  pix_merchant_name: e.target.value.toUpperCase() || null,
+                })
+              }
+              className="h-11 bg-background/50 border-border/50 focus:border-primary/50 uppercase"
+              maxLength={25}
+            />
+            <p className="text-xs text-muted-foreground">
+              Nome que aparece no comprovante de pagamento (máx. 25 caracteres)
+            </p>
+          </div>
+
+          {/* Pix Merchant City */}
+          <div className="space-y-2">
+            <Label htmlFor="pix-merchant-city" className="flex items-center gap-2 text-sm font-medium">
+              <MapPin className="h-4 w-4 text-muted-foreground" />
+              Cidade do Beneficiário
+            </Label>
+            <Input
+              id="pix-merchant-city"
+              type="text"
+              placeholder="Cidade (ex: SAO PAULO)"
+              value={settings.pix_merchant_city || ""}
+              onChange={(e) =>
+                onSettingsChange({
+                  ...settings,
+                  pix_merchant_city: e.target.value.toUpperCase() || null,
+                })
+              }
+              className="h-11 bg-background/50 border-border/50 focus:border-primary/50 uppercase"
+              maxLength={15}
+            />
+            <p className="text-xs text-muted-foreground">
+              Cidade registrada no Pix (obrigatório no padrão EMV)
+            </p>
+          </div>
           
           <p className="text-xs text-muted-foreground">
             💡 A chave Pix será usada para gerar QR Codes de pagamento nos pedidos via mesa.
@@ -270,7 +321,7 @@ export function FinancialTab({ settings, onSettingsChange, onSave, isSaving }: F
               className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-600 shadow-lg shadow-emerald-500/25"
             >
               {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-              Salvar Chave Pix
+              Salvar Configurações Pix
             </Button>
           </div>
         </div>

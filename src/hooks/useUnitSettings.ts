@@ -39,6 +39,8 @@ export interface UnitSettings {
   currency: string;
   payment_methods: PaymentMethods;
   pix_key?: string | null;
+  pix_merchant_name?: string | null;
+  pix_merchant_city?: string | null;
   // Theme customization
   primary_color?: string;
   accent_color?: string;

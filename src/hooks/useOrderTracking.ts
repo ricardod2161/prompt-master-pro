@@ -29,6 +29,8 @@ interface OrderData {
 
 interface UnitSettings {
   pix_key: string | null;
+  pix_merchant_name: string | null;
+  pix_merchant_city: string | null;
   currency: string | null;
 }
 
@@ -101,7 +103,7 @@ export function useOrderTracking(orderId: string) {
 
       const { data, error } = await supabase
         .from("unit_settings")
-        .select("pix_key, currency")
+        .select("pix_key, pix_merchant_name, pix_merchant_city, currency")
         .eq("unit_id", orderQuery.data.unit_id)
         .maybeSingle();
 

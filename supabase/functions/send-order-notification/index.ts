@@ -21,6 +21,8 @@ interface WhatsAppSettings {
 
 interface UnitSettings {
   pix_key: string | null;
+  pix_merchant_name: string | null;
+  pix_merchant_city: string | null;
 }
 
 interface Unit {
@@ -184,7 +186,7 @@ serve(async (req) => {
     const [unitSettingsResult, unitInfoResult] = await Promise.all([
       supabase
         .from("unit_settings")
-        .select("pix_key")
+        .select("pix_key, pix_merchant_name, pix_merchant_city")
         .eq("unit_id", unitId)
         .maybeSingle(),
       supabase
@@ -260,8 +262,8 @@ serve(async (req) => {
       try {
         pixCode = generatePixCode(
           unitSettings.pix_key,
-          unitInfo?.name || "Restaurante",
-          unitInfo?.address?.split(",")[0]?.trim() || "BRASIL",
+          unitSettings.pix_merchant_name || unitInfo?.name || "RESTAURANTE",
+          unitSettings.pix_merchant_city || "BRASIL",
           order.total_price,
           `PED${order.order_number}`
         );
