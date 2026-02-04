@@ -1,44 +1,83 @@
 
-# Correção: Links de Email não Abrem o Gmail
+# Plano: Simplificar Contatos e Botão Enterprise
 
-## Problema
-Os botões de contato estão usando `window.open('mailto:...', '_blank')` que abre uma nova aba em branco em vez de abrir o cliente de email (Gmail).
+## Mudanças Solicitadas
 
-## Solução
-Trocar `window.open()` por `window.location.href` para os links `mailto:`. Isso faz o navegador abrir o cliente de email padrão corretamente.
+### 1. Plano Enterprise - Botão "Assinar Agora"
+Remover a lógica especial de "Falar com Vendas" e usar o mesmo botão "Assinar Agora" dos outros planos.
+
+**Arquivo**: `src/components/subscription/PricingCard.tsx`
+
+**De (linhas 125-144)**:
+```typescript
+) : tier === 'enterprise' ? (
+  <Button ... onClick={() => { /* lógica de email */ }}>
+    <Crown className="h-4 w-4" />
+    Falar com Vendas
+  </Button>
+) : (
+```
+
+**Para**:
+```typescript
+) : (
+  // Remove toda a condição especial do enterprise
+  // Usa o mesmo botão "Assinar Agora" para todos
+```
+
+### 2. Seção de Contato - Exibir Informações Visíveis
+Substituir os botões que não funcionam por informações de contato visíveis.
+
+**Arquivo**: `src/pages/Pricing.tsx`
+
+**De (linhas 168-209)**:
+```typescript
+<div className="flex flex-col sm:flex-row gap-3 justify-center">
+  <Button onClick={...}>Falar com Suporte</Button>
+  <Button onClick={...}>Enviar Email</Button>
+</div>
+```
+
+**Para**:
+```typescript
+<div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+  <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card border">
+    <Mail className="h-5 w-5 text-primary" />
+    <span className="font-medium">ricardodelima1988@gmail.com</span>
+  </div>
+  <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card border">
+    <Phone className="h-5 w-5 text-green-500" />
+    <span className="font-medium">(98) 98254-9505</span>
+  </div>
+</div>
+```
+
+## Resultado Visual
+
+```text
+┌─────────────────────────────────────────────┐
+│          Ainda tem dúvidas?                 │
+│  Nossa equipe está pronta para ajudar...    │
+│                                             │
+│  ┌─────────────────────────────────────┐    │
+│  │ 📧 ricardodelima1988@gmail.com      │    │
+│  └─────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────┐    │
+│  │ 📱 (98) 98254-9505                  │    │
+│  └─────────────────────────────────────┘    │
+│                                             │
+└─────────────────────────────────────────────┘
+```
 
 ## Arquivos a Modificar
 
-### 1. `src/components/subscription/PricingCard.tsx`
-**Linha 132** - Botão "Falar com Vendas" do plano Enterprise:
-```typescript
-// DE:
-onClick={() => window.open('Ricardo:ricardodelima1988@gmail.com?subject=...', '_blank')}
+| Arquivo | Mudança |
+|---------|---------|
+| `src/components/subscription/PricingCard.tsx` | Remover condição especial do Enterprise, usar "Assinar Agora" |
+| `src/pages/Pricing.tsx` | Trocar botões por texto visível com email e WhatsApp |
 
-// PARA:
-onClick={() => window.location.href = 'Ricardo:ricardodelima1988@gmail.com?subject=...'}
-```
-
-### 2. `src/pages/Pricing.tsx`
-**Linha 180** - Botão "Falar com Suporte":
-```typescript
-// DE:
-onClick={() => window.open('Ricardo:suporte@restaurantos.com.br', '_blank')}
-
-// PARA:
-onClick={() => window.location.href = 'Ricardo:suporte@restaurantos.com.br'}
-```
-
-**Linha 187** - Botão "WhatsApp" (que na verdade deveria ser Email):
-```typescript
-// DE:
-onClick={() => window.open('Ricardo:ricardodelima1988@gmail.com?subject=...', '_blank')}
-
-// PARA:
-onClick={() => window.location.href = 'Ricardo:ricardodelima1988@gmail.com?subject=...'}
-```
-
-Também vou trocar o texto do botão de "WhatsApp" para "Email" já que agora é por email.
-
-## Resultado Esperado
-Ao clicar nos botões, o Gmail (ou cliente de email padrão) será aberto com o assunto e corpo pré-preenchidos.
+## Benefícios
+- Clientes podem copiar diretamente o email/telefone
+- Funciona em qualquer navegador ou dispositivo
+- Sem dependência de links mailto: ou wa.me
+- Mais simples e direto
