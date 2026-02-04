@@ -102,9 +102,9 @@ serve(async (req) => {
       
       // Map product ID to tier
       const tierMap: Record<string, string> = {
-        "prod_Ttv3LNr32ThW8G": "starter",
-        "prod_Ttv5fsMXdkwI7k": "pro",
-        "prod_Ttv6ifEGhgCeOI": "enterprise"
+        "prod_TulLmt1sNhS2L2": "starter",
+        "prod_TulNDUheGUqxbB": "pro",
+        "prod_TulNrqfw5s4Hp9": "enterprise"
       };
       
       tier = tierMap[productId] || null;
