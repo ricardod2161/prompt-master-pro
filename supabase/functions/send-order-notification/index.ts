@@ -391,12 +391,11 @@ serve(async (req) => {
         break;
     }
 
-    // Format phone number for WhatsApp
+    // Format phone number for WhatsApp (apenas dígitos, sem sufixo @s.whatsapp.net)
     let phone = order.customer_phone.replace(/\D/g, "");
     if (!phone.startsWith("55")) {
       phone = "55" + phone;
     }
-    const remoteJid = `${phone}@s.whatsapp.net`;
 
     // Send message via Evolution API
     const cleanApiUrl = settings.api_url.replace(/\/+$/, "");
@@ -412,7 +411,7 @@ serve(async (req) => {
         apikey: settings.api_token,
       },
       body: JSON.stringify({
-        number: remoteJid,
+        number: phone,
         text: message,
       }),
     });
