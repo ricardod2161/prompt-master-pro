@@ -1,55 +1,141 @@
 
-# Plano: Incluir Código Pix na Notificação de Pedido Pronto
+# Plano: Melhorias no Layout da Página de Mesas
 
-## Problema Identificado
+## Problemas Identificados
 
-Atualmente, quando o status do pedido muda para "ready" (pronto), a mensagem do WhatsApp não inclui o código Pix para pagamento. Conforme a imagem compartilhada, a mensagem atual é muito simples:
+Analisando a imagem e o código, identifiquei os seguintes problemas:
 
+1. **Grid muito denso**: 6 colunas em telas grandes comprimem os cards
+2. **Padding muito reduzido**: Cards com `p-3` ficam apertados
+3. **Textos muito pequenos**: Uso de `text-[10px]` dificulta leitura
+4. **Métricas compactas**: Cards de métricas com pouco espaço
+5. **Botões de ação pequenos**: Difíceis de tocar em mobile
+
+---
+
+## Melhorias Propostas
+
+### 1. Grid de Cards - Mais Espaçoso
+
+**Antes:**
 ```
-🎉 Olá Ricardo!
-Seu pedido #17 está PRONTO! ✅
-Agradecemos a preferência! 💚
-```
-
-## Solução
-
-Modificar a edge function `send-order-notification` para incluir o código Pix na mensagem de "pedido pronto", permitindo que o cliente pague no momento que for notificado.
-
-## Nova Mensagem Proposta
-
-```
-🎉 Olá Ricardo!
-
-Seu pedido #17 na Mesa 5 está PRONTO! ✅
-
-🍽️ Já estamos levando até você!
-
-💰 Valor Total: R$ 45,90
-
-📱 Pague via Pix:
-Copie o código abaixo e cole no seu app de banco:
-
-00020126580014BR.GOV.BCB.PIX0136...
-
-Agradecemos a preferência! 💚
+grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6
 ```
 
-## Alteração Necessária
+**Depois:**
+```
+grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5
+```
 
-**Arquivo:** `supabase/functions/send-order-notification/index.ts`
+Resultado: Cards maiores e mais legíveis.
 
-**Modificação no case "ready"** (linhas 313-336):
+### 2. Cards de Mesa - Mais Espaço Interno
 
-Adicionar o valor total e o código Pix em todas as variações de mensagem de "pedido pronto":
-- Pedido de mesa
-- Pedido delivery
-- Pedido balcão
-- Outros pedidos
+| Elemento | Antes | Depois |
+|----------|-------|--------|
+| Padding do card | `p-3 sm:p-4` | `p-4 sm:p-5` |
+| Título da mesa | `text-lg sm:text-xl` | `text-xl sm:text-2xl` |
+| Badge de status | `text-[10px] sm:text-xs` | `text-xs sm:text-sm` |
+| Info do pedido | `text-[10px]` | `text-xs` |
+| Botões de ação | `h-8 sm:h-9` | `h-9 sm:h-10` |
+
+### 3. Métricas no Topo - Mais Destaque
+
+| Elemento | Antes | Depois |
+|----------|-------|--------|
+| Padding | `p-3 sm:p-4` | `p-4 sm:p-5` |
+| Ícone | `h-4 w-4 sm:h-5 sm:w-5` | `h-5 w-5 sm:h-6 sm:w-6` |
+| Número | `text-xl sm:text-2xl` | `text-2xl sm:text-3xl` |
+| Label | `text-xs` | `text-sm` |
+
+### 4. Seção de Info do Pedido Ativo
+
+- Aumentar padding interno de `p-2.5` para `p-3`
+- Aumentar tamanho das fontes
+- Adicionar mais espaçamento entre elementos
+
+### 5. Gap Entre Cards
+
+- Aumentar de `gap-3 sm:gap-4` para `gap-4 sm:gap-5`
+
+---
+
+## Visualização do Resultado
+
+```text
+┌────────────────────────────────────────────────────────────┐
+│  GESTÃO DE MESAS                          [↻] [+ Nova Mesa]│
+├────────────────────────────────────────────────────────────┤
+│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐              │
+│  │  📊    │ │  ✓     │ │  🍽️    │ │  ⏳    │              │
+│  │   5    │ │   3    │ │   1    │ │   1    │              │
+│  │ Total  │ │ Livres │ │Ocupadas│ │Aguard. │              │
+│  └────────┘ └────────┘ └────────┘ └────────┘              │
+├────────────────────────────────────────────────────────────┤
+│  [🔍 Buscar mesa...        ] [Filtrar status ▼]           │
+│                                                            │
+│  ○ Livre   ○ Ocupada   ○ Aguardando                       │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│  ┌─────────────────┐  ┌─────────────────┐                 │
+│  │   MESA 1        │  │   MESA 2        │                 │
+│  │   ────────      │  │   ────────      │                 │
+│  │   🟢 Livre      │  │   🔵 Ocupada    │                 │
+│  │                 │  │                 │                 │
+│  │                 │  │ Pedido #127     │                 │
+│  │                 │  │ R$ 45,90        │                 │
+│  │                 │  │ 14:32 ● Preparo │                 │
+│  │                 │  │                 │                 │
+│  │ [QR Code] [🗑️]  │  │ [QR] [👁️] [🗑️] │                 │
+│  └─────────────────┘  └─────────────────┘                 │
+│                                                            │
+│  ┌─────────────────┐  ┌─────────────────┐                 │
+│  │   MESA 3        │  │   MESA 4        │                 │
+│  │   ────────      │  │   ────────      │                 │
+│  │   🟡 Aguardando │  │   🟢 Livre      │                 │
+│  │                 │  │                 │                 │
+│  │ [QR Code] [🗑️]  │  │ [QR Code] [🗑️]  │                 │
+│  └─────────────────┘  └─────────────────┘                 │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Arquivos a Modificar
+
+| Arquivo | Ação | Descrição |
+|---------|------|-----------|
+| `src/pages/Tables.tsx` | Modificar | Todas as melhorias de layout |
+
+---
+
+## Detalhes Técnicos
+
+### Componente TableMetrics (linhas 70-102)
+- Aumentar padding: `p-3 sm:p-4` → `p-4 sm:p-5`
+- Aumentar ícones: `h-4 w-4 sm:h-5 sm:w-5` → `h-5 w-5 sm:h-6 sm:w-6`
+- Aumentar números: `text-xl sm:text-2xl` → `text-2xl sm:text-3xl`
+- Aumentar labels: `text-xs` → `text-sm`
+
+### Componente TableCard (linhas 104-309)
+- Aumentar padding geral: `p-3 sm:p-4` → `p-4 sm:p-5`
+- Título da mesa: `text-lg sm:text-xl` → `text-xl sm:text-2xl`
+- Badge de status: `text-[10px] sm:text-xs` → `text-xs sm:text-sm`
+- Área de pedido ativo: aumentar padding e fontes
+- Botões: `h-8 sm:h-9` → `h-9 sm:h-10`
+
+### Grid principal (linha 687)
+- De: `grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6`
+- Para: `grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5`
+- Gap: `gap-3 sm:gap-4` → `gap-4 sm:gap-5`
+
+---
 
 ## Resultado Esperado
 
-| Antes | Depois |
-|-------|--------|
-| Mensagem simples sem valor | Inclui valor total do pedido |
-| Sem código Pix | QR Code Pix "copia e cola" |
-| Cliente não sabe quanto pagar | Cliente pode pagar imediatamente |
+- Cards de mesa significativamente maiores e mais legíveis
+- Métricas com mais destaque visual
+- Melhor experiência em dispositivos móveis
+- Layout mais profissional e espaçoso
+- Botões de ação mais fáceis de tocar
