@@ -1,110 +1,107 @@
 
-# Melhorias na Gestão de Mesas e QR Codes Funcionais
+# Plano: Correção do Fluxo de Pedidos via QR Code + Notificações WhatsApp
 
 ## Problema Identificado
-O QR Code atual **não funciona** porque mostra apenas um ícone decorativo (`<QrCode />` do Lucide) em vez de um QR Code real e escaneável. Os clientes não conseguem escanear para fazer pedidos.
+
+O cliente consegue abrir o cardápio digital e adicionar itens ao carrinho, mas quando clica em "Enviar Pedido para Cozinha", o pedido **não é criado no banco de dados** devido a problemas de permissão (RLS).
+
+### Diagnóstico Técnico
+
+Ao analisar as políticas de segurança do banco de dados, encontrei o seguinte:
+
+| Tabela | Permissão INSERT (anon) | Permissão SELECT (anon) |
+|--------|-------------------------|-------------------------|
+| orders | ✅ Sim (channel='table') | ❌ **NÃO** |
+| order_items | ✅ Sim (mas depende de SELECT em orders) | ❌ **NÃO** |
+
+**Causa Raiz:**
+1. O código faz `.insert().select().single()` - precisa de SELECT para retornar o pedido criado
+2. A política de `order_items` verifica se o pedido existe com `EXISTS (SELECT FROM orders...)` - sem SELECT no orders, sempre falha
+3. Resultado: pedido não é criado, itens não são inseridos, cliente vê tela de sucesso falsa
+
+---
+
+## Solução Proposta
+
+### 1. Adicionar Políticas de Leitura para Clientes Anônimos
+
+Permitir que clientes anônimos possam:
+- Ver seus próprios pedidos (channel = 'table')
+- Ver os itens dos pedidos de mesa
+
+```text
+┌──────────────────────────────────────────────────────────┐
+│  ANTES (Bloqueado)                                       │
+│  Cliente → INSERT order → SELECT order → ❌ ERRO         │
+│  Cliente → INSERT order_items → EXISTS check → ❌ ERRO   │
+├──────────────────────────────────────────────────────────┤
+│  DEPOIS (Funcionando)                                    │
+│  Cliente → INSERT order → SELECT order → ✅ Retorna ID   │
+│  Cliente → INSERT order_items → EXISTS check → ✅ OK     │
+│  KDS → Recebe pedido em tempo real                       │
+└──────────────────────────────────────────────────────────┘
+```
+
+### 2. Melhorar Tratamento de Erros no Frontend
+
+Adicionar feedback visual quando algo der errado para que o cliente saiba que precisa tentar novamente.
+
+### 3. Adicionar Mensagem Específica para Pedidos de Mesa
+
+Melhorar a mensagem do WhatsApp quando o pedido de mesa estiver pronto:
+- Informar número da mesa
+- Tom amigável e profissional
 
 ---
 
 ## Alterações Necessárias
 
-### 1. Instalar Biblioteca de QR Code
-```bash
-npm install qrcode.react
-```
-Essa biblioteca gera QR Codes reais e escaneáveis.
+### Banco de Dados (Migration SQL)
 
----
+```sql
+-- Permitir que clientes anônimos vejam pedidos de mesa
+CREATE POLICY "Public can read table orders"
+ON public.orders
+FOR SELECT
+TO anon
+USING (channel = 'table');
 
-### 2. Refatorar QRCodeDialog (src/pages/Tables.tsx)
-
-**Problemas atuais:**
-- Mostra ícone fake de QR (linhas 514-517)
-- Download gera SVG estático sem QR real
-- Visual básico
-
-**Solução - Novo QRCodeDialog profissional:**
-
-```text
-┌─────────────────────────────────────────────────────────┐
-│            🎯 QR Code - Mesa 1                          │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│          ┌─────────────────────┐                        │
-│          │   ██▀▀▀▀▀▀▀██       │                        │
-│          │   ██ █ █ ███       │  ← QR Code REAL        │
-│          │   ██ ███████       │    (escaneável)        │
-│          │   ██ █ █ ███       │                        │
-│          │   ██▄▄▄▄▄▄▄██       │                        │
-│          └─────────────────────┘                        │
-│                  Mesa 1                                 │
-│          Escaneie para fazer pedido                     │
-│                                                         │
-├─────────────────────────────────────────────────────────┤
-│  🔗 https://app.../order/uuid-mesa                      │
-│                                                         │
-│  [ 📋 Copiar ]  [ 🌐 Abrir ]  [ 📥 Baixar ]  [ 🖨 Print ]│
-└─────────────────────────────────────────────────────────┘
+-- Permitir que clientes anônimos vejam itens de pedidos de mesa
+CREATE POLICY "Public can read table order items"
+ON public.order_items
+FOR SELECT
+TO anon
+USING (
+  EXISTS (
+    SELECT 1 FROM public.orders
+    WHERE orders.id = order_items.order_id
+    AND orders.channel = 'table'
+  )
+);
 ```
 
-**Recursos novos:**
-- QR Code real usando `qrcode.react`
-- Botão de imprimir ticket com QR
-- Design glassmorphism elegante
-- Download em PNG de alta qualidade
-- Preview visual profissional
+### Frontend - Tratamento de Erros
 
----
+**Arquivo:** `src/pages/CustomerOrder.tsx`
 
-### 3. Criar Componente de Ticket Imprimível
+Adicionar exibição de erros para o cliente:
+- Toast de erro quando a submissão falhar
+- Estado de erro visual no botão
+- Mensagem clara explicando o problema
 
-Novo componente para impressão profissional:
+### Edge Function - Mensagem de Mesa
 
-```text
-┌────────────────────┐
-│    🍽️ LOGO         │
-│                    │
-│   ┌──────────┐     │
-│   │  QR CODE │     │
-│   │  REAL    │     │
-│   └──────────┘     │
-│                    │
-│     MESA 1         │
-│                    │
-│  Escaneie e faça   │
-│    seu pedido!     │
-│                    │
-│  ─────────────────  │
-│  restaurante.app   │
-└────────────────────┘
-```
+**Arquivo:** `supabase/functions/send-order-notification/index.ts`
 
----
-
-### 4. Melhorias Visuais nos Cards de Mesa
-
-**Antes:** Cards simples
-**Depois:** Cards com glassmorphism, animações sutis e indicadores visuais
-
-Melhorias:
-- Gradientes premium nos status
-- Sombras em múltiplas camadas (3D)
-- Animação de pulse sutil em mesas aguardando
-- Ícone de QR mais destacado
-- Hover effects elegantes
-
----
-
-### 5. Melhorias na Função de Download
-
-**Atual:** Download de SVG fake
-**Novo:** Download de PNG real com QR Code funcional
-
-```typescript
-// Usar canvas para gerar PNG de alta qualidade
-const canvas = document.getElementById('qr-canvas');
-const dataUrl = canvas.toDataURL('image/png');
-// Download automático
+Adicionar tratamento especial para pedidos de mesa:
+```javascript
+case "ready":
+  if (order.channel === "table") {
+    message = `🎉 *Olá ${customerName}!*\n\n` +
+      `Seu pedido *#${order.order_number}* na *Mesa ${tableNumber}* está *PRONTO*! ✅\n\n` +
+      `Já estamos levando até você!\n` +
+      `Agradecemos a preferência! 💚`;
+  }
 ```
 
 ---
@@ -113,51 +110,59 @@ const dataUrl = canvas.toDataURL('image/png');
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `package.json` | Adicionar `qrcode.react` |
-| `src/pages/Tables.tsx` | Refatorar QRCodeDialog com QR real, melhorar cards, adicionar impressão |
+| `supabase/migrations/new_migration.sql` | Adicionar políticas SELECT para anon |
+| `src/pages/CustomerOrder.tsx` | Adicionar tratamento de erros |
+| `src/hooks/useCustomerOrder.ts` | Adicionar onError handler |
+| `supabase/functions/send-order-notification/index.ts` | Melhorar mensagem para mesas |
 
 ---
 
-## Estrutura do Novo QRCodeDialog
+## Fluxo Completo Após Correção
 
-```typescript
-import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
-
-function QRCodeDialog({ ... }) {
-  // QR Code real usando a biblioteca
-  <QRCodeSVG 
-    value={qrCode}
-    size={200}
-    level="H"          // Alta correção de erro
-    includeMargin={true}
-  />
-  
-  // Canvas oculto para download PNG
-  <QRCodeCanvas
-    id="qr-canvas"
-    value={qrCode}
-    size={400}
-    style={{ display: 'none' }}
-  />
-}
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  1. CLIENTE ESCANEIA QR CODE                                    │
+│     └→ Abre cardápio digital (/order/:tableId)                  │
+├─────────────────────────────────────────────────────────────────┤
+│  2. CLIENTE FAZ PEDIDO                                          │
+│     └→ Adiciona itens, nome e telefone                          │
+│     └→ Clica "Enviar Pedido para Cozinha"                       │
+├─────────────────────────────────────────────────────────────────┤
+│  3. SISTEMA PROCESSA                                            │
+│     └→ Cria pedido (orders) com channel='table'                 │
+│     └→ Cria itens do pedido (order_items)                       │
+│     └→ Atualiza mesa para status='occupied'                     │
+│     └→ Trigger dispara notificação no sistema                   │
+├─────────────────────────────────────────────────────────────────┤
+│  4. KDS RECEBE PEDIDO (Realtime)                                │
+│     └→ Pedido aparece em "Pendentes" com som de alerta          │
+│     └→ Cozinha clica "Iniciar Preparo" → status='preparing'     │
+│     └→ Marca itens como prontos                                 │
+│     └→ Clica "Pronto" → status='ready'                          │
+├─────────────────────────────────────────────────────────────────┤
+│  5. NOTIFICAÇÃO WHATSAPP                                        │
+│     └→ Edge function verifica se cliente tem telefone           │
+│     └→ Envia mensagem personalizada via Evolution API           │
+│     └→ "Seu pedido #X na Mesa Y está PRONTO! ✅"                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Melhorias Adicionais
+
+1. **Toast de sucesso/erro** mais visíveis para o cliente
+2. **Vibração do dispositivo** ao enviar pedido (feedback háptico)
+3. **Animação de confete** na tela de sucesso
+4. **Estimativa de tempo** mais precisa baseada nos itens
+5. **Acompanhamento em tempo real** - cliente pode ver status do pedido
 
 ---
 
 ## Resultado Esperado
 
-1. ✅ QR Codes funcionais e escaneáveis
-2. ✅ Clientes podem fazer pedidos via celular
-3. ✅ Download em PNG de alta qualidade
-4. ✅ Impressão de tickets profissionais
-5. ✅ Design elegante e responsivo
-6. ✅ Rota `/order/:tableId` funcionando corretamente
-
----
-
-## Fluxo do Cliente
-
-```text
-Cliente escaneia QR → Abre /order/{tableId} → Vê cardápio → Faz pedido → KDS recebe
-```
-
+- ✅ Pedidos via QR Code funcionando corretamente
+- ✅ Pedidos aparecem no KDS em tempo real
+- ✅ Cliente recebe notificação quando pedido estiver pronto
+- ✅ Mesa atualiza status automaticamente
+- ✅ Feedback claro em caso de erros
