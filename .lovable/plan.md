@@ -1,168 +1,219 @@
 
-# Plano: Correção do Fluxo de Pedidos via QR Code + Notificações WhatsApp
+# Plano: Acompanhamento de Pedido em Tempo Real + QR Code de Pagamento Pix
 
-## Problema Identificado
+## Visão Geral
 
-O cliente consegue abrir o cardápio digital e adicionar itens ao carrinho, mas quando clica em "Enviar Pedido para Cozinha", o pedido **não é criado no banco de dados** devido a problemas de permissão (RLS).
-
-### Diagnóstico Técnico
-
-Ao analisar as políticas de segurança do banco de dados, encontrei o seguinte:
-
-| Tabela | Permissão INSERT (anon) | Permissão SELECT (anon) |
-|--------|-------------------------|-------------------------|
-| orders | ✅ Sim (channel='table') | ❌ **NÃO** |
-| order_items | ✅ Sim (mas depende de SELECT em orders) | ❌ **NÃO** |
-
-**Causa Raiz:**
-1. O código faz `.insert().select().single()` - precisa de SELECT para retornar o pedido criado
-2. A política de `order_items` verifica se o pedido existe com `EXISTS (SELECT FROM orders...)` - sem SELECT no orders, sempre falha
-3. Resultado: pedido não é criado, itens não são inseridos, cliente vê tela de sucesso falsa
+Implementar duas funcionalidades principais:
+1. **Acompanhamento em tempo real**: Cliente vê o status do pedido atualizar automaticamente
+2. **QR Code Pix**: Gerar código Pix para pagamento exibido na tela e enviado via WhatsApp
 
 ---
 
-## Solução Proposta
-
-### 1. Adicionar Políticas de Leitura para Clientes Anônimos
-
-Permitir que clientes anônimos possam:
-- Ver seus próprios pedidos (channel = 'table')
-- Ver os itens dos pedidos de mesa
-
-```text
-┌──────────────────────────────────────────────────────────┐
-│  ANTES (Bloqueado)                                       │
-│  Cliente → INSERT order → SELECT order → ❌ ERRO         │
-│  Cliente → INSERT order_items → EXISTS check → ❌ ERRO   │
-├──────────────────────────────────────────────────────────┤
-│  DEPOIS (Funcionando)                                    │
-│  Cliente → INSERT order → SELECT order → ✅ Retorna ID   │
-│  Cliente → INSERT order_items → EXISTS check → ✅ OK     │
-│  KDS → Recebe pedido em tempo real                       │
-└──────────────────────────────────────────────────────────┘
-```
-
-### 2. Melhorar Tratamento de Erros no Frontend
-
-Adicionar feedback visual quando algo der errado para que o cliente saiba que precisa tentar novamente.
-
-### 3. Adicionar Mensagem Específica para Pedidos de Mesa
-
-Melhorar a mensagem do WhatsApp quando o pedido de mesa estiver pronto:
-- Informar número da mesa
-- Tom amigável e profissional
-
----
-
-## Alterações Necessárias
-
-### Banco de Dados (Migration SQL)
-
-```sql
--- Permitir que clientes anônimos vejam pedidos de mesa
-CREATE POLICY "Public can read table orders"
-ON public.orders
-FOR SELECT
-TO anon
-USING (channel = 'table');
-
--- Permitir que clientes anônimos vejam itens de pedidos de mesa
-CREATE POLICY "Public can read table order items"
-ON public.order_items
-FOR SELECT
-TO anon
-USING (
-  EXISTS (
-    SELECT 1 FROM public.orders
-    WHERE orders.id = order_items.order_id
-    AND orders.channel = 'table'
-  )
-);
-```
-
-### Frontend - Tratamento de Erros
-
-**Arquivo:** `src/pages/CustomerOrder.tsx`
-
-Adicionar exibição de erros para o cliente:
-- Toast de erro quando a submissão falhar
-- Estado de erro visual no botão
-- Mensagem clara explicando o problema
-
-### Edge Function - Mensagem de Mesa
-
-**Arquivo:** `supabase/functions/send-order-notification/index.ts`
-
-Adicionar tratamento especial para pedidos de mesa:
-```javascript
-case "ready":
-  if (order.channel === "table") {
-    message = `🎉 *Olá ${customerName}!*\n\n` +
-      `Seu pedido *#${order.order_number}* na *Mesa ${tableNumber}* está *PRONTO*! ✅\n\n` +
-      `Já estamos levando até você!\n` +
-      `Agradecemos a preferência! 💚`;
-  }
-```
-
----
-
-## Arquivos a Modificar
-
-| Arquivo | Alteração |
-|---------|-----------|
-| `supabase/migrations/new_migration.sql` | Adicionar políticas SELECT para anon |
-| `src/pages/CustomerOrder.tsx` | Adicionar tratamento de erros |
-| `src/hooks/useCustomerOrder.ts` | Adicionar onError handler |
-| `supabase/functions/send-order-notification/index.ts` | Melhorar mensagem para mesas |
-
----
-
-## Fluxo Completo Após Correção
+## Fluxo Proposto
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
-│  1. CLIENTE ESCANEIA QR CODE                                    │
-│     └→ Abre cardápio digital (/order/:tableId)                  │
+│  1. CLIENTE FAZ PEDIDO                                          │
+│     └→ Envia pedido para cozinha                                │
+│     └→ Recebe tela de acompanhamento com QR Code Pix            │
 ├─────────────────────────────────────────────────────────────────┤
-│  2. CLIENTE FAZ PEDIDO                                          │
-│     └→ Adiciona itens, nome e telefone                          │
-│     └→ Clica "Enviar Pedido para Cozinha"                       │
+│  2. ACOMPANHAMENTO EM TEMPO REAL                                │
+│     └→ Status atualiza automaticamente via Realtime             │
+│     └→ Pendente → Preparando → Pronto                           │
+│     └→ Animações e feedback visual a cada mudança               │
 ├─────────────────────────────────────────────────────────────────┤
-│  3. SISTEMA PROCESSA                                            │
-│     └→ Cria pedido (orders) com channel='table'                 │
-│     └→ Cria itens do pedido (order_items)                       │
-│     └→ Atualiza mesa para status='occupied'                     │
-│     └→ Trigger dispara notificação no sistema                   │
+│  3. QR CODE PIX NA TELA                                         │
+│     └→ Gerado dinamicamente com valor do pedido                 │
+│     └→ Cliente escaneia e paga pelo app do banco                │
+│     └→ Botão "Copiar código Pix"                                │
 ├─────────────────────────────────────────────────────────────────┤
-│  4. KDS RECEBE PEDIDO (Realtime)                                │
-│     └→ Pedido aparece em "Pendentes" com som de alerta          │
-│     └→ Cozinha clica "Iniciar Preparo" → status='preparing'     │
-│     └→ Marca itens como prontos                                 │
-│     └→ Clica "Pronto" → status='ready'                          │
-├─────────────────────────────────────────────────────────────────┤
-│  5. NOTIFICAÇÃO WHATSAPP                                        │
-│     └→ Edge function verifica se cliente tem telefone           │
-│     └→ Envia mensagem personalizada via Evolution API           │
-│     └→ "Seu pedido #X na Mesa Y está PRONTO! ✅"                 │
+│  4. NOTIFICAÇÃO WHATSAPP                                        │
+│     └→ Recebe mensagem com QR Code Pix em anexo                 │
+│     └→ Código Pix copia e cola na mensagem                      │
+│     └→ Segunda mensagem quando pedido estiver pronto            │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Melhorias Adicionais
+## Alterações Necessárias
 
-1. **Toast de sucesso/erro** mais visíveis para o cliente
-2. **Vibração do dispositivo** ao enviar pedido (feedback háptico)
-3. **Animação de confete** na tela de sucesso
-4. **Estimativa de tempo** mais precisa baseada nos itens
-5. **Acompanhamento em tempo real** - cliente pode ver status do pedido
+### 1. Banco de Dados
+
+**Adicionar campo `pix_key` na tabela `unit_settings`:**
+
+```sql
+ALTER TABLE public.unit_settings
+ADD COLUMN pix_key TEXT;
+
+COMMENT ON COLUMN public.unit_settings.pix_key IS 'Chave Pix para recebimento de pagamentos';
+```
+
+### 2. Nova Página de Acompanhamento
+
+**Arquivo:** `src/pages/OrderTracking.tsx` (novo)
+
+Funcionalidades:
+- Recebe o `orderId` como parâmetro da URL
+- Exibe status atual do pedido com ícones animados
+- Timeline visual mostrando progresso (Pendente > Preparando > Pronto)
+- Atualização em tempo real via Supabase Realtime
+- QR Code Pix com valor do pedido
+- Botão para copiar código Pix
+- Tempo estimado de preparo
+
+### 3. Novo Hook de Acompanhamento
+
+**Arquivo:** `src/hooks/useOrderTracking.ts` (novo)
+
+Funcionalidades:
+- Query para buscar dados do pedido
+- Subscription Realtime para atualizações de status
+- Busca configurações da unidade (chave Pix)
+- Geração do código Pix (EMV format)
+
+### 4. Modificar CustomerOrder
+
+**Arquivo:** `src/pages/CustomerOrder.tsx`
+
+Mudanças:
+- Após criar pedido, redirecionar para `/track/:orderId`
+- Armazenar `orderId` no state para navegação
+- Remover tela de sucesso estática
+
+### 5. Adicionar Rota
+
+**Arquivo:** `src/App.tsx`
+
+Nova rota pública: `/track/:orderId`
+
+### 6. Atualizar Edge Function
+
+**Arquivo:** `supabase/functions/send-order-notification/index.ts`
+
+Mudanças:
+- Buscar chave Pix da unidade
+- Gerar código Pix copia e cola
+- Incluir código na mensagem de confirmação do pedido
+- Nova mensagem quando status mudar para "ready"
+
+### 7. Configurações - Aba Financeira
+
+**Arquivo:** `src/components/settings/FinancialTab.tsx`
+
+Adicionar:
+- Campo para cadastrar chave Pix
+- Validação do formato (CPF, CNPJ, email, telefone, chave aleatória)
+- Preview do QR Code gerado
+
+---
+
+## Componentes Visuais
+
+### Tela de Acompanhamento (Mobile-First)
+
+```text
+┌────────────────────────────────┐
+│  ← Voltar       Mesa 5         │
+├────────────────────────────────┤
+│                                │
+│     ┌──────────────────┐       │
+│     │   PEDIDO #127    │       │
+│     └──────────────────┘       │
+│                                │
+│    ○ ─────── ● ─────── ○       │
+│  Pendente  Preparando  Pronto  │
+│                                │
+│     🍳 Preparando...           │
+│     Tempo estimado: 15 min     │
+│                                │
+├────────────────────────────────┤
+│  💳 PAGAMENTO                  │
+│  ┌────────────────────────┐    │
+│  │                        │    │
+│  │     [QR CODE PIX]      │    │
+│  │                        │    │
+│  └────────────────────────┘    │
+│                                │
+│  Total: R$ 45,90               │
+│                                │
+│  ┌────────────────────────┐    │
+│  │  📋 Copiar código Pix  │    │
+│  └────────────────────────┘    │
+│                                │
+│  Itens do pedido:              │
+│  • 2x Hambúrguer Clássico      │
+│  • 1x Batata Frita             │
+│  • 2x Refrigerante             │
+│                                │
+└────────────────────────────────┘
+```
+
+---
+
+## Geração do Código Pix
+
+O código Pix será gerado no formato EMV (padrão brasileiro), contendo:
+- Chave Pix do estabelecimento
+- Valor do pedido
+- Identificador da transação (número do pedido)
+- Nome do beneficiário
+
+A biblioteca `qrcode.react` já está instalada no projeto e será reutilizada.
+
+---
+
+## Mensagem WhatsApp com Pix
+
+**Mensagem de confirmação do pedido:**
+```
+✅ *Pedido Confirmado!*
+
+Olá João! Seu pedido *#127* na *Mesa 5* foi recebido!
+
+💰 *Valor Total: R$ 45,90*
+
+📱 *Pague via Pix:*
+Copie o código abaixo e cole no seu app de banco:
+
+00020126580014BR.GOV.BCB.PIX0136abc123-...
+
+⏱️ Tempo estimado: 15-20 min
+
+Acompanhe seu pedido em tempo real:
+https://seusite.com/track/abc123
+```
+
+---
+
+## Arquivos a Criar/Modificar
+
+| Arquivo | Ação | Descrição |
+|---------|------|-----------|
+| `supabase/migrations/new.sql` | Criar | Adicionar coluna pix_key |
+| `src/pages/OrderTracking.tsx` | Criar | Página de acompanhamento |
+| `src/hooks/useOrderTracking.ts` | Criar | Hook com realtime |
+| `src/lib/pix-generator.ts` | Criar | Utilitário geração Pix |
+| `src/pages/CustomerOrder.tsx` | Modificar | Redirecionar após pedido |
+| `src/App.tsx` | Modificar | Adicionar rota /track |
+| `src/components/settings/FinancialTab.tsx` | Modificar | Campo chave Pix |
+| `supabase/functions/send-order-notification/index.ts` | Modificar | Incluir código Pix |
 
 ---
 
 ## Resultado Esperado
 
-- ✅ Pedidos via QR Code funcionando corretamente
-- ✅ Pedidos aparecem no KDS em tempo real
-- ✅ Cliente recebe notificação quando pedido estiver pronto
-- ✅ Mesa atualiza status automaticamente
-- ✅ Feedback claro em caso de erros
+- Cliente acompanha status do pedido em tempo real
+- QR Code Pix funcional para pagamento imediato
+- Código Pix enviado via WhatsApp junto com confirmação
+- Experiência premium e profissional para o cliente
+- Redução de tempo de atendimento (cliente já pagou antes de receber)
+
+---
+
+## Considerações de Segurança
+
+- Chave Pix armazenada de forma segura no banco
+- Políticas RLS para leitura pública apenas de pedidos de mesa
+- Código Pix gerado no servidor (edge function) para maior segurança
+- Validação do formato da chave Pix antes de salvar
