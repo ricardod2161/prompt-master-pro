@@ -1,83 +1,60 @@
 
-# Plano: Simplificar Contatos e Botão Enterprise
+# Plano: Criar Logotipo Futurista para RestaurantOS
 
-## Mudanças Solicitadas
+## Objetivo
+Gerar um logotipo moderno, futurista e único para o RestaurantOS usando IA de geração de imagens.
 
-### 1. Plano Enterprise - Botão "Assinar Agora"
-Remover a lógica especial de "Falar com Vendas" e usar o mesmo botão "Assinar Agora" dos outros planos.
+## Conceito do Logo
+Um símbolo que combine:
+- **Restaurante**: Elementos de gastronomia (garfo/faca estilizado, prato, chef hat)
+- **Tecnologia**: Visual futurista, linhas geométricas, gradientes neon
+- **OS (Sistema)**: Círculos concêntricos, conexões digitais
 
-**Arquivo**: `src/components/subscription/PricingCard.tsx`
+**Estilo**: Minimalista, gradiente em tons de laranja/dourado (cor primária do app), fundo transparente, bordas suaves.
 
-**De (linhas 125-144)**:
+## Arquivos a Atualizar
+
+| Arquivo | Uso |
+|---------|-----|
+| `src/assets/logo.png` | Logo principal no app |
+| `public/logo.png` | Favicon e referências gerais |
+| `public/pwa-512x512.png` | Ícone PWA (512x512) |
+| `public/apple-touch-icon.png` | Ícone Apple Touch |
+| `public/favicon.ico` | Favicon do navegador |
+
+## Implementação Técnica
+
+### 1. Criar Componente de Geração de Logo
+Usar a API Lovable AI (google/gemini-2.5-flash-image) para gerar o logotipo:
+
 ```typescript
-) : tier === 'enterprise' ? (
-  <Button ... onClick={() => { /* lógica de email */ }}>
-    <Crown className="h-4 w-4" />
-    Falar com Vendas
-  </Button>
-) : (
+// Prompt para geração
+"Create a futuristic restaurant management system logo. 
+Modern minimalist design with geometric shapes. 
+A stylized fork and knife forming a circular tech symbol. 
+Gradient colors: orange to gold (#F97316 to #EAB308). 
+Clean lines, no text, transparent background, suitable for app icon.
+High quality, professional, unique design."
 ```
 
-**Para**:
-```typescript
-) : (
-  // Remove toda a condição especial do enterprise
-  // Usa o mesmo botão "Assinar Agora" para todos
-```
+### 2. Criar Página/Ferramenta de Geração
+Uma interface simples para:
+- Gerar múltiplas opções de logo
+- Visualizar em diferentes tamanhos
+- Escolher e salvar a preferida
 
-### 2. Seção de Contato - Exibir Informações Visíveis
-Substituir os botões que não funcionam por informações de contato visíveis.
+### 3. Atualizar Arquivos de Ícones
+Após escolher o logo, atualizar todos os arquivos de ícone do projeto.
 
-**Arquivo**: `src/pages/Pricing.tsx`
-
-**De (linhas 168-209)**:
-```typescript
-<div className="flex flex-col sm:flex-row gap-3 justify-center">
-  <Button onClick={...}>Falar com Suporte</Button>
-  <Button onClick={...}>Enviar Email</Button>
-</div>
-```
-
-**Para**:
-```typescript
-<div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-  <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card border">
-    <Mail className="h-5 w-5 text-primary" />
-    <span className="font-medium">ricardodelima1988@gmail.com</span>
-  </div>
-  <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card border">
-    <Phone className="h-5 w-5 text-green-500" />
-    <span className="font-medium">(98) 98254-9505</span>
-  </div>
-</div>
-```
-
-## Resultado Visual
+## Fluxo de Trabalho
 
 ```text
-┌─────────────────────────────────────────────┐
-│          Ainda tem dúvidas?                 │
-│  Nossa equipe está pronta para ajudar...    │
-│                                             │
-│  ┌─────────────────────────────────────┐    │
-│  │ 📧 ricardodelima1988@gmail.com      │    │
-│  └─────────────────────────────────────┘    │
-│  ┌─────────────────────────────────────┐    │
-│  │ 📱 (98) 98254-9505                  │    │
-│  └─────────────────────────────────────┘    │
-│                                             │
-└─────────────────────────────────────────────┘
+1. Criar componente de geração de logo
+2. Gerar 3-4 opções diferentes
+3. Você escolhe a que mais gostar
+4. Exportar em todos os tamanhos necessários
+5. Atualizar os arquivos do projeto
 ```
 
-## Arquivos a Modificar
-
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/subscription/PricingCard.tsx` | Remover condição especial do Enterprise, usar "Assinar Agora" |
-| `src/pages/Pricing.tsx` | Trocar botões por texto visível com email e WhatsApp |
-
-## Benefícios
-- Clientes podem copiar diretamente o email/telefone
-- Funciona em qualquer navegador ou dispositivo
-- Sem dependência de links mailto: ou wa.me
-- Mais simples e direto
+## Resultado Esperado
+Um logotipo único, futurista e profissional que represente o RestaurantOS como um sistema moderno de gestão para restaurantes. essa imagem seja em 3D.
