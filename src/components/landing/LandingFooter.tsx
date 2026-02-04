@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import { ChefHat, Mail, Phone, MapPin, Facebook, Instagram, Linkedin, Twitter } from "lucide-react";
+import { Mail, Phone, MapPin, Facebook, Instagram, Linkedin, Twitter } from "lucide-react";
+import { Logo } from "@/components/brand/Logo";
 
 const FOOTER_LINKS = {
   produto: [
@@ -52,11 +53,8 @@ export function LandingFooter() {
           {/* Brand Column */}
           <div className="col-span-2 md:col-span-3 lg:col-span-2">
             {/* Logo */}
-            <Link to="/" className="flex items-center gap-2 mb-4">
-              <div className="bg-gradient-to-br from-primary to-primary/80 p-2 rounded-xl">
-                <ChefHat className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <span className="text-lg font-bold">RestaurantOS</span>
+            <Link to="/" className="mb-4 inline-block">
+              <Logo size="sm" />
             </Link>
 
             <p className="text-sm text-muted-foreground mb-6 max-w-xs">

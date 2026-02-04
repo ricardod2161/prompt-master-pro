@@ -29,11 +29,10 @@ import {
   BarChart3,
   Settings,
   Building2,
-  Utensils,
   CreditCard,
   ShieldAlert,
-  AlertCircle,
 } from "lucide-react";
+import { Logo } from "@/components/brand/Logo";
 import { cn } from "@/lib/utils";
 import { SubscriptionBadge } from "@/components/subscription/SubscriptionBadge";
 import { SidebarBadge } from "./SidebarBadge";
@@ -129,9 +128,7 @@ export function AppSidebar() {
       <SidebarHeader className="border-b border-sidebar-border/50">
         <div className="flex items-center gap-3 px-2 py-3">
           <div className="relative">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg shadow-primary/20">
-              <Utensils className="w-5 h-5 text-primary-foreground" />
-            </div>
+            <Logo size="sm" showText={false} />
             {/* Online indicator */}
             <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-sidebar" />
           </div>
