@@ -518,6 +518,7 @@ export type Database = {
           status: Database["public"]["Enums"]["order_status"] | null
           table_id: string | null
           total_price: number
+          tracking_token: string | null
           unit_id: string
           updated_at: string
         }
@@ -532,6 +533,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["order_status"] | null
           table_id?: string | null
           total_price?: number
+          tracking_token?: string | null
           unit_id: string
           updated_at?: string
         }
@@ -546,6 +548,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["order_status"] | null
           table_id?: string | null
           total_price?: number
+          tracking_token?: string | null
           unit_id?: string
           updated_at?: string
         }
@@ -1216,6 +1219,7 @@ export type Database = {
         Returns: boolean
       }
       is_developer: { Args: { _user_id: string }; Returns: boolean }
+      is_valid_order_access: { Args: { order_id: string }; Returns: boolean }
     }
     Enums: {
       app_role:
