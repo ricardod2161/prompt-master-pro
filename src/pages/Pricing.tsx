@@ -177,17 +177,17 @@ export default function Pricing() {
           <Button 
             variant="outline" 
             className="gap-2"
-            onClick={() => window.open('mailto:suporte@restaurantos.com.br', '_blank')}
+            onClick={() => window.location.href = 'mailto:suporte@restaurantos.com.br'}
           >
             <HeadphonesIcon className="h-4 w-4" />
             Falar com Suporte
           </Button>
           <Button 
             className="gap-2"
-            onClick={() => window.open('mailto:ricardodelima1988@gmail.com?subject=Dúvidas sobre Planos&body=Olá! Gostaria de saber mais sobre os planos do RestaurantOS', '_blank')}
+            onClick={() => window.location.href = 'mailto:ricardodelima1988@gmail.com?subject=Dúvidas sobre Planos&body=Olá! Gostaria de saber mais sobre os planos do RestaurantOS'}
           >
             <Sparkles className="h-4 w-4" />
-            WhatsApp
+            Enviar Email
           </Button>
         </div>
       </div>
