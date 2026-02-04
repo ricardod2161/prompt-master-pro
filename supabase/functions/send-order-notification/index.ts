@@ -78,21 +78,52 @@ function normalizeString(str: string): string {
     .toUpperCase();
 }
 
-function formatPixKey(key: string): string {
+// Detecta o tipo de chave Pix corretamente
+function detectPixKeyType(key: string): 'cpf' | 'cnpj' | 'phone' | 'email' | 'random' {
   const cleanKey = key.replace(/\D/g, '');
   
-  // Phone
-  if (/^\d{10,11}$/.test(cleanKey)) {
-    return `+55${cleanKey}`;
+  // CPF: exatamente 11 dígitos numéricos (não começa com 0 geralmente)
+  if (/^\d{11}$/.test(cleanKey) && !cleanKey.startsWith('0')) {
+    return 'cpf';
   }
   
-  // CPF or CNPJ
-  if (/^\d{11}$/.test(cleanKey) || /^\d{14}$/.test(cleanKey)) {
-    return cleanKey;
+  // CNPJ: 14 dígitos numéricos
+  if (/^\d{14}$/.test(cleanKey)) {
+    return 'cnpj';
   }
   
-  // Email or random key
-  return key.toLowerCase();
+  // Telefone: tem +55 explícito OU começa com 0 (indicando DDD)
+  if (/^\+?55\d{10,11}$/.test(key.replace(/[\s\-()]/g, '')) || cleanKey.startsWith('0')) {
+    return 'phone';
+  }
+  
+  // Email
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key)) {
+    return 'email';
+  }
+  
+  // Chave aleatória ou outro formato
+  return 'random';
+}
+
+function formatPixKey(key: string): string {
+  const type = detectPixKeyType(key);
+  
+  switch (type) {
+    case 'cpf':
+    case 'cnpj':
+      // CPF e CNPJ: apenas números, SEM +55
+      return key.replace(/\D/g, '');
+    case 'phone':
+      // Telefone: adiciona +55 se necessário
+      const cleanPhone = key.replace(/\D/g, '');
+      if (cleanPhone.startsWith('55')) return `+${cleanPhone}`;
+      return `+55${cleanPhone}`;
+    case 'email':
+      return key.toLowerCase();
+    default:
+      return key;
+  }
 }
 
 function generatePixCode(
