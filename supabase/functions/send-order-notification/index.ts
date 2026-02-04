@@ -7,10 +7,32 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+interface BillOrderItem {
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+}
+
+interface BillOrder {
+  orderNumber: number;
+  createdAt: string;
+  total: number;
+  items: BillOrderItem[];
+}
+
+interface BillData {
+  orders: BillOrder[];
+  totalAmount: number;
+  customerName: string;
+  customerPhone: string;
+}
+
 interface NotificationRequest {
   orderId: string;
-  status: "ready" | "delivering" | "delivered" | "confirmed" | "cancelled";
+  status: "ready" | "delivering" | "delivered" | "confirmed" | "cancelled" | "bill_close";
   unitId: string;
+  billData?: BillData;
 }
 
 interface WhatsAppSettings {
@@ -171,7 +193,7 @@ serve(async (req) => {
   }
 
   try {
-    const { orderId, status, unitId }: NotificationRequest = await req.json();
+    const { orderId, status, unitId, billData }: NotificationRequest = await req.json();
 
     // Validate required fields
     if (!orderId || !status || !unitId) {
@@ -318,6 +340,77 @@ serve(async (req) => {
     let message = "";
 
     switch (status) {
+      case "bill_close":
+        // Consolidated bill closing message
+        if (billData) {
+          const { orders: billOrders, totalAmount, customerName: billCustomerName, customerPhone: billPhone } = billData;
+          
+          // Override phone with billData phone
+          order.customer_phone = billPhone;
+          
+          // Format currency for total
+          const formattedBillTotal = new Intl.NumberFormat("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }).format(totalAmount);
+          
+          // Generate Pix code for total amount
+          let billPixCode: string | null = null;
+          if (unitSettings?.pix_key && totalAmount > 0) {
+            try {
+              billPixCode = generatePixCode(
+                unitSettings.pix_key,
+                unitSettings.pix_merchant_name || unitInfo?.name || "RESTAURANTE",
+                unitSettings.pix_merchant_city || "BRASIL",
+                totalAmount,
+                `CONTA${tableNumber || ""}`
+              );
+            } catch (e) {
+              console.error("Error generating bill Pix code:", e);
+            }
+          }
+          
+          message = `🧾 *Conta Fechada - Mesa ${tableNumber || ""}*\n\n` +
+            `Olá ${billCustomerName}! Aqui está o resumo da sua conta:\n\n`;
+          
+          // Add each order
+          for (const billOrder of billOrders) {
+            const orderTime = new Date(billOrder.createdAt).toLocaleTimeString("pt-BR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+            const orderSubtotal = new Intl.NumberFormat("pt-BR", {
+              style: "currency",
+              currency: "BRL",
+            }).format(billOrder.total);
+            
+            message += `📋 *Pedido #${billOrder.orderNumber}* (${orderTime})\n`;
+            for (const item of billOrder.items) {
+              const itemTotal = new Intl.NumberFormat("pt-BR", {
+                style: "currency",
+                currency: "BRL",
+              }).format(item.totalPrice);
+              message += `• ${item.quantity}x ${item.name} - ${itemTotal}\n`;
+            }
+            message += `Subtotal: ${orderSubtotal}\n\n`;
+          }
+          
+          message += `━━━━━━━━━━━━━━━━\n` +
+            `💰 *TOTAL: ${formattedBillTotal}*\n` +
+            `━━━━━━━━━━━━━━━━\n`;
+          
+          if (billPixCode) {
+            message += `\n📱 *Pague via Pix:*\n` +
+              `Copie o código abaixo e cole no seu app de banco:\n\n` +
+              `\`\`\`${billPixCode}\`\`\`\n`;
+          }
+          
+          message += `\nAgradecemos a preferência! 💚`;
+        } else {
+          message = `🧾 *Conta Fechada*\n\nObrigado pela preferência!`;
+        }
+        break;
+
       case "confirmed":
         // Order confirmation message with Pix payment option
         if (order.channel === "table" && tableNumber) {
