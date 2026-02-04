@@ -1,148 +1,73 @@
 
-# Funcionalidade "Fechar Conta" para Mesas
+# Correção: Botão "Voltar" na Tela de Acompanhamento
 
-## Objetivo
+## Problema Identificado
 
-Permitir que clientes de mesa vejam todos os pedidos acumulados durante o consumo e fechem a conta, recebendo o valor total via WhatsApp com código Pix para pagamento.
+Na tela de acompanhamento do pedido (`OrderTracking`), o botão "Voltar" usa `navigate(-1)` para voltar no histórico. Porém, quando o pedido é finalizado em `CustomerOrder`, a navegação usa `replace: true`, que **substitui** a entrada do histórico ao invés de adicionar uma nova.
 
-## Fluxo do Cliente
+**Resultado:** O histórico não tem a página anterior, então `navigate(-1)` não funciona ou vai para uma página inesperada.
+
+## Fluxo Correto Esperado
 
 ```text
-┌─────────────────────┐
-│  Cliente na Mesa    │
-│  (CustomerOrder)    │
-└─────────┬───────────┘
-          │
-          ├──► Faz pedido 1 (R$ 35,00)
-          ├──► Faz pedido 2 (R$ 22,50)
-          ├──► Faz pedido 3 (R$ 18,00)
-          │
-          ▼
-┌─────────────────────┐
-│  Clica "Ver Conta"  │
-│  (Botão no header)  │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│  Modal com resumo   │──► Lista de pedidos
-│  de todos pedidos   │──► Total acumulado
-└─────────┬───────────┘
-          │
-          ▼ Clica "Fechar Conta"
-┌─────────────────────┐
-│  Preenche telefone  │
-│  (se não informou)  │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│  WhatsApp enviado   │──► Total + Pix
-│  Mesa liberada      │
-└─────────────────────┘
+Cliente na Mesa → Faz Pedido 1 → Acompanha Pedido 1
+       ↑                              │
+       └────── Clica "Voltar" ────────┘
+       │
+       ├──► Faz Pedido 2 → Acompanha Pedido 2
+       │                        │
+       └─── Clica "Voltar" ─────┘
+       │
+       └──► Fecha Conta (soma todos pedidos)
 ```
 
-## Componentes da Interface
+## Solução
 
-### 1. Botão "Ver Conta" no Header
+### 1. Arquivo: `src/pages/OrderTracking.tsx`
 
-Aparece no canto direito do header quando a mesa tem pedidos ativos:
+Mudar o botão "Voltar" para navegar diretamente para `/order/:tableId` ao invés de usar `navigate(-1)`:
 
-- Badge com quantidade de pedidos
-- Ícone de conta/recibo
-- Contador do total acumulado
-
-### 2. Modal/Sheet "Minha Conta"
-
-Design profissional com:
-
-- Lista de todos os pedidos da sessão
-- Para cada pedido: número, horário, itens, valor
-- Separador visual entre pedidos
-- Total acumulado destacado
-- Código Pix exibido em área copiável
-- Botão "Fechar Conta e Receber no WhatsApp"
-
-### 3. Mensagem WhatsApp
-
+**De:**
+```typescript
+<Button onClick={() => navigate(-1)}>
+  Voltar
+</Button>
 ```
-🧾 *Conta Fechada - Mesa 5*
 
-Olá Maria! Aqui está o resumo da sua conta:
-
-📋 *Pedido #42* (14:30)
-• 2x Hambúrguer Artesanal - R$ 70,00
-• 1x Batata Frita - R$ 18,00
-Subtotal: R$ 88,00
-
-📋 *Pedido #45* (15:15)
-• 2x Refrigerante - R$ 14,00
-Subtotal: R$ 14,00
-
-━━━━━━━━━━━━━━━━
-💰 *TOTAL: R$ 102,00*
-━━━━━━━━━━━━━━━━
-
-📱 *Pague via Pix:*
-Copie o código abaixo:
-
-```00020126360014br.gov.bcb.pix...```
-
-Agradecemos a preferência! 💚
+**Para:**
+```typescript
+<Button onClick={() => {
+  if (order?.table_id) {
+    navigate(`/order/${order.table_id}`);
+  } else {
+    navigate(-1);
+  }
+}}>
+  Voltar
+</Button>
 ```
+
+Isso garante que:
+- Se o pedido for de mesa → volta para o cardápio da mesa
+- Se não for de mesa → usa o histórico normal
+
+### 2. Arquivo: `src/hooks/useOrderTracking.ts`
+
+Verificar se o hook já retorna o `table_id` do pedido. Se não retornar, adicionar.
+
+## Resultado Esperado
+
+- Cliente faz pedido na mesa
+- É redirecionado para tela de acompanhamento
+- Clica em "Voltar"
+- Volta para o cardápio da mesa `/order/:tableId`
+- Pode fazer novos pedidos
+- Todos os pedidos acumulam na conta
+- Quando quiser, fecha a conta pelo botão "Ver Conta"
 
 ## Alterações Técnicas
 
-### 1. Novo Hook: `useTableBill`
-
-Busca e gerencia os pedidos da mesa:
-
-- Buscar pedidos ativos da mesa (status não finalizado)
-- Calcular total acumulado
-- Função para fechar conta (enviar WhatsApp + atualizar mesa)
-
-### 2. Atualização: `src/pages/CustomerOrder.tsx`
-
-- Importar novo hook
-- Adicionar botão "Ver Conta" no header
-- Adicionar Sheet/Modal com resumo da conta
-- Integrar com envio de WhatsApp
-
-### 3. Atualização: `src/hooks/useCustomerOrder.ts`
-
-- Adicionar função `closeBill` que:
-  - Busca todos os pedidos da mesa
-  - Calcula total
-  - Invoca edge function com dados consolidados
-  - Atualiza status da mesa para "free"
-
-### 4. Atualização: Edge Function `send-order-notification`
-
-- Adicionar suporte para tipo "bill_close"
-- Gerar mensagem formatada com todos os pedidos
-- Incluir código Pix do total
-
-## Estados de Pedidos Considerados
-
-Para o cálculo da conta, incluir pedidos com status:
-- `pending` - Aguardando
-- `preparing` - Em preparo
-- `ready` - Pronto
-- `delivered` - Entregue (consumido, mas não pago)
-
-Excluir:
-- `cancelled` - Cancelado
-
-## Responsividade
-
-- Sheet abre de baixo em mobile (90vh)
-- Lista de pedidos com scroll interno
-- Botões de ação sempre visíveis no footer
-- Área do Pix com destaque e botão de copiar
-- Feedback visual ao copiar código
-
-## Segurança
-
-- Validar que os pedidos pertencem à mesa
-- Não permitir fechar conta se não houver pedidos
-- Manter histórico de pedidos após fechamento
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/pages/OrderTracking.tsx` | Ajustar botão Voltar para navegar para `/order/:tableId` |
+| `src/hooks/useOrderTracking.ts` | Garantir que `table_id` está disponível no retorno |
