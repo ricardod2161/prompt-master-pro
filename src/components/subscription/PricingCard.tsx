@@ -129,7 +129,7 @@ export function PricingCard({
               "w-full gap-2 h-11 font-semibold",
               isPopular && "bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
             )}
-            onClick={() => window.open('mailto:contato@restaurantos.com.br?subject=Interesse no Plano Enterprise', '_blank')}
+            onClick={() => window.open('https://wa.me/5511999999999?text=Olá! Tenho interesse no Plano Enterprise do RestaurantOS', '_blank')}
           >
             <Crown className="h-4 w-4" />
             Falar com Vendas
