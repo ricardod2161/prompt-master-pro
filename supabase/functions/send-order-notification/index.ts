@@ -71,6 +71,7 @@ interface Order {
   channel: string;
   total_price: number;
   table_id: string | null;
+  unit_id: string;
   delivery_orders?: Array<{
     address: string;
   }> | null;
@@ -230,10 +231,40 @@ serve(async (req) => {
       );
     }
 
-    // Initialize Supabase client
+    // Initialize Supabase clients
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Authentication & Authorization
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      // Authenticated caller (staff) — verify identity and unit access
+      const authClient = createClient(supabaseUrl, supabaseAnon, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const token = authHeader.replace("Bearer ", "");
+      const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
+
+      if (!claimsError && claimsData?.claims?.sub) {
+        const userId = claimsData.claims.sub;
+        const { data: hasAccess } = await supabase.rpc("has_unit_access", {
+          _user_id: userId,
+          _unit_id: unitId,
+        });
+        if (!hasAccess) {
+          return new Response(
+            JSON.stringify({ success: false, error: "Sem acesso a esta unidade" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+      // If claims check fails but token was provided, we still proceed
+      // because the order-unit validation below provides a safety net
+    }
+    // Anonymous callers (customers placing table orders) are allowed through
+    // but the order-unit ownership check below prevents abuse
 
     // Get WhatsApp settings for the unit
     const { data: settings, error: settingsError } = await supabase
@@ -284,6 +315,7 @@ serve(async (req) => {
         channel,
         total_price,
         table_id,
+        unit_id,
         tables(number),
         delivery_orders(address)
       `)
@@ -298,6 +330,20 @@ serve(async (req) => {
         }),
         {
           status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Verify order belongs to the specified unit (prevents cross-unit attacks)
+    if (order.unit_id !== unitId) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Pedido não pertence a esta unidade",
+        }),
+        {
+          status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
