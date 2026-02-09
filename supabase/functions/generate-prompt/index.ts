@@ -34,7 +34,7 @@ serve(async (req) => {
   }
 
   try {
-    const { businessDescription } = await req.json();
+    const { businessDescription, restaurantName } = await req.json();
 
     if (!businessDescription || businessDescription.trim().length < 5) {
       return new Response(
@@ -61,7 +61,7 @@ serve(async (req) => {
         model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: META_PROMPT },
-          { role: "user", content: `Meu negócio: ${businessDescription.trim()}` },
+          { role: "user", content: `Nome do estabelecimento: ${(restaurantName || "").trim() || "Não informado"}\nMeu negócio: ${businessDescription.trim()}` },
         ],
       }),
     });

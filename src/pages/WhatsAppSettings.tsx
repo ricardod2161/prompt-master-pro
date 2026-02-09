@@ -223,7 +223,7 @@ export default function WhatsAppSettings() {
     setIsGeneratingPrompt(true);
     try {
       const { data, error } = await supabase.functions.invoke("generate-prompt", {
-        body: { businessDescription: businessDescription.trim() },
+        body: { businessDescription: businessDescription.trim(), restaurantName: selectedUnit?.name || "" },
       });
 
       if (error) throw error;
@@ -648,27 +648,35 @@ export default function WhatsAppSettings() {
                   <p className="text-xs text-muted-foreground">
                     Descreva seu negócio e a IA criará um prompt profissional para o bot de atendimento.
                   </p>
-                  <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="space-y-3">
                     <Input
-                      placeholder="Ex: Pizzaria delivery com massa artesanal e forno a lenha"
-                      value={businessDescription}
-                      onChange={(e) => setBusinessDescription(e.target.value)}
-                      className="flex-1 h-11"
-                      onKeyDown={(e) => e.key === "Enter" && handleGeneratePrompt()}
+                      placeholder="Ex: Nome do restaurante"
+                      value={selectedUnit?.name || ""}
+                      disabled
+                      className="h-11 opacity-60"
                     />
-                    <Button
-                      onClick={handleGeneratePrompt}
-                      disabled={isGeneratingPrompt || !businessDescription.trim()}
-                      variant="outline"
-                      className="h-11 shrink-0 border-primary/30 hover:bg-primary/10"
-                    >
-                      {isGeneratingPrompt ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Sparkles className="h-4 w-4 mr-2" />
-                      )}
-                      {isGeneratingPrompt ? "Gerando..." : "Gerar com IA"}
-                    </Button>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <Input
+                        placeholder="Ex: Pizzaria delivery com massa artesanal e forno a lenha"
+                        value={businessDescription}
+                        onChange={(e) => setBusinessDescription(e.target.value)}
+                        className="flex-1 h-11"
+                        onKeyDown={(e) => e.key === "Enter" && handleGeneratePrompt()}
+                      />
+                      <Button
+                        onClick={handleGeneratePrompt}
+                        disabled={isGeneratingPrompt || !businessDescription.trim()}
+                        variant="outline"
+                        className="h-11 shrink-0 border-primary/30 hover:bg-primary/10"
+                      >
+                        {isGeneratingPrompt ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-4 w-4 mr-2" />
+                        )}
+                        {isGeneratingPrompt ? "Gerando..." : "Gerar com IA"}
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
