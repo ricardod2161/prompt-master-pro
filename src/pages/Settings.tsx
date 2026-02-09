@@ -8,6 +8,7 @@ import {
   User,
   Palette,
   BookOpen,
+  Sparkles,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,6 +29,7 @@ import { HoursTab } from "@/components/settings/HoursTab";
 import { ProfileTab } from "@/components/settings/ProfileTab";
 import { AppearanceTab } from "@/components/settings/AppearanceTab";
 import { DocumentationTab } from "@/components/settings/DocumentationTab";
+import { AIPromptGenerator } from "@/components/settings/AIPromptGenerator";
 import { cn } from "@/lib/utils";
 
 function SettingsLoadingSkeleton() {
@@ -50,6 +52,7 @@ const TAB_ITEMS = [
   { value: "hours", label: "Horários", icon: Clock },
   { value: "profile", label: "Perfil", icon: User },
   { value: "appearance", label: "Aparência", icon: Palette },
+  { value: "whatsapp-ai", label: "WhatsApp IA", icon: Sparkles },
   { value: "docs", label: "Ajuda", icon: BookOpen },
 ];
 
@@ -316,6 +319,14 @@ export default function Settings() {
         {/* Appearance Tab */}
         <TabsContent value="appearance" className="mt-0">
           <AppearanceTab />
+        </TabsContent>
+
+        {/* WhatsApp IA Tab */}
+        <TabsContent value="whatsapp-ai" className="mt-0">
+          <AIPromptGenerator
+            unitName={selectedUnit.name}
+            unitId={selectedUnit.id}
+          />
         </TabsContent>
 
         {/* Documentation Tab */}
