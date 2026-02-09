@@ -421,9 +421,9 @@ async function executeTool(
   switch (toolName) {
     case "listar_cardapio": {
       const menuResult = await listarCardapio(supabase, unitId);
-      // Return multiple messages for separate sending, plus a summary for AI
+      // Return multiple messages for separate sending, plus a strict instruction for AI
       return {
-        text: `[Cardápio enviado ao cliente em ${menuResult.messages.length} mensagens separadas]`,
+        text: `[CARDÁPIO JÁ ENVIADO AO CLIENTE. NÃO repita os itens do cardápio na sua resposta. O cardápio completo já foi enviado em mensagens separadas. Apenas pergunte o que o cliente gostaria de pedir, sem listar produtos novamente.]`,
         multipleMessages: menuResult.messages
       };
     }
@@ -1900,14 +1900,12 @@ serve(async (req) => {
     // Final sanitization
     assistantMessage = sanitizeResponse(assistantMessage);
 
-    // Only send AI response if it's not just acknowledging the menu was sent
-    const isJustMenuAck = assistantMessage.includes("[Cardápio enviado") || 
-                          assistantMessage.toLowerCase().includes("aqui está o cardápio") ||
-                          assistantMessage.toLowerCase().includes("aqui está nosso cardápio");
-    
+    // If menu was already sent via separate messages, suppress AI response entirely
     let sentMessageId = "";
-    if (!isJustMenuAck || !menuMessages) {
-      // Send response via Evolution API and get message ID
+    if (menuMessages && menuMessages.length > 0) {
+      console.log("[MENU] Menu sent separately, suppressing AI duplicate response");
+    } else {
+      // Normal flow - send AI response
       sentMessageId = await sendWhatsAppMessage(
         settings.api_url,
         settings.api_token,
@@ -2046,6 +2044,8 @@ ETAPA 3 - ESCOLHA DOS ITENS:
 Ajude o cliente a escolher, responda dúvidas sobre produtos.
 Use a ferramenta listar_cardapio ou buscar_produto quando necessário.
 MEMORIZE os nomes EXATOS dos produtos que aparecem!
+IMPORTANTE: Quando usar listar_cardapio, o cardápio já será enviado automaticamente ao cliente em mensagens formatadas separadas.
+NÃO repita o cardápio na sua resposta. Apenas pergunte o que o cliente gostaria de pedir, sem listar produtos novamente.
 
 ETAPA 4 - CONFIRMAÇÃO DOS ITENS:
 Liste todos os itens escolhidos com preços e total.
