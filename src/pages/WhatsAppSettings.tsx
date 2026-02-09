@@ -34,7 +34,7 @@ import {
   Shield,
   Eye,
   EyeOff,
-  Sparkles,
+  
 } from "lucide-react";
 import { useUnit } from "@/contexts/UnitContext";
 import {
@@ -46,6 +46,7 @@ import {
   useTestConnection,
 } from "@/hooks/useWhatsApp";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
+import { AIPromptGenerator } from "@/components/settings/AIPromptGenerator";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -86,9 +87,6 @@ export default function WhatsAppSettings() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // AI prompt generator state
-  const [businessDescription, setBusinessDescription] = useState("");
-  const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
   const hasPasswordProtection = !!settings?.settings_password;
 
   // Load settings into form
@@ -210,43 +208,6 @@ export default function WhatsAppSettings() {
     testConnection.mutate({ apiUrl, apiToken, instanceName });
   };
 
-  const handleGeneratePrompt = async () => {
-    if (!businessDescription.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Descrição necessária",
-        description: "Descreva seu negócio para gerar o prompt.",
-      });
-      return;
-    }
-
-    setIsGeneratingPrompt(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("generate-prompt", {
-        body: { businessDescription: businessDescription.trim(), restaurantName: selectedUnit?.name || "" },
-      });
-
-      if (error) throw error;
-
-      if (data?.prompt) {
-        setSystemPrompt(data.prompt);
-        toast({
-          title: "Prompt gerado com sucesso!",
-          description: "Revise o prompt e salve as configurações.",
-        });
-      } else if (data?.error) {
-        throw new Error(data.error);
-      }
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Erro ao gerar prompt",
-        description: error.message || "Tente novamente.",
-      });
-    } finally {
-      setIsGeneratingPrompt(false);
-    }
-  };
 
   const isConnected = settings?.api_url && settings?.api_token && settings?.instance_name;
   const totalConversations = conversations?.length || 0;
@@ -640,67 +601,14 @@ export default function WhatsAppSettings() {
                 </div>
 
                 {/* AI Prompt Generator */}
-                <div className="space-y-3 rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 p-5">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-primary" />
-                    <Label className="text-sm font-medium">Gerar Prompt com IA</Label>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Descreva seu negócio e a IA criará um prompt profissional para o bot de atendimento.
-                  </p>
-                  <div className="space-y-3">
-                    <Input
-                      placeholder="Ex: Nome do restaurante"
-                      value={selectedUnit?.name || ""}
-                      disabled
-                      className="h-11 opacity-60"
-                    />
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <Input
-                        placeholder="Ex: Pizzaria delivery com massa artesanal e forno a lenha"
-                        value={businessDescription}
-                        onChange={(e) => setBusinessDescription(e.target.value)}
-                        className="flex-1 h-11"
-                        onKeyDown={(e) => e.key === "Enter" && handleGeneratePrompt()}
-                      />
-                      <Button
-                        onClick={handleGeneratePrompt}
-                        disabled={isGeneratingPrompt || !businessDescription.trim()}
-                        variant="outline"
-                        className="h-11 shrink-0 border-primary/30 hover:bg-primary/10"
-                      >
-                        {isGeneratingPrompt ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
-                          <Sparkles className="h-4 w-4 mr-2" />
-                        )}
-                        {isGeneratingPrompt ? "Gerando..." : "Gerar com IA"}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <Label htmlFor="system-prompt" className="text-sm font-medium">
-                    Prompt do Sistema (IA)
-                  </Label>
-                  <Textarea
-                    id="system-prompt"
-                    placeholder={`Você é um assistente de atendimento de um restaurante. Seja cordial e ajude os clientes com:
-- Consulta do cardápio
-- Realização de pedidos
-- Informações sobre horário de funcionamento
-
-Sempre confirme os pedidos antes de finalizar.`}
-                    value={systemPrompt}
-                    onChange={(e) => setSystemPrompt(e.target.value)}
-                    rows={10}
-                    className="font-mono text-sm resize-none"
+                {selectedUnit && (
+                  <AIPromptGenerator
+                    unitName={selectedUnit.name}
+                    unitId={selectedUnit.id}
+                    externalPrompt={systemPrompt}
+                    onPromptChange={setSystemPrompt}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Instruções para a IA sobre como responder aos clientes. Seja específico sobre o comportamento desejado.
-                  </p>
-                </div>
+                )}
 
                 <Button
                   onClick={handleSaveBotSettings}
