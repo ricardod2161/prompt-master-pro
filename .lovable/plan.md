@@ -1,74 +1,73 @@
 
 
-# Gerador de Prompt com IA para WhatsApp Bot
+# Adicionar Gerador de Prompt com IA nas Configuracoes + Nome Editavel
 
 ## Resumo
 
-Adicionar um botao "Gerar com IA" ao lado do campo "Prompt do Sistema" na pagina de configuracoes do WhatsApp. O administrador descreve o tipo de negocio (ex: "pizzaria delivery", "hamburgueria gourmet", "restaurante japones") e a IA gera um prompt profissional e completo para o bot de atendimento.
+Adicionar o gerador de prompt com IA na pagina de Configuracoes (Settings), acessivel aos clientes do sistema, e incluir um campo editavel para o nome do restaurante que sera usado na geracao do prompt.
 
-## Como Funciona
+## O que muda
+
+### 1. Novo componente: `src/components/settings/AIPromptGenerator.tsx`
+
+Componente reutilizavel com:
+- Campo editavel para **nome do restaurante** (pre-preenchido com o nome da unidade)
+- Campo para **descricao do negocio** (tipo de culinaria, estilo, etc)
+- Botao "Gerar com IA" com estado de loading
+- Textarea com o prompt gerado, editavel pelo admin
+- Botao para salvar o prompt gerado no `whatsapp_settings`
+
+### 2. Nova aba na pagina de Configuracoes: "WhatsApp IA"
+
+Adicionar uma nova aba no `Settings.tsx` com icone de Bot/Sparkles que renderiza o `AIPromptGenerator`. Essa aba ficara acessivel para os clientes do sistema (donos de restaurante).
+
+### 3. Atualizar Edge Function `generate-prompt`
+
+Receber tambem o campo `restaurantName` e incluir no contexto enviado a IA, para que o prompt gerado ja venha personalizado com o nome correto do estabelecimento.
+
+### 4. Atualizar `WhatsAppSettings.tsx`
+
+Usar o mesmo componente `AIPromptGenerator` na aba Bot, substituindo o bloco atual do gerador para evitar duplicacao de codigo.
+
+## Fluxo do Usuario
 
 ```text
+Configuracoes -> Aba "WhatsApp IA"
 ┌─────────────────────────────────────────────┐
-│  Prompt do Sistema (IA)                     │
+│  Gerador de Prompt com IA                   │
 │                                             │
+│  Nome do Restaurante:                       │
+│  [Pizzaria do Joao          ] (editavel)    │
+│                                             │
+│  Descreva seu negocio:                      │
+│  [Pizzaria delivery com massa artesanal   ] │
+│                                             │
+│         [ Gerar Prompt com IA ]             │
+│                                             │
+│  Prompt gerado:                             │
 │  ┌──────────────────────────────────────┐   │
-│  │ Descreva seu negocio:                │   │
-│  │ [Pizzaria delivery com massa artesa] │   │
-│  │                                      │   │
-│  │         [ Gerar Prompt com IA ]      │   │
+│  │ Voce e o assistente virtual da      │   │
+│  │ Pizzaria do Joao, uma pizzaria...   │   │
 │  └──────────────────────────────────────┘   │
 │                                             │
-│  ┌──────────────────────────────────────┐   │
-│  │ Voce e um assistente profissional... │   │
-│  │ de uma pizzaria delivery artesanal.  │   │
-│  │ Seja cordial, ajude com pedidos...   │   │
-│  │ ...                                  │   │
-│  └──────────────────────────────────────┘   │
-│                                             │
-│  [ Salvar Configuracoes do Bot ]            │
+│  [ Salvar Prompt ]                          │
 └─────────────────────────────────────────────┘
 ```
 
-## Fluxo
-
-1. Administrador digita descricao do negocio (ex: "hamburgueria gourmet com delivery")
-2. Clica em "Gerar Prompt com IA"
-3. IA gera prompt profissional que inclui:
-   - Tom de atendimento adequado ao tipo de negocio
-   - Instrucoes de como lidar com pedidos
-   - Comportamento do bot (cordial, profissional)
-   - Limites de atendimento
-   - Quando transferir para humano
-4. Prompt gerado preenche o campo de system prompt
-5. Admin pode editar e salvar
-
-## Alteracoes Tecnicas
-
-### 1. Nova Edge Function: `generate-prompt`
-
-Usa Lovable AI (Gemini 3 Flash) para gerar o prompt:
-- Recebe a descricao do negocio
-- Envia para a IA com instrucoes de como criar um prompt profissional para bot de atendimento WhatsApp
-- Retorna o prompt gerado
-
-### 2. Atualizacao: `WhatsAppSettings.tsx`
-
-Na aba "Bot", adicionar acima do textarea de system prompt:
-- Input para descricao do negocio
-- Botao "Gerar com IA" com icone de Sparkles
-- Estado de loading durante geracao
-- Preencher automaticamente o textarea com o resultado
-
-### 3. Atualizacao: `supabase/config.toml`
-
-Registrar a nova funcao `generate-prompt`.
-
-## Resumo dos Arquivos
+## Arquivos Alterados
 
 | Arquivo | Acao |
 |---------|------|
-| `supabase/functions/generate-prompt/index.ts` | Criar - Edge function que chama Lovable AI |
-| `src/pages/WhatsAppSettings.tsx` | Atualizar - Adicionar UI do gerador |
-| `supabase/config.toml` | Atualizar - Registrar nova funcao |
+| `src/components/settings/AIPromptGenerator.tsx` | Criar - Componente reutilizavel do gerador |
+| `src/pages/Settings.tsx` | Atualizar - Adicionar nova aba "WhatsApp IA" |
+| `src/pages/WhatsAppSettings.tsx` | Atualizar - Usar componente compartilhado |
+| `supabase/functions/generate-prompt/index.ts` | Atualizar - Aceitar `restaurantName` e incluir no prompt |
+
+## Detalhes Tecnicos
+
+- O componente `AIPromptGenerator` recebe props: `unitName`, `unitId`, `onPromptSaved` (callback opcional)
+- O nome do restaurante e pre-preenchido via `selectedUnit.name` mas pode ser editado
+- A edge function `generate-prompt` passa a receber `{ businessDescription, restaurantName }` e injeta o nome no contexto da IA
+- O prompt gerado e salvo na tabela `whatsapp_settings` via upsert (cria se nao existir)
+- Design segue o padrao visual existente com `SettingCard`, bordas dashed, icone Sparkles
 
