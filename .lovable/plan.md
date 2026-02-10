@@ -1,44 +1,63 @@
 
-# Corrigir Pedidos do WhatsApp Aparecendo com Canal Errado
+# Responder em Audio no WhatsApp via ElevenLabs TTS
 
-## Problema Identificado
+## O que sera feito
 
-Investigacao detalhada revelou que os pedidos feitos pelo WhatsApp **estao sendo criados** no banco de dados, porem com o **canal errado**. Por exemplo, pedidos #39, #40, #41 foram feitos via WhatsApp (telefone 559882549505) mas estao salvos como `channel: "delivery"` em vez de `channel: "whatsapp"`.
+O bot do WhatsApp passara a responder com mensagens de audio em vez de texto. O texto gerado pela IA sera convertido em audio usando ElevenLabs TTS e enviado como audio no WhatsApp via Evolution API.
 
-### Causa Raiz
+## Alteracoes
 
-Na funcao `confirmarPedido` dentro do webhook do WhatsApp (`supabase/functions/whatsapp-webhook/index.ts`, linhas 768-773), o canal e mapeado pela modalidade de entrega:
+### 1. Criar funcao `sendWhatsAppAudio` no webhook
 
-```text
-"entrega" -> "delivery"
-"retirada" -> "counter"
-"local" -> "table"
-fallback -> "whatsapp"
-```
-
-Isso significa que apenas pedidos onde a IA nao consegue mapear a modalidade recebem o canal `"whatsapp"`. Na pratica, pedidos de entrega ficam como `"delivery"`, retirada como `"counter"`, etc. O canal deveria ser **sempre** `"whatsapp"` para pedidos vindos do WhatsApp.
-
-## Solucao
-
-### 1. Corrigir o canal na funcao `confirmarPedido` (whatsapp-webhook)
-
-Forcar o canal como `"whatsapp"` para todos os pedidos criados pelo webhook, independente da modalidade. A modalidade (entrega/retirada/local) sera salva nas notas do pedido, nao no canal:
+Nova funcao no `supabase/functions/whatsapp-webhook/index.ts` que envia audio via Evolution API:
 
 ```text
-channel = "whatsapp" (sempre)
-notes = inclui informacao da modalidade
+POST {apiUrl}/message/sendWhatsAppAudio/{instanceName}
+Body: { number: phone, audio: "data:audio/mpeg;base64,{audioBase64}" }
 ```
 
-### 2. Corrigir pedidos existentes no banco
+### 2. Criar funcao `textToSpeech` no webhook
 
-Atualizar os pedidos que foram criados pelo WhatsApp mas estao com canal errado. Identificar pela presenca de `customer_phone` com formato de WhatsApp (prefixo 55) e sem associacao com mesa/usuario autenticado.
+Nova funcao que converte texto em audio usando a API do ElevenLabs:
 
-### 3. Garantir que delivery_orders seja criado para entregas
+- Endpoint: `https://api.elevenlabs.io/v1/text-to-speech/{voiceId}`
+- Usa a secret `ELEVENLABS_API_KEY` (ja configurada)
+- Voz: Laura (FGY2WhTYpPnrIDTdsKH5) - voz feminina em portugues, natural e profissional
+- Modelo: `eleven_turbo_v2_5` (baixa latencia, ideal para chat)
+- Retorna audio base64
 
-Manter a criacao do registro em `delivery_orders` para pedidos de entrega via WhatsApp, pois isso e necessario para o fluxo de entregas.
+### 3. Modificar o fluxo de resposta do bot
 
-## Resultado Esperado
+No trecho onde o bot envia a resposta da IA (linha ~1906), apos gerar o texto:
 
-- Todos os pedidos vindos do WhatsApp aparecerao com a badge "WhatsApp" na lista de pedidos
-- O filtro por canal "WhatsApp" mostrara todos os pedidos corretamente
-- O realtime ja corrigido anteriormente garantira que aparecem sem recarregar a pagina
+1. Converter o texto em audio via ElevenLabs TTS
+2. Enviar o audio via `sendWhatsAppAudio` em vez de `sendWhatsAppMessage`
+3. Salvar a mensagem no banco com `media_type: "audio"` para exibir corretamente no chat do sistema
+4. Manter fallback para texto caso o TTS falhe (problema de rede, limite de API, etc.)
+
+### 4. Excecoes (continua como texto)
+
+Mensagens que contem formatacao complexa (cardapio, resumo de pedido com tabelas) serao enviadas como texto, pois audio nao transmite bem listas formatadas. Criterio: se a mensagem contem mais de 3 emojis de formatacao ou e o cardapio, envia como texto.
+
+## Fluxo
+
+```text
+Cliente envia mensagem
+    -> IA gera resposta em texto
+    -> Se resposta simples (conversacional):
+        -> ElevenLabs converte texto em audio MP3
+        -> Evolution API envia audio no WhatsApp
+        -> Salva no banco como media_type: "audio"
+    -> Se resposta complexa (cardapio, resumo):
+        -> Envia como texto normalmente (comportamento atual)
+    -> Se TTS falhar:
+        -> Fallback: envia como texto
+```
+
+## Detalhes tecnicos
+
+- Voz ElevenLabs: Laura (FGY2WhTYpPnrIDTdsKH5) - portugues brasileiro natural
+- Modelo: `eleven_turbo_v2_5` para latencia minima
+- Audio enviado como base64 no formato `data:audio/mpeg;base64,...`
+- A mensagem no sistema exibira o player de audio existente (AudioPlayer.tsx)
+- Secret `ELEVENLABS_API_KEY` ja esta configurada no projeto
