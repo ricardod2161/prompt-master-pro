@@ -2322,7 +2322,8 @@ async function sendWhatsAppAudio(
       },
       body: JSON.stringify({
         number: phone,
-        audio: `data:audio/mpeg;base64,${audioBase64}`,
+        audio: audioBase64,
+        encoding: "base64",
       }),
     }
   );
