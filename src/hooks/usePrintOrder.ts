@@ -25,14 +25,14 @@ interface PrintTicketData {
 
 // Format ticket as text for thermal printer (58mm or 80mm)
 function formatTicketText(data: PrintTicketData): string {
-  const divider = "=".repeat(28);
-  const thinDivider = "-".repeat(28);
+  const divider = "=".repeat(24);
+  const thinDivider = "-".repeat(24);
   
   let ticket = "";
   
   // Header
   ticket += `${divider}\n`;
-  ticket += `       COMANDA #${data.orderNumber}\n`;
+  ticket += `    COMANDA #${data.orderNumber}\n`;
   ticket += `${divider}\n`;
   
   // Date/Time
@@ -60,12 +60,12 @@ function formatTicketText(data: PrintTicketData): string {
   // Delivery address
   if (data.deliveryAddress) {
     ticket += `${thinDivider}\n`;
-    ticket += `       ** ENDERECO **\n`;
+    ticket += `    ** ENDERECO **\n`;
     ticket += `${data.deliveryAddress}\n`;
   }
   
   ticket += `${thinDivider}\n`;
-  ticket += `       ** ITENS **\n`;
+  ticket += `     ** ITENS **\n`;
   ticket += `${thinDivider}\n`;
   
   // Items
@@ -83,7 +83,7 @@ function formatTicketText(data: PrintTicketData): string {
   }
   
   ticket += `${divider}\n`;
-  ticket += `     *** PREPARAR ***\n`;
+  ticket += `   *** PREPARAR ***\n`;
   ticket += `${divider}\n\n\n`;
   
   return ticket;
@@ -130,11 +130,11 @@ function printViaBrowser(ticketText: string, orderNumber: number): void {
         <style>
           body {
             font-family: 'Courier New', monospace;
-            font-size: 16px;
-            line-height: 1.5;
-            padding: 8px;
+            font-size: 13px;
+            line-height: 1.4;
+            padding: 4px;
             margin: 0 auto;
-            width: 100%;
+            max-width: 48mm;
             box-sizing: border-box;
           }
           pre {
@@ -145,10 +145,11 @@ function printViaBrowser(ticketText: string, orderNumber: number): void {
             font-size: inherit;
           }
           @media print {
-            @page { margin: 2mm; }
+            @page { margin: 1mm; }
             body { 
               padding: 0;
-              font-size: 14px;
+              font-size: 12px;
+              max-width: 100%;
             }
           }
         </style>
