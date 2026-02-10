@@ -1161,6 +1161,8 @@ export type Database = {
           instance_name: string | null
           settings_password: string | null
           system_prompt: string | null
+          tts_mode: string
+          tts_voice_id: string
           unit_id: string
           updated_at: string
           welcome_message: string | null
@@ -1174,6 +1176,8 @@ export type Database = {
           instance_name?: string | null
           settings_password?: string | null
           system_prompt?: string | null
+          tts_mode?: string
+          tts_voice_id?: string
           unit_id: string
           updated_at?: string
           welcome_message?: string | null
@@ -1187,6 +1191,8 @@ export type Database = {
           instance_name?: string | null
           settings_password?: string | null
           system_prompt?: string | null
+          tts_mode?: string
+          tts_voice_id?: string
           unit_id?: string
           updated_at?: string
           welcome_message?: string | null
