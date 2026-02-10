@@ -1,31 +1,44 @@
 
 
-# Reduzir fonte e largura da comanda ainda mais
+# Corrigir corte lateral da comanda na impressora termica
 
-## Problema
+## Problema real identificado pela foto
 
-Mesmo com divisores de 20 caracteres e fonte 11px/10px, o texto ainda esta sendo cortado na impressora termica de 58mm.
+Analisando a impressao com cuidado, o texto **nao esta largo demais** -- o problema e que a **impressora corta o lado esquerdo**. Na foto:
+
+- "MANDA #46" -- falta "CO" no inicio
+- "1: 10/02/2026" -- falta "Data"
+- "1l: WHATSAPP" -- falta "Cana"
+- "ente: Ricardo" -- falta "Cli"
+- "ENDERECO" -- falta espaco e asterisco
+
+Isso acontece porque impressoras termicas de 58mm tem uma margem mecanica a esquerda que "engole" os primeiros caracteres.
 
 ## Solucao
 
 ### Arquivo: `src/hooks/usePrintOrder.ts`
 
-**1. Reduzir fontes**:
-
-- Fonte na tela: `11px` para `9px`
-- Fonte na impressao: `10px` para `8px`
-- Line-height: `1.3` para `1.2`
-
-**2. Reduzir divisores de 20 para 16 caracteres** para garantir que nao ultrapassem a largura:
+**1. Adicionar prefixo de 2 espacos em TODAS as linhas de texto** para compensar a margem mecanica da impressora:
 
 ```text
-const divider = "=".repeat(16);
-const thinDivider = "-".repeat(16);
+"  ================\n"      (2 espacos antes)
+"  COMANDA #46\n"            (2 espacos antes)
+"  Data: 10/02/...\n"       (2 espacos antes)
+"  Canal: WHATSAPP\n"       (2 espacos antes)
 ```
 
-**3. Ajustar centralizacao dos titulos** para a largura menor.
+**2. Reduzir divisores de 16 para 14 caracteres** para que, com os 2 espacos de margem, nao ultrapasse a largura:
 
-**4. Reduzir max-width de 48mm para 44mm** para dar mais margem de seguranca contra corte.
+```text
+const divider = "=".repeat(14);
+const thinDivider = "-".repeat(14);
+```
 
-Resultado: comanda mais compacta que cabe sem corte no papel de 58mm.
+**3. Adicionar `padding-left: 2mm` no CSS** como margem de seguranca adicional no fallback do navegador.
+
+**4. Manter fontes em 9px/8px** que ja estao em tamanho adequado -- o problema nunca foi a fonte, era a margem.
+
+### Resultado esperado
+
+O texto tera um recuo a esquerda que compensa a area de corte mecanico da impressora, e todas as palavras aparecerao completas no papel.
 
