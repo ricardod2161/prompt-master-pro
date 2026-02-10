@@ -86,6 +86,8 @@ export default function WhatsAppSettings() {
   // TTS state
   const [ttsMode, setTtsMode] = useState("auto");
   const [ttsVoiceId, setTtsVoiceId] = useState("FGY2WhTYpPnrIDTdsKH5");
+  const [elevenlabsApiKey, setElevenlabsApiKey] = useState("");
+  const [showElevenlabsKey, setShowElevenlabsKey] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const [previewAudio, setPreviewAudio] = useState<HTMLAudioElement | null>(null);
@@ -111,7 +113,7 @@ export default function WhatsAppSettings() {
             apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-          body: JSON.stringify({ voiceId: ttsVoiceId }),
+          body: JSON.stringify({ voiceId: ttsVoiceId, elevenlabs_api_key: elevenlabsApiKey || undefined }),
         }
       );
 
@@ -175,6 +177,7 @@ export default function WhatsAppSettings() {
       setSystemPrompt(settings.system_prompt || "");
       setTtsMode(settings.tts_mode || "auto");
       setTtsVoiceId(settings.tts_voice_id || "FGY2WhTYpPnrIDTdsKH5");
+      setElevenlabsApiKey((settings as any).elevenlabs_api_key || "");
       setEnablePasswordProtection(!!settings.settings_password);
     }
   }, [settings]);
@@ -267,12 +270,13 @@ export default function WhatsAppSettings() {
   };
 
   const handleSaveBotSettings = () => {
-    const data = {
+    const data: any = {
       bot_enabled: botEnabled,
       welcome_message: welcomeMessage,
       system_prompt: systemPrompt,
       tts_mode: ttsMode,
       tts_voice_id: ttsVoiceId,
+      elevenlabs_api_key: elevenlabsApiKey || null,
     };
 
     if (settings?.id) {
@@ -760,6 +764,65 @@ export default function WhatsAppSettings() {
                         Voz usada para converter as respostas em áudio via ElevenLabs. Clique ▶ para ouvir.
                       </p>
                     </div>
+                  </div>
+
+                  {/* ElevenLabs API Key */}
+                  <div className="rounded-xl border p-4 space-y-3 bg-muted/20">
+                    <div className="space-y-1">
+                      <Label className="text-sm font-medium">API Key do ElevenLabs</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Para usar respostas em áudio, você precisa de uma conta na ElevenLabs com cartão de crédito vinculado.
+                      </p>
+                    </div>
+                    <div className="relative">
+                      <Input
+                        type={showElevenlabsKey ? "text" : "password"}
+                        placeholder="sk_..."
+                        value={elevenlabsApiKey}
+                        onChange={(e) => setElevenlabsApiKey(e.target.value)}
+                        className="h-11 pr-10"
+                        disabled={ttsMode === "disabled"}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                        onClick={() => setShowElevenlabsKey(!showElevenlabsKey)}
+                      >
+                        {showElevenlabsKey ? (
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      <a
+                        href="https://elevenlabs.io/app/sign-up"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Criar conta na ElevenLabs
+                      </a>
+                      <a
+                        href="https://elevenlabs.io/app/settings/api-keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Gerenciar API Keys
+                      </a>
+                    </div>
+                    {!elevenlabsApiKey && ttsMode !== "disabled" && (
+                      <div className="flex items-start gap-2 text-xs text-amber-600 dark:text-amber-400">
+                        <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                        <span>Sem API key configurada, o áudio não funcionará. Configure sua chave acima.</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 

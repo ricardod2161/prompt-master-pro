@@ -1912,7 +1912,7 @@ serve(async (req) => {
         // Try to send as audio via ElevenLabs TTS
         try {
           console.log("[TTS] Converting response to audio via ElevenLabs...");
-          const audioBase64 = await textToSpeech(assistantMessage, ttsVoiceId);
+          const audioBase64 = await textToSpeech(assistantMessage, ttsVoiceId, settings.elevenlabs_api_key || undefined);
           
           sentMessageId = await sendWhatsAppAudio(
             settings.api_url,
@@ -2265,9 +2265,9 @@ function shouldSendAsAudio(message: string, ttsMode: string, lastUserMessageWasA
 }
 
 // Convert text to speech using ElevenLabs API
-async function textToSpeech(text: string, voiceId?: string): Promise<string> {
-  const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
-  if (!ELEVENLABS_API_KEY) {
+async function textToSpeech(text: string, voiceId?: string, clientApiKey?: string): Promise<string> {
+  const apiKey = clientApiKey || Deno.env.get("ELEVENLABS_API_KEY");
+  if (!apiKey) {
     throw new Error("ELEVENLABS_API_KEY is not configured");
   }
   
@@ -2278,7 +2278,7 @@ async function textToSpeech(text: string, voiceId?: string): Promise<string> {
     {
       method: "POST",
       headers: {
-        "xi-api-key": ELEVENLABS_API_KEY,
+        "xi-api-key": apiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
