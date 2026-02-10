@@ -1,63 +1,66 @@
 
-# Responder em Audio no WhatsApp via ElevenLabs TTS
+# Configuracao de Audio no WhatsApp - Voz e Modo de Resposta
 
 ## O que sera feito
 
-O bot do WhatsApp passara a responder com mensagens de audio em vez de texto. O texto gerado pela IA sera convertido em audio usando ElevenLabs TTS e enviado como audio no WhatsApp via Evolution API.
+Tres mudancas principais:
 
-## Alteracoes
+1. **Novo campo de configuracao**: O dono escolhe se quer respostas em audio, texto, ou apenas quando o cliente enviar audio
+2. **Escolha da voz**: O dono pode selecionar entre vozes masculinas e femininas do ElevenLabs
+3. **Logica condicional**: O bot so responde em audio quando o cliente envia audio (modo padrao)
 
-### 1. Criar funcao `sendWhatsAppAudio` no webhook
+## Alteracoes no Banco de Dados
 
-Nova funcao no `supabase/functions/whatsapp-webhook/index.ts` que envia audio via Evolution API:
+Adicionar 2 novas colunas na tabela `whatsapp_settings`:
 
-```text
-POST {apiUrl}/message/sendWhatsAppAudio/{instanceName}
-Body: { number: phone, audio: "data:audio/mpeg;base64,{audioBase64}" }
-```
+- `tts_mode` (text, default `'auto'`): Modo de resposta de audio
+  - `'auto'` - Responde em audio apenas quando o cliente envia audio
+  - `'always'` - Sempre responde em audio (mensagens simples)
+  - `'disabled'` - Nunca responde em audio, sempre texto
+- `tts_voice_id` (text, default `'FGY2WhTYpPnrIDTdsKH5'`): ID da voz do ElevenLabs selecionada
 
-### 2. Criar funcao `textToSpeech` no webhook
+## Alteracoes no Frontend (WhatsAppSettings.tsx)
 
-Nova funcao que converte texto em audio usando a API do ElevenLabs:
+Na aba "Bot", adicionar uma nova secao "Respostas em Audio" com:
 
-- Endpoint: `https://api.elevenlabs.io/v1/text-to-speech/{voiceId}`
-- Usa a secret `ELEVENLABS_API_KEY` (ja configurada)
-- Voz: Laura (FGY2WhTYpPnrIDTdsKH5) - voz feminina em portugues, natural e profissional
-- Modelo: `eleven_turbo_v2_5` (baixa latencia, ideal para chat)
-- Retorna audio base64
+- **Modo de audio**: Select com 3 opcoes (Auto / Sempre / Desativado)
+- **Voz do bot**: Select com opcoes de vozes pre-definidas:
+  - Laura (feminina, PT-BR) - padrao
+  - Sarah (feminina, versatil)
+  - Alice (feminina, confiante)
+  - Liam (masculina, articulada)
+  - Daniel (masculina, profunda)
+  - Charlie (masculina, casual)
 
-### 3. Modificar o fluxo de resposta do bot
+## Alteracoes no Webhook (whatsapp-webhook/index.ts)
 
-No trecho onde o bot envia a resposta da IA (linha ~1906), apos gerar o texto:
+1. **Ler configuracoes**: Buscar `tts_mode` e `tts_voice_id` junto com as outras settings
+2. **Modificar `shouldSendAsAudio`**: Agora recebe `tts_mode` e `lastUserMessageWasAudio` como parametros:
+   - Se `tts_mode = 'disabled'`: retorna `false` sempre
+   - Se `tts_mode = 'always'`: usa a logica atual (verifica complexidade)
+   - Se `tts_mode = 'auto'`: so retorna `true` se o ultimo envio do cliente foi audio
+3. **Usar `tts_voice_id`**: Na funcao `textToSpeech`, usar o voice ID das configuracoes em vez do hardcoded
+4. **Detectar audio do cliente**: Verificar se a mensagem recebida era audio para passar ao `shouldSendAsAudio`
 
-1. Converter o texto em audio via ElevenLabs TTS
-2. Enviar o audio via `sendWhatsAppAudio` em vez de `sendWhatsAppMessage`
-3. Salvar a mensagem no banco com `media_type: "audio"` para exibir corretamente no chat do sistema
-4. Manter fallback para texto caso o TTS falhe (problema de rede, limite de API, etc.)
+## Alteracoes no Hook (useWhatsApp.ts)
 
-### 4. Excecoes (continua como texto)
+Atualizar a interface `WhatsAppSettings` para incluir os novos campos `tts_mode` e `tts_voice_id`.
 
-Mensagens que contem formatacao complexa (cardapio, resumo de pedido com tabelas) serao enviadas como texto, pois audio nao transmite bem listas formatadas. Criterio: se a mensagem contem mais de 3 emojis de formatacao ou e o cardapio, envia como texto.
-
-## Fluxo
+## Fluxo Atualizado
 
 ```text
 Cliente envia mensagem
+    -> Webhook busca settings (inclui tts_mode e tts_voice_id)
     -> IA gera resposta em texto
-    -> Se resposta simples (conversacional):
-        -> ElevenLabs converte texto em audio MP3
-        -> Evolution API envia audio no WhatsApp
-        -> Salva no banco como media_type: "audio"
-    -> Se resposta complexa (cardapio, resumo):
-        -> Envia como texto normalmente (comportamento atual)
-    -> Se TTS falhar:
-        -> Fallback: envia como texto
+    -> Verifica tts_mode:
+       -> 'disabled': envia texto
+       -> 'always': se mensagem simples, converte com voz escolhida e envia audio
+       -> 'auto': se cliente enviou AUDIO, converte e envia audio; senao, texto
+    -> Fallback: se TTS falhar, envia texto
 ```
 
-## Detalhes tecnicos
+## Detalhes Tecnicos
 
-- Voz ElevenLabs: Laura (FGY2WhTYpPnrIDTdsKH5) - portugues brasileiro natural
-- Modelo: `eleven_turbo_v2_5` para latencia minima
-- Audio enviado como base64 no formato `data:audio/mpeg;base64,...`
-- A mensagem no sistema exibira o player de audio existente (AudioPlayer.tsx)
-- Secret `ELEVENLABS_API_KEY` ja esta configurada no projeto
+- Vozes disponiveis sao um subconjunto curado do ElevenLabs com qualidade garantida em portugues
+- O campo `tts_mode` com default `'auto'` garante que o comportamento padrao e "responde audio so se o cliente pediu em audio"
+- A migracao nao quebra nada existente pois os defaults cobrem o comportamento esperado
