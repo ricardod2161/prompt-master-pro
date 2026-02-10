@@ -1,50 +1,41 @@
 
 
-# Preview de Voz nas Configuracoes do WhatsApp
+# API Key propria do ElevenLabs por cliente
 
-## Verificacao do estado atual
+## Resumo
 
-A secao "Respostas em Audio" ja esta implementada corretamente na aba Bot das configuracoes do WhatsApp (linhas 630-681 do WhatsAppSettings.tsx), com selects para modo de audio e voz do bot. O webhook tambem esta funcional com as funcoes `shouldSendAsAudio`, `textToSpeech` e `sendWhatsAppAudio`.
+Permitir que cada cliente configure sua propria chave da ElevenLabs diretamente nas configuracoes do WhatsApp. Isso elimina a dependencia de uma chave compartilhada do servidor e cada cliente usa sua propria conta/creditos.
 
-## O que sera adicionado
+## Alteracoes
 
-Um botao de preview ao lado do select de voz que permite ao dono ouvir uma amostra da voz selecionada antes de salvar.
+### 1. Banco de dados
 
-## Implementacao
+Adicionar coluna `elevenlabs_api_key` (text, nullable) na tabela `whatsapp_settings` para armazenar a chave de cada unidade.
 
-### 1. Criar Edge Function `elevenlabs-tts-preview`
+### 2. Frontend - WhatsAppSettings.tsx
 
-Nova funcao simples que recebe um `voiceId` e gera um audio curto de demonstracao:
+Na secao "Respostas em Audio" (aba Bot), adicionar:
+- Campo de input para a API key do ElevenLabs (tipo password, com botao mostrar/ocultar)
+- Link externo para "Criar conta na ElevenLabs" e "Gerenciar API Keys"
+- Texto explicativo informando que o cliente precisa ter uma conta com cartao de credito na ElevenLabs
+- Salvar a chave junto com as demais configuracoes do bot
 
-- Texto fixo de preview: "Ola! Eu sou a voz do seu assistente virtual. Como posso ajudar?"
-- Usa `ELEVENLABS_API_KEY` (ja configurada)
-- Retorna o audio como binary (audio/mpeg)
-- Modelo: `eleven_turbo_v2_5` para resposta rapida
+### 3. Edge Functions
 
-### 2. Adicionar botao de preview no WhatsAppSettings.tsx
+Atualizar `elevenlabs-tts-preview` e `whatsapp-webhook` para:
+- Receber a `elevenlabs_api_key` do banco de dados (da tabela `whatsapp_settings` da unidade)
+- Usar a chave do cliente quando disponivel
+- Fallback para a chave do servidor (`ELEVENLABS_API_KEY` do env) se o cliente nao configurou a propria
 
-- Botao com icone de play ao lado do select de voz
-- Ao clicar, faz fetch para a edge function com o `voiceId` selecionado
-- Reproduz o audio no navegador usando `new Audio()`
-- Loading state enquanto o audio carrega
-- Desabilita o botao durante a reproducao
+### 4. Hooks
 
-### 3. Fluxo
-
-```text
-Dono seleciona voz no select
-    -> Clica no botao de preview (icone play)
-    -> Loading spinner no botao
-    -> Edge function gera audio via ElevenLabs
-    -> Audio reproduzido no navegador
-    -> Botao volta ao estado normal
-```
+Atualizar `useWhatsApp.ts` para incluir `elevenlabs_api_key` na interface `WhatsAppSettings`.
 
 ## Detalhes tecnicos
 
-- Edge function retorna binary audio (nao base64) para uso direto com `response.blob()`
-- Audio reproduzido via `URL.createObjectURL(blob)` + `new Audio(url)`
-- Estado de loading e playing controlados por useState
-- Texto de preview curto (~10 palavras) para economia de creditos ElevenLabs
-- Tratamento de erro com toast se o preview falhar
+- A chave e armazenada em texto plano na tabela `whatsapp_settings` (protegida por RLS)
+- O preview de voz passa a enviar a chave do cliente para a edge function, que a usa diretamente na chamada ao ElevenLabs
+- O webhook busca a chave da unidade no banco antes de chamar o TTS
+- A UI desabilita o seletor de voz e o botao de preview quando o modo de audio e "disabled"
+- Input da API key com mascara de senha e toggle de visibilidade
 
