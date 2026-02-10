@@ -1,57 +1,44 @@
 
-# Corrigir Pedidos Nao Aparecendo sem Atualizar Pagina
+# Corrigir Pedidos do WhatsApp Aparecendo com Canal Errado
 
-## Problema
+## Problema Identificado
 
-Ao criar um pedido (ex: pelo PDV), ele nao aparece imediatamente na lista de pedidos (/orders). O usuario precisa recarregar a pagina manualmente para ve-lo.
+Investigacao detalhada revelou que os pedidos feitos pelo WhatsApp **estao sendo criados** no banco de dados, porem com o **canal errado**. Por exemplo, pedidos #39, #40, #41 foram feitos via WhatsApp (telefone 559882549505) mas estao salvos como `channel: "delivery"` em vez de `channel: "whatsapp"`.
 
-## Causa Raiz
+### Causa Raiz
 
-Quando o `useCreateOrder` finaliza com sucesso, ele chama `invalidateQueries({ queryKey: ["orders"] })`. Porem, isso apenas *marca* a query como "stale" (obsoleta) e dispara um refetch em background. Se a pagina de pedidos nao esta montada naquele momento (usuario navega depois), a invalidacao nao tem efeito visivel. Alem disso, o canal realtime pode sofrer latencia ou falhar silenciosamente.
+Na funcao `confirmarPedido` dentro do webhook do WhatsApp (`supabase/functions/whatsapp-webhook/index.ts`, linhas 768-773), o canal e mapeado pela modalidade de entrega:
 
-A solucao e garantir um refetch imediato e confiavel, combinando:
-
-1. **Refetch forcado no `onSuccess` do mutation** usando `refetchQueries` em vez de apenas `invalidateQueries`
-2. **Refetch ao montar a pagina de pedidos** para sempre buscar dados frescos
-3. **Corrigir nome do canal realtime** para evitar conflitos quando multiplas instancias do hook sao usadas
-
-## Alteracoes
-
-### 1. `src/hooks/useOrders.ts` - useCreateOrder
-
-No `onSuccess`, trocar `invalidateQueries` por `refetchQueries` para forcar busca imediata:
-
-```typescript
-onSuccess: () => {
-  queryClient.refetchQueries({ queryKey: ["orders"] });
-  toast({ title: "Pedido criado com sucesso!" });
-},
+```text
+"entrega" -> "delivery"
+"retirada" -> "counter"
+"local" -> "table"
+fallback -> "whatsapp"
 ```
 
-### 2. `src/hooks/useOrders.ts` - useOrders
+Isso significa que apenas pedidos onde a IA nao consegue mapear a modalidade recebem o canal `"whatsapp"`. Na pratica, pedidos de entrega ficam como `"delivery"`, retirada como `"counter"`, etc. O canal deveria ser **sempre** `"whatsapp"` para pedidos vindos do WhatsApp.
 
-- Reduzir `staleTime` para 0 (padrao) para que a query sempre refaça busca quando invalidada
-- Usar um nome de canal realtime unico baseado no `unit_id` para evitar conflitos:
+## Solucao
 
-```typescript
-const channel = supabase
-  .channel(`orders-realtime-${selectedUnit.id}`)
+### 1. Corrigir o canal na funcao `confirmarPedido` (whatsapp-webhook)
+
+Forcar o canal como `"whatsapp"` para todos os pedidos criados pelo webhook, independente da modalidade. A modalidade (entrega/retirada/local) sera salva nas notas do pedido, nao no canal:
+
+```text
+channel = "whatsapp" (sempre)
+notes = inclui informacao da modalidade
 ```
 
-- Na callback do realtime, usar `refetchQueries` para busca imediata:
+### 2. Corrigir pedidos existentes no banco
 
-```typescript
-() => {
-  queryClient.refetchQueries({ queryKey: ["orders", selectedUnit.id] });
-}
-```
+Atualizar os pedidos que foram criados pelo WhatsApp mas estao com canal errado. Identificar pela presenca de `customer_phone` com formato de WhatsApp (prefixo 55) e sem associacao com mesa/usuario autenticado.
 
-### 3. `src/pages/Orders.tsx` - Refetch ao montar
+### 3. Garantir que delivery_orders seja criado para entregas
 
-Adicionar `refetchOnMount: "always"` ou chamar `refetch()` via `useEffect` para garantir dados frescos ao abrir a pagina. Isso sera feito passando a opcao no hook ou chamando refetch no componente.
+Manter a criacao do registro em `delivery_orders` para pedidos de entrega via WhatsApp, pois isso e necessario para o fluxo de entregas.
 
 ## Resultado Esperado
 
-- Pedidos aparecem instantaneamente apos criacao, sem necessidade de recarregar a pagina
-- O canal realtime sincroniza mudancas de outros dispositivos/abas
-- A pagina de pedidos sempre mostra dados atualizados ao ser aberta
+- Todos os pedidos vindos do WhatsApp aparecerao com a badge "WhatsApp" na lista de pedidos
+- O filtro por canal "WhatsApp" mostrara todos os pedidos corretamente
+- O realtime ja corrigido anteriormente garantira que aparecem sem recarregar a pagina
