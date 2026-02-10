@@ -20,6 +20,7 @@ interface PrintTicketData {
   notes?: string | null;
   createdAt: string;
   tableNumber?: number | null;
+  deliveryAddress?: string | null;
 }
 
 // Format ticket as text for thermal printer (58mm or 80mm)
@@ -54,6 +55,13 @@ function formatTicketText(data: PrintTicketData): string {
   // Table number
   if (data.tableNumber) {
     ticket += `Mesa: ${data.tableNumber}\n`;
+  }
+  
+  // Delivery address
+  if (data.deliveryAddress) {
+    ticket += `${thinDivider}\n`;
+    ticket += `       ** ENDERECO **\n`;
+    ticket += `${data.deliveryAddress}\n`;
   }
   
   ticket += `${thinDivider}\n`;
@@ -166,6 +174,7 @@ export function usePrintOrder() {
       notes: order.notes,
       createdAt: order.created_at,
       tableNumber: order.table?.number,
+      deliveryAddress: order.delivery_order?.address || null,
     };
     
     const ticketText = formatTicketText(ticketData);
