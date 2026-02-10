@@ -24,19 +24,22 @@ interface PrintTicketData {
 }
 
 // Format ticket as text for thermal printer (58mm or 80mm)
+// Prefix to compensate for thermal printer left margin mechanical cut
+const P = "  "; // 2-space left padding on every line
+
 function formatTicketText(data: PrintTicketData): string {
-  const divider = "=".repeat(16);
-  const thinDivider = "-".repeat(16);
+  const divider = P + "=".repeat(14);
+  const thinDivider = P + "-".repeat(14);
   
   let ticket = "";
   
   // Header
   ticket += `${divider}\n`;
-  ticket += ` COMANDA #${data.orderNumber}\n`;
+  ticket += `${P} COMANDA #${data.orderNumber}\n`;
   ticket += `${divider}\n`;
   
   // Date/Time
-  ticket += `Data: ${format(new Date(data.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}\n`;
+  ticket += `${P}Data: ${format(new Date(data.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}\n`;
   
   // Channel
   const channelLabels: Record<string, string> = {
@@ -45,45 +48,45 @@ function formatTicketText(data: PrintTicketData): string {
     delivery: "DELIVERY",
     whatsapp: "WHATSAPP",
   };
-  ticket += `Canal: ${channelLabels[data.channel] || data.channel.toUpperCase()}\n`;
+  ticket += `${P}Canal: ${channelLabels[data.channel] || data.channel.toUpperCase()}\n`;
   
   // Customer
   if (data.customerName) {
-    ticket += `Cliente: ${data.customerName}\n`;
+    ticket += `${P}Cliente: ${data.customerName}\n`;
   }
   
   // Table number
   if (data.tableNumber) {
-    ticket += `Mesa: ${data.tableNumber}\n`;
+    ticket += `${P}Mesa: ${data.tableNumber}\n`;
   }
   
   // Delivery address
   if (data.deliveryAddress) {
     ticket += `${thinDivider}\n`;
-    ticket += ` ** ENDERECO **\n`;
-    ticket += `${data.deliveryAddress}\n`;
+    ticket += `${P} ** ENDERECO **\n`;
+    ticket += `${P}${data.deliveryAddress}\n`;
   }
   
   ticket += `${thinDivider}\n`;
-  ticket += `  ** ITENS **\n`;
+  ticket += `${P}  ** ITENS **\n`;
   ticket += `${thinDivider}\n`;
   
   // Items
   data.items.forEach((item) => {
-    ticket += `${item.quantity}x ${item.name}\n`;
+    ticket += `${P}${item.quantity}x ${item.name}\n`;
     if (item.notes) {
-      ticket += `   > ${item.notes}\n`;
+      ticket += `${P}  > ${item.notes}\n`;
     }
   });
   
   // Order notes
   if (data.notes) {
     ticket += `${thinDivider}\n`;
-    ticket += `OBS: ${data.notes}\n`;
+    ticket += `${P}OBS: ${data.notes}\n`;
   }
   
   ticket += `${divider}\n`;
-  ticket += `** PREPARAR **\n`;
+  ticket += `${P}** PREPARAR **\n`;
   ticket += `${divider}\n\n\n`;
   
   return ticket;
@@ -133,6 +136,7 @@ function printViaBrowser(ticketText: string, orderNumber: number): void {
             font-size: 9px;
             line-height: 1.2;
             padding: 1px;
+            padding-left: 2mm;
             margin: 0 auto;
             max-width: 44mm;
             box-sizing: border-box;
