@@ -1,48 +1,81 @@
 
+# Corrigir erro "Parâmetros inválidos" no Pix
 
-# Corrigir pronúncia do TTS (dólares -> reais) e tornar áudio mais natural
+## Causa raiz: Bug no CRC16
 
-## Problema
+O erro "Parâmetros inválidos" acontece porque o **CRC16 está sendo calculado errado**. O algoritmo CRC16-CCITT precisa manter o valor em 16 bits (mascarar com `& 0xFFFF`) a cada iteracao do loop interno. Sem isso, o valor cresce alem de 16 bits e o calculo do checksum fica incorreto.
 
-O bot está falando "dólares" ao invés de "reais" nos áudios, e a fala soa robótica. Duas causas identificadas:
+### O bug (nas duas implementacoes):
 
-1. **Modelo errado**: O TTS usa `eleven_turbo_v2_5` que é otimizado para inglês. Ele interpreta "R$" como símbolo de dólar e pronuncia incorretamente.
-2. **Texto não preparado para fala**: O texto enviado ao TTS contém emojis, markdown (`*negrito*`), símbolos (`R$`), e formatação de números (`34,90`) que o sintetizador não interpreta bem em português.
+```text
+// ERRADO - valor cresce alem de 16 bits a cada shift
+crc = (crc << 1) ^ 0x1021;   // pode virar 17, 18... 24 bits!
+crc = crc << 1;                // sem mascara!
+```
 
-## Solução (2 partes)
+```text
+// CORRETO - manter sempre em 16 bits
+crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+crc = (crc << 1) & 0xFFFF;
+```
 
-### 1. Trocar o modelo TTS para multilingual
+Quando o CRC esta errado, o banco rejeita o codigo inteiro com "Parametros invalidos".
 
-Trocar de `eleven_turbo_v2_5` (inglês) para `eleven_multilingual_v2` que tem suporte nativo ao português brasileiro e entende convenções de moeda locais.
+## Correcoes adicionais
 
-### 2. Pré-processar o texto antes de enviar ao TTS
+### 1. Adicionar campo "Point of Initiation Method" (ID 01)
 
-Criar uma função `prepareTextForSpeech()` que converte o texto em formato otimizado para fala natural:
+O padrao BR Code/Pix recomenda incluir o campo 01 com valor "12" (QR dinamico, com valor) ou "11" (QR estatico, sem valor). Varios bancos exigem esse campo. Atualmente esta faltando.
 
-- `R$ 34,90` vira `34 reais e 90 centavos`
-- `R$ 50,00` vira `50 reais`
-- Remove emojis
-- Remove markdown (`*negrito*` vira `negrito`)
-- Remove caracteres especiais que atrapalham a pronúncia
+### 2. Corrigir truncamento do nome do comerciante
 
-### 3. Ajustar instruções do prompt para respostas em áudio
+O nome "PAULO RICARDO DANTAS DE LIMA" e cortado em 25 caracteres ficando "PAULO RICARDO DANTAS DE L" (letra solta). Corrigir para truncar na ultima palavra completa: "PAULO RICARDO DANTAS DE" (23 chars).
 
-Reforçar no `audioInstructions` que quando responder para áudio, o bot deve:
-- Escrever valores por extenso (ex: "trinta e quatro reais e noventa centavos")
-- Não usar emojis ou formatação markdown
-- Manter tom conversacional e natural
+## Detalhes tecnicos
 
-## Detalhes técnicos
+Arquivos a alterar:
 
-Alterações apenas no arquivo `supabase/functions/whatsapp-webhook/index.ts`:
+**1. `src/lib/pix-generator.ts`** (usado no frontend/tracking):
+- Corrigir CRC16: adicionar `& 0xFFFF` nas duas linhas do loop interno
+- Adicionar campo 01 ("12" quando tem valor, "11" quando nao tem)
+- Corrigir `normalizeString` para truncar em palavra completa
 
-1. Na função `textToSpeech()`: trocar `model_id` de `eleven_turbo_v2_5` para `eleven_multilingual_v2`
-2. Nova função `prepareTextForSpeech(text)` com regex para:
-   - Converter `R$ X,YY` para formato falado em reais
-   - Remover emojis com regex Unicode
-   - Limpar markdown (`*`, `_`, etc.)
-3. Chamar `prepareTextForSpeech()` antes de enviar o texto ao TTS
-4. Atualizar `audioInstructions` para orientar respostas mais naturais para áudio
+**2. `supabase/functions/send-order-notification/index.ts`** (usado no WhatsApp):
+- Mesmas 3 correcoes acima na copia das funcoes CRC16, generatePixCode e normalizeString
 
-Nenhuma mudança no banco de dados, frontend, ou schema.
+### Mudancas especificas:
 
+**CRC16** (ambos arquivos):
+```text
+// Linha do if:
+crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+// Linha do else:
+crc = (crc << 1) & 0xFFFF;
+```
+
+**normalizeString** (ambos arquivos):
+```text
+function normalizeString(str: string): string {
+  const cleaned = str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9 ]/g, '')
+    .toUpperCase()
+    .trim();
+
+  if (cleaned.length <= 25) return cleaned;
+
+  // Truncar na ultima palavra completa dentro de 25 chars
+  const truncated = cleaned.substring(0, 25);
+  const lastSpace = truncated.lastIndexOf(' ');
+  return lastSpace > 10 ? truncated.substring(0, lastSpace) : truncated;
+}
+```
+
+**generatePixCode** (ambos arquivos):
+```text
+// Apos campo 00 (Payload Format Indicator), adicionar:
+payload += formatField('01', amount && amount > 0 ? '12' : '11');
+```
+
+Nenhuma mudanca no banco de dados. Apenas correcoes nas funcoes de geracao de codigo Pix.
