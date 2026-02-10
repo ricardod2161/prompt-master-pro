@@ -1839,12 +1839,32 @@ IMPORTANTE - CAPACIDADE DE ÁUDIO/VOZ:
 
     const systemPrompt = basePrompt + audioInstructions;
 
+    const filteredMessages = (recentMessages || [])
+      .reverse()
+      .filter((m: any) => {
+        if (m.role === 'assistant') {
+          const lower = (m.content || '').toLowerCase();
+          if (
+            lower.includes('assistente de texto') ||
+            lower.includes('apenas por texto') ||
+            lower.includes('não consigo enviar mensagens de voz') ||
+            lower.includes('nao consigo enviar mensagens de voz') ||
+            lower.includes('não consigo te enviar') ||
+            lower.includes('nao consigo te enviar')
+          ) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .map((m: any) => ({
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        content: m.content,
+      }));
+
     const aiMessages = [
       { role: "system", content: systemPrompt },
-      ...(recentMessages || []).reverse().map((m: any) => ({
-        role: m.role === "assistant" ? "assistant" : "user",
-        content: m.content,
-      })),
+      ...filteredMessages,
     ];
 
     // Process with AI
