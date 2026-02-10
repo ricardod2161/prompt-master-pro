@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1902,23 +1903,70 @@ serve(async (req) => {
     if (menuMessages && menuMessages.length > 0) {
       console.log("[MENU] Menu sent separately, suppressing AI duplicate response");
     } else {
-      // Normal flow - send AI response
-      sentMessageId = await sendWhatsAppMessage(
-        settings.api_url,
-        settings.api_token,
-        instanceName,
-        phone,
-        assistantMessage
-      );
+      // Decide: send as audio or text
+      if (shouldSendAsAudio(assistantMessage)) {
+        // Try to send as audio via ElevenLabs TTS
+        try {
+          console.log("[TTS] Converting response to audio via ElevenLabs...");
+          const audioBase64 = await textToSpeech(assistantMessage);
+          
+          sentMessageId = await sendWhatsAppAudio(
+            settings.api_url,
+            settings.api_token,
+            instanceName,
+            phone,
+            audioBase64
+          );
 
-      // Store assistant message with message ID for status tracking
-      await supabase.from("whatsapp_messages").insert({
-        conversation_id: conversation.id,
-        role: "assistant",
-        content: assistantMessage,
-        message_id: sentMessageId,
-        status: "sent",
-      });
+          // Store as audio message
+          await supabase.from("whatsapp_messages").insert({
+            conversation_id: conversation.id,
+            role: "assistant",
+            content: assistantMessage,
+            message_id: sentMessageId,
+            status: "sent",
+            media_type: "audio",
+            transcription: assistantMessage,
+          });
+
+          console.log("[TTS] Audio response sent successfully");
+        } catch (ttsError) {
+          // Fallback to text if TTS fails
+          console.error("[TTS] Failed, falling back to text:", ttsError);
+          sentMessageId = await sendWhatsAppMessage(
+            settings.api_url,
+            settings.api_token,
+            instanceName,
+            phone,
+            assistantMessage
+          );
+
+          await supabase.from("whatsapp_messages").insert({
+            conversation_id: conversation.id,
+            role: "assistant",
+            content: assistantMessage,
+            message_id: sentMessageId,
+            status: "sent",
+          });
+        }
+      } else {
+        // Complex/formatted message - send as text
+        sentMessageId = await sendWhatsAppMessage(
+          settings.api_url,
+          settings.api_token,
+          instanceName,
+          phone,
+          assistantMessage
+        );
+
+        await supabase.from("whatsapp_messages").insert({
+          conversation_id: conversation.id,
+          role: "assistant",
+          content: assistantMessage,
+          message_id: sentMessageId,
+          status: "sent",
+        });
+      }
     }
 
     return new Response(
@@ -2186,4 +2234,98 @@ async function sendMultipleWhatsAppMessages(
   }
   
   return lastMessageId;
+}
+
+// Determine if a message should be sent as audio (conversational) or text (complex/formatted)
+function shouldSendAsAudio(message: string): boolean {
+  if (!message || message.length < 5) return false;
+  if (message.length > 1500) return false; // Too long for audio
+  
+  // Count formatting indicators that don't work well in audio
+  const formatIndicators = [
+    (message.match(/\n/g) || []).length > 8,           // Many line breaks (lists/tables)
+    (message.match(/[📋🛒💰🏍️🏠📍💳🧾✅❌📦]/g) || []).length > 3, // Many structural emojis
+    message.includes("────"),                            // Horizontal lines (menu)
+    message.includes("*RESUMO*") || message.includes("*PEDIDO*"), // Order summary
+    message.includes("*CARDÁPIO*") || message.includes("*MENU*"), // Menu header
+    (message.match(/R\$ ?\d/g) || []).length > 2,       // Multiple prices (menu/summary)
+    (message.match(/^\s*[-•●]\s/gm) || []).length > 3,  // Bullet lists
+  ];
+  
+  const complexityScore = formatIndicators.filter(Boolean).length;
+  return complexityScore < 2; // Send as audio if less than 2 complexity indicators
+}
+
+// Convert text to speech using ElevenLabs API
+async function textToSpeech(text: string): Promise<string> {
+  const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
+  if (!ELEVENLABS_API_KEY) {
+    throw new Error("ELEVENLABS_API_KEY is not configured");
+  }
+  
+  const voiceId = "FGY2WhTYpPnrIDTdsKH5"; // Laura - Portuguese Brazilian
+  
+  const response = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_22050_32`,
+    {
+      method: "POST",
+      headers: {
+        "xi-api-key": ELEVENLABS_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text,
+        model_id: "eleven_turbo_v2_5",
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75,
+          style: 0.3,
+          speed: 1.05,
+        },
+      }),
+    }
+  );
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("[TTS] ElevenLabs error:", response.status, errorText);
+    throw new Error(`ElevenLabs TTS failed: ${response.status}`);
+  }
+  
+  const audioBuffer = await response.arrayBuffer();
+  return base64Encode(audioBuffer);
+}
+
+// Send audio message via Evolution API
+async function sendWhatsAppAudio(
+  apiUrl: string,
+  apiToken: string,
+  instanceName: string,
+  phone: string,
+  audioBase64: string
+): Promise<string> {
+  const response = await fetch(
+    `${apiUrl}/message/sendWhatsAppAudio/${instanceName}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: apiToken,
+      },
+      body: JSON.stringify({
+        number: phone,
+        audio: `data:audio/mpeg;base64,${audioBase64}`,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("[TTS] Error sending WhatsApp audio:", response.status, errorText);
+    throw new Error(`Failed to send WhatsApp audio: ${response.status}`);
+  }
+
+  const data = await response.json();
+  console.log("[TTS] WhatsApp audio sent successfully to:", phone);
+  return data.key?.id || "";
 }
