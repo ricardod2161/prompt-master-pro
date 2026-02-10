@@ -1,48 +1,66 @@
 
 
-# Corrigir bot dizendo que nao pode enviar audio
+# Corrigir historico contaminado que faz bot repetir "sou assistente de texto"
 
-## Problema
+## Problema Real
 
-O bot esta respondendo "sou um assistente de texto e nao consigo te enviar mensagens de voz" porque a IA (GPT/Gemini) nao sabe que o sistema tem capacidade de enviar audio. O system prompt nao informa isso.
+O fix do prompt foi aplicado e funciona (os logs confirmam `[TTS] Audio response sent successfully`). Porem, o historico da conversa contem **3 mensagens antigas** onde o bot disse "sou assistente de texto" / "nao consigo enviar audio". Quando a IA carrega as ultimas 20 mensagens, ela ve essas respostas e **repete o mesmo padrao**, ignorando as instrucoes do system prompt.
 
-Existem dois cenarios:
-1. **Prompt personalizado**: Se o cliente configurou um `system_prompt` customizado, ele substitui completamente o prompt default, perdendo todas as instrucoes sobre audio
-2. **Prompt default**: Mesmo no prompt default, falta dizer explicitamente que o bot TEM capacidade de responder em audio
+## Solucao (2 partes)
 
-## Solucao
+### 1. Limpar mensagens problematicas do banco
 
-### 1. Injetar instrucoes de audio automaticamente no system prompt
+Deletar as 3 mensagens do historico que contem o texto problematico, para que a IA nao as veja mais:
 
-No webhook, adicionar um bloco de instrucoes sobre capacidade de audio que e SEMPRE injetado no prompt, independente de ser customizado ou default. Isso garante que a IA sempre saiba que pode responder em audio.
-
-**Logica no webhook (whatsapp-webhook/index.ts):**
-
-```text
-// Antes de montar aiMessages, anexar ao systemPrompt:
-const audioInstructions = `
-
-IMPORTANTE - CAPACIDADE DE AUDIO:
-- Voce TEM capacidade de responder em audio/voz quando apropriado
-- O sistema converte automaticamente suas respostas em audio quando necessario
-- NUNCA diga que "nao consegue enviar audio" ou "sou assistente de texto"
-- Se o cliente pedir para falar em audio, responda normalmente que o sistema
-  enviara a resposta em audio
-- Quando for responder em audio, mantenha respostas mais curtas e
-  conversacionais (como uma fala natural)
-`;
-
-const finalPrompt = systemPrompt + audioInstructions;
+```sql
+DELETE FROM whatsapp_messages 
+WHERE role = 'assistant' 
+AND (content LIKE '%assistente de texto%' 
+  OR content LIKE '%apenas por texto%' 
+  OR content LIKE '%não consigo enviar mensagens de voz%'
+  OR content LIKE '%não consigo te enviar mensagens de voz%');
 ```
 
-### 2. Atualizar o prompt default
+### 2. Filtrar mensagens no webhook antes de enviar para a IA
 
-Na funcao `getDefaultSystemPrompt()`, atualizar a secao "MENSAGENS DE AUDIO" (linhas 2069-2074) para incluir a informacao de que o bot pode responder com audio.
+No `whatsapp-webhook/index.ts`, adicionar um filtro no mapeamento do historico para excluir automaticamente mensagens que contenham esses padroes problematicos. Isso previne que mensagens futuras com esse padrao "contaminem" o contexto.
 
-## Detalhes tecnicos
+**No trecho que monta `aiMessages` (linha ~1844):**
 
-- A injecao de instrucoes de audio e feita APOS carregar o system prompt (seja default ou customizado)
-- Isso garante que mesmo prompts personalizados sempre tenham a instrucao correta
-- As instrucoes orientam a IA a manter respostas mais naturais/curtas quando for audio
-- Nenhuma mudanca no banco de dados ou frontend necessaria
+```typescript
+const filteredMessages = (recentMessages || [])
+  .reverse()
+  .filter((m: any) => {
+    if (m.role === 'assistant') {
+      const lower = (m.content || '').toLowerCase();
+      if (
+        lower.includes('assistente de texto') ||
+        lower.includes('apenas por texto') ||
+        lower.includes('não consigo enviar mensagens de voz') ||
+        lower.includes('nao consigo enviar mensagens de voz') ||
+        lower.includes('não consigo te enviar') ||
+        lower.includes('nao consigo te enviar')
+      ) {
+        return false;
+      }
+    }
+    return true;
+  })
+  .map((m: any) => ({
+    role: m.role === 'assistant' ? 'assistant' : 'user',
+    content: m.content,
+  }));
 
+const aiMessages = [
+  { role: "system", content: systemPrompt },
+  ...filteredMessages,
+];
+```
+
+## Resumo das alteracoes
+
+1. **Migracao SQL**: Deletar mensagens problematicas existentes no banco
+2. **whatsapp-webhook/index.ts**: Filtrar mensagens com padrao "assistente de texto" antes de enviar ao LLM
+3. **Re-deploy** do webhook
+
+Nenhuma alteracao no frontend ou banco de dados (schema).
