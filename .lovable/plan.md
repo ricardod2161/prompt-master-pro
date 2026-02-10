@@ -1,66 +1,50 @@
 
-# Configuracao de Audio no WhatsApp - Voz e Modo de Resposta
 
-## O que sera feito
+# Preview de Voz nas Configuracoes do WhatsApp
 
-Tres mudancas principais:
+## Verificacao do estado atual
 
-1. **Novo campo de configuracao**: O dono escolhe se quer respostas em audio, texto, ou apenas quando o cliente enviar audio
-2. **Escolha da voz**: O dono pode selecionar entre vozes masculinas e femininas do ElevenLabs
-3. **Logica condicional**: O bot so responde em audio quando o cliente envia audio (modo padrao)
+A secao "Respostas em Audio" ja esta implementada corretamente na aba Bot das configuracoes do WhatsApp (linhas 630-681 do WhatsAppSettings.tsx), com selects para modo de audio e voz do bot. O webhook tambem esta funcional com as funcoes `shouldSendAsAudio`, `textToSpeech` e `sendWhatsAppAudio`.
 
-## Alteracoes no Banco de Dados
+## O que sera adicionado
 
-Adicionar 2 novas colunas na tabela `whatsapp_settings`:
+Um botao de preview ao lado do select de voz que permite ao dono ouvir uma amostra da voz selecionada antes de salvar.
 
-- `tts_mode` (text, default `'auto'`): Modo de resposta de audio
-  - `'auto'` - Responde em audio apenas quando o cliente envia audio
-  - `'always'` - Sempre responde em audio (mensagens simples)
-  - `'disabled'` - Nunca responde em audio, sempre texto
-- `tts_voice_id` (text, default `'FGY2WhTYpPnrIDTdsKH5'`): ID da voz do ElevenLabs selecionada
+## Implementacao
 
-## Alteracoes no Frontend (WhatsAppSettings.tsx)
+### 1. Criar Edge Function `elevenlabs-tts-preview`
 
-Na aba "Bot", adicionar uma nova secao "Respostas em Audio" com:
+Nova funcao simples que recebe um `voiceId` e gera um audio curto de demonstracao:
 
-- **Modo de audio**: Select com 3 opcoes (Auto / Sempre / Desativado)
-- **Voz do bot**: Select com opcoes de vozes pre-definidas:
-  - Laura (feminina, PT-BR) - padrao
-  - Sarah (feminina, versatil)
-  - Alice (feminina, confiante)
-  - Liam (masculina, articulada)
-  - Daniel (masculina, profunda)
-  - Charlie (masculina, casual)
+- Texto fixo de preview: "Ola! Eu sou a voz do seu assistente virtual. Como posso ajudar?"
+- Usa `ELEVENLABS_API_KEY` (ja configurada)
+- Retorna o audio como binary (audio/mpeg)
+- Modelo: `eleven_turbo_v2_5` para resposta rapida
 
-## Alteracoes no Webhook (whatsapp-webhook/index.ts)
+### 2. Adicionar botao de preview no WhatsAppSettings.tsx
 
-1. **Ler configuracoes**: Buscar `tts_mode` e `tts_voice_id` junto com as outras settings
-2. **Modificar `shouldSendAsAudio`**: Agora recebe `tts_mode` e `lastUserMessageWasAudio` como parametros:
-   - Se `tts_mode = 'disabled'`: retorna `false` sempre
-   - Se `tts_mode = 'always'`: usa a logica atual (verifica complexidade)
-   - Se `tts_mode = 'auto'`: so retorna `true` se o ultimo envio do cliente foi audio
-3. **Usar `tts_voice_id`**: Na funcao `textToSpeech`, usar o voice ID das configuracoes em vez do hardcoded
-4. **Detectar audio do cliente**: Verificar se a mensagem recebida era audio para passar ao `shouldSendAsAudio`
+- Botao com icone de play ao lado do select de voz
+- Ao clicar, faz fetch para a edge function com o `voiceId` selecionado
+- Reproduz o audio no navegador usando `new Audio()`
+- Loading state enquanto o audio carrega
+- Desabilita o botao durante a reproducao
 
-## Alteracoes no Hook (useWhatsApp.ts)
-
-Atualizar a interface `WhatsAppSettings` para incluir os novos campos `tts_mode` e `tts_voice_id`.
-
-## Fluxo Atualizado
+### 3. Fluxo
 
 ```text
-Cliente envia mensagem
-    -> Webhook busca settings (inclui tts_mode e tts_voice_id)
-    -> IA gera resposta em texto
-    -> Verifica tts_mode:
-       -> 'disabled': envia texto
-       -> 'always': se mensagem simples, converte com voz escolhida e envia audio
-       -> 'auto': se cliente enviou AUDIO, converte e envia audio; senao, texto
-    -> Fallback: se TTS falhar, envia texto
+Dono seleciona voz no select
+    -> Clica no botao de preview (icone play)
+    -> Loading spinner no botao
+    -> Edge function gera audio via ElevenLabs
+    -> Audio reproduzido no navegador
+    -> Botao volta ao estado normal
 ```
 
-## Detalhes Tecnicos
+## Detalhes tecnicos
 
-- Vozes disponiveis sao um subconjunto curado do ElevenLabs com qualidade garantida em portugues
-- O campo `tts_mode` com default `'auto'` garante que o comportamento padrao e "responde audio so se o cliente pediu em audio"
-- A migracao nao quebra nada existente pois os defaults cobrem o comportamento esperado
+- Edge function retorna binary audio (nao base64) para uso direto com `response.blob()`
+- Audio reproduzido via `URL.createObjectURL(blob)` + `new Audio(url)`
+- Estado de loading e playing controlados por useState
+- Texto de preview curto (~10 palavras) para economia de creditos ElevenLabs
+- Tratamento de erro com toast se o preview falhar
+
