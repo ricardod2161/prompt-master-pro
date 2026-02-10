@@ -1,41 +1,48 @@
 
 
-# API Key propria do ElevenLabs por cliente
+# Corrigir bot dizendo que nao pode enviar audio
 
-## Resumo
+## Problema
 
-Permitir que cada cliente configure sua propria chave da ElevenLabs diretamente nas configuracoes do WhatsApp. Isso elimina a dependencia de uma chave compartilhada do servidor e cada cliente usa sua propria conta/creditos.
+O bot esta respondendo "sou um assistente de texto e nao consigo te enviar mensagens de voz" porque a IA (GPT/Gemini) nao sabe que o sistema tem capacidade de enviar audio. O system prompt nao informa isso.
 
-## Alteracoes
+Existem dois cenarios:
+1. **Prompt personalizado**: Se o cliente configurou um `system_prompt` customizado, ele substitui completamente o prompt default, perdendo todas as instrucoes sobre audio
+2. **Prompt default**: Mesmo no prompt default, falta dizer explicitamente que o bot TEM capacidade de responder em audio
 
-### 1. Banco de dados
+## Solucao
 
-Adicionar coluna `elevenlabs_api_key` (text, nullable) na tabela `whatsapp_settings` para armazenar a chave de cada unidade.
+### 1. Injetar instrucoes de audio automaticamente no system prompt
 
-### 2. Frontend - WhatsAppSettings.tsx
+No webhook, adicionar um bloco de instrucoes sobre capacidade de audio que e SEMPRE injetado no prompt, independente de ser customizado ou default. Isso garante que a IA sempre saiba que pode responder em audio.
 
-Na secao "Respostas em Audio" (aba Bot), adicionar:
-- Campo de input para a API key do ElevenLabs (tipo password, com botao mostrar/ocultar)
-- Link externo para "Criar conta na ElevenLabs" e "Gerenciar API Keys"
-- Texto explicativo informando que o cliente precisa ter uma conta com cartao de credito na ElevenLabs
-- Salvar a chave junto com as demais configuracoes do bot
+**Logica no webhook (whatsapp-webhook/index.ts):**
 
-### 3. Edge Functions
+```text
+// Antes de montar aiMessages, anexar ao systemPrompt:
+const audioInstructions = `
 
-Atualizar `elevenlabs-tts-preview` e `whatsapp-webhook` para:
-- Receber a `elevenlabs_api_key` do banco de dados (da tabela `whatsapp_settings` da unidade)
-- Usar a chave do cliente quando disponivel
-- Fallback para a chave do servidor (`ELEVENLABS_API_KEY` do env) se o cliente nao configurou a propria
+IMPORTANTE - CAPACIDADE DE AUDIO:
+- Voce TEM capacidade de responder em audio/voz quando apropriado
+- O sistema converte automaticamente suas respostas em audio quando necessario
+- NUNCA diga que "nao consegue enviar audio" ou "sou assistente de texto"
+- Se o cliente pedir para falar em audio, responda normalmente que o sistema
+  enviara a resposta em audio
+- Quando for responder em audio, mantenha respostas mais curtas e
+  conversacionais (como uma fala natural)
+`;
 
-### 4. Hooks
+const finalPrompt = systemPrompt + audioInstructions;
+```
 
-Atualizar `useWhatsApp.ts` para incluir `elevenlabs_api_key` na interface `WhatsAppSettings`.
+### 2. Atualizar o prompt default
+
+Na funcao `getDefaultSystemPrompt()`, atualizar a secao "MENSAGENS DE AUDIO" (linhas 2069-2074) para incluir a informacao de que o bot pode responder com audio.
 
 ## Detalhes tecnicos
 
-- A chave e armazenada em texto plano na tabela `whatsapp_settings` (protegida por RLS)
-- O preview de voz passa a enviar a chave do cliente para a edge function, que a usa diretamente na chamada ao ElevenLabs
-- O webhook busca a chave da unidade no banco antes de chamar o TTS
-- A UI desabilita o seletor de voz e o botao de preview quando o modo de audio e "disabled"
-- Input da API key com mascara de senha e toggle de visibilidade
+- A injecao de instrucoes de audio e feita APOS carregar o system prompt (seja default ou customizado)
+- Isso garante que mesmo prompts personalizados sempre tenham a instrucao correta
+- As instrucoes orientam a IA a manter respostas mais naturais/curtas quando for audio
+- Nenhuma mudanca no banco de dados ou frontend necessaria
 
