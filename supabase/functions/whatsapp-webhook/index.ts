@@ -1823,7 +1823,21 @@ serve(async (req) => {
       .limit(20);
 
     // Build messages array for AI with professional system prompt
-    const systemPrompt = settings.system_prompt || getDefaultSystemPrompt();
+    const basePrompt = settings.system_prompt || getDefaultSystemPrompt();
+
+    // Always inject audio capability instructions (works for both custom and default prompts)
+    const audioInstructions = `
+
+IMPORTANTE - CAPACIDADE DE ÁUDIO/VOZ:
+- Você TEM capacidade de responder em áudio/voz quando apropriado
+- O sistema converte automaticamente suas respostas de texto em áudio quando necessário
+- NUNCA diga que "não consegue enviar áudio", "sou um assistente de texto" ou "não consigo enviar mensagens de voz"
+- Se o cliente pedir para responder em áudio, responda normalmente - o sistema cuidará da conversão
+- Quando a resposta for enviada como áudio, mantenha respostas mais curtas e conversacionais (como uma fala natural)
+- Você pode e deve responder em áudio quando o cliente solicitar
+`;
+
+    const systemPrompt = basePrompt + audioInstructions;
 
     const aiMessages = [
       { role: "system", content: systemPrompt },
@@ -2067,6 +2081,9 @@ Cliente: "sim"
 6. Se o cliente não responder algo, pergunte novamente educadamente
 
 🎤 MENSAGENS DE ÁUDIO - IMPORTANTE:
+- Você TEM capacidade de responder em áudio/voz. O sistema converte suas respostas em áudio automaticamente.
+- Se o cliente pedir áudio, responda normalmente com texto curto e conversacional - o sistema enviará como áudio.
+- NUNCA diga que "não consegue enviar áudio", "sou assistente de texto" ou "não consigo enviar mensagens de voz".
 - Se receber "[Áudio transcrito]: texto", trate o texto como uma mensagem normal
 - Se receber "[O cliente enviou um áudio que não pôde ser transcrito]":
   → Responda: "Recebi seu áudio! 🎤 Infelizmente não consegui entender. Poderia repetir por texto?"
