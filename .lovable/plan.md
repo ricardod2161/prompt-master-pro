@@ -1,43 +1,39 @@
 
 
-# Corrigir tamanho da fonte e texto cortado na impressao
+# Ajustar impressao: fonte equilibrada e sem corte
 
-## Problemas identificados
+## Problema atual
 
-1. **Fonte muito pequena**: O CSS atual usa `font-size: 14px` na tela e reduz para `12px` na impressao -- muito pequeno para leitura rapida na cozinha.
-2. **Texto cortado nas laterais**: As linhas com 32 caracteres de divisor (`=` e `-`) podem ultrapassar a largura do papel, cortando o conteudo. O `max-width: 280px` tambem limita demais.
-3. **Sem `word-wrap`**: Textos longos (enderecos, nomes de produtos) nao quebram linha e sao cortados.
+A fonte de 16px na tela e 14px na impressao ficou grande demais para papel termico de 58mm, fazendo o texto ultrapassar a largura do papel e ser cortado. Os divisores de 28 caracteres com fonte grande tambem excedem a area imprimivel.
 
 ## Solucao
 
 ### Arquivo: `src/hooks/usePrintOrder.ts`
 
-**1. Reduzir largura dos divisores** de 32 para 28 caracteres para caber melhor no papel termico de 58mm:
+**1. Reduzir divisores para 24 caracteres** -- tamanho seguro para 58mm com fonte legivel:
 
 ```text
-const divider = "=".repeat(28);
-const thinDivider = "-".repeat(28);
+const divider = "=".repeat(24);
+const thinDivider = "-".repeat(24);
 ```
 
-**2. Aumentar fonte e corrigir CSS do fallback do navegador**:
+**2. Centralizar titulos com menos espacos** para acompanhar a largura menor dos divisores.
 
-- Fonte na tela: `14px` para `16px`
-- Fonte na impressao: `12px` para `14px`
-- Adicionar `word-wrap: break-word` no `pre` para evitar corte
-- Remover `max-width` restritivo e usar `width: 100%`
-- Adicionar `white-space: pre-wrap` para permitir quebra de linha automatica
-- Adicionar margens de pagina zeradas no `@media print`
+**3. Ajustar CSS para tamanho equilibrado**:
 
-**3. CSS atualizado**:
+- Fonte na tela: `16px` para `13px` -- tamanho ideal para preview sem corte
+- Fonte na impressao: `14px` para `12px` -- legivel em papel termico sem ultrapassar a largura
+- Largura maxima: `width: 100%` para `max-width: 48mm` -- respeita a area util do papel de 58mm (descontando margens mecanicas)
+- Manter `pre-wrap` e `word-wrap` para textos longos quebrarem linha
 
 ```css
 body {
   font-family: 'Courier New', monospace;
-  font-size: 16px;
-  line-height: 1.5;
-  padding: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 4px;
   margin: 0 auto;
-  width: 100%;
+  max-width: 48mm;
   box-sizing: border-box;
 }
 pre {
@@ -48,13 +44,14 @@ pre {
   font-size: inherit;
 }
 @media print {
-  @page { margin: 2mm; }
+  @page { margin: 1mm; }
   body {
     padding: 0;
-    font-size: 14px;
+    font-size: 12px;
+    max-width: 100%;
   }
 }
 ```
 
-Essas mudancas garantem que o texto fique maior, legivel e nunca seja cortado, independentemente do tamanho do papel termico (58mm ou 80mm).
+Essas mudancas equilibram legibilidade com o espaco disponivel no papel termico, garantindo que nenhum texto seja cortado e a comanda fique com aparencia profissional.
 
