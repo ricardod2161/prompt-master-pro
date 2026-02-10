@@ -764,13 +764,8 @@ async function confirmarPedido(
   };
   const paymentMethod = paymentMap[pagamento.forma] || "cash";
 
-  // Map modalidade to channel
-  const channelMap: Record<string, string> = {
-    "entrega": "delivery",
-    "retirada": "counter",
-    "local": "table"
-  };
-  const channel = channelMap[modalidade] || "whatsapp";
+  // Channel is ALWAYS "whatsapp" for orders coming from WhatsApp webhook
+  const channel = "whatsapp";
 
   // Find products and calculate total
   const orderItems: Array<{
@@ -839,15 +834,17 @@ async function confirmarPedido(
 
   // Build notes with additional info
   const notesArray: string[] = [];
+  // Add delivery mode info to notes
+  if (modalidade === "entrega") {
+    notesArray.push("🚚 Modalidade: Entrega");
+  } else if (modalidade === "retirada") {
+    notesArray.push("🏃 Modalidade: Retirada no local");
+  } else if (modalidade === "local") {
+    notesArray.push("🍽️ Modalidade: Consumo no local");
+  }
   if (observacoes) notesArray.push(observacoes);
   if (pagamento.forma === "dinheiro" && pagamento.troco_para) {
     notesArray.push(`💵 Troco para: R$ ${pagamento.troco_para.toFixed(2).replace(".", ",")}`);
-  }
-  if (modalidade === "retirada") {
-    notesArray.push("🏃 Cliente vai retirar no local");
-  }
-  if (modalidade === "local") {
-    notesArray.push("🍽️ Cliente vai consumir no local");
   }
 
   // Create order
