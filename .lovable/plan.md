@@ -1,66 +1,48 @@
 
 
-# Corrigir historico contaminado que faz bot repetir "sou assistente de texto"
+# Corrigir pronúncia do TTS (dólares -> reais) e tornar áudio mais natural
 
-## Problema Real
+## Problema
 
-O fix do prompt foi aplicado e funciona (os logs confirmam `[TTS] Audio response sent successfully`). Porem, o historico da conversa contem **3 mensagens antigas** onde o bot disse "sou assistente de texto" / "nao consigo enviar audio". Quando a IA carrega as ultimas 20 mensagens, ela ve essas respostas e **repete o mesmo padrao**, ignorando as instrucoes do system prompt.
+O bot está falando "dólares" ao invés de "reais" nos áudios, e a fala soa robótica. Duas causas identificadas:
 
-## Solucao (2 partes)
+1. **Modelo errado**: O TTS usa `eleven_turbo_v2_5` que é otimizado para inglês. Ele interpreta "R$" como símbolo de dólar e pronuncia incorretamente.
+2. **Texto não preparado para fala**: O texto enviado ao TTS contém emojis, markdown (`*negrito*`), símbolos (`R$`), e formatação de números (`34,90`) que o sintetizador não interpreta bem em português.
 
-### 1. Limpar mensagens problematicas do banco
+## Solução (2 partes)
 
-Deletar as 3 mensagens do historico que contem o texto problematico, para que a IA nao as veja mais:
+### 1. Trocar o modelo TTS para multilingual
 
-```sql
-DELETE FROM whatsapp_messages 
-WHERE role = 'assistant' 
-AND (content LIKE '%assistente de texto%' 
-  OR content LIKE '%apenas por texto%' 
-  OR content LIKE '%não consigo enviar mensagens de voz%'
-  OR content LIKE '%não consigo te enviar mensagens de voz%');
-```
+Trocar de `eleven_turbo_v2_5` (inglês) para `eleven_multilingual_v2` que tem suporte nativo ao português brasileiro e entende convenções de moeda locais.
 
-### 2. Filtrar mensagens no webhook antes de enviar para a IA
+### 2. Pré-processar o texto antes de enviar ao TTS
 
-No `whatsapp-webhook/index.ts`, adicionar um filtro no mapeamento do historico para excluir automaticamente mensagens que contenham esses padroes problematicos. Isso previne que mensagens futuras com esse padrao "contaminem" o contexto.
+Criar uma função `prepareTextForSpeech()` que converte o texto em formato otimizado para fala natural:
 
-**No trecho que monta `aiMessages` (linha ~1844):**
+- `R$ 34,90` vira `34 reais e 90 centavos`
+- `R$ 50,00` vira `50 reais`
+- Remove emojis
+- Remove markdown (`*negrito*` vira `negrito`)
+- Remove caracteres especiais que atrapalham a pronúncia
 
-```typescript
-const filteredMessages = (recentMessages || [])
-  .reverse()
-  .filter((m: any) => {
-    if (m.role === 'assistant') {
-      const lower = (m.content || '').toLowerCase();
-      if (
-        lower.includes('assistente de texto') ||
-        lower.includes('apenas por texto') ||
-        lower.includes('não consigo enviar mensagens de voz') ||
-        lower.includes('nao consigo enviar mensagens de voz') ||
-        lower.includes('não consigo te enviar') ||
-        lower.includes('nao consigo te enviar')
-      ) {
-        return false;
-      }
-    }
-    return true;
-  })
-  .map((m: any) => ({
-    role: m.role === 'assistant' ? 'assistant' : 'user',
-    content: m.content,
-  }));
+### 3. Ajustar instruções do prompt para respostas em áudio
 
-const aiMessages = [
-  { role: "system", content: systemPrompt },
-  ...filteredMessages,
-];
-```
+Reforçar no `audioInstructions` que quando responder para áudio, o bot deve:
+- Escrever valores por extenso (ex: "trinta e quatro reais e noventa centavos")
+- Não usar emojis ou formatação markdown
+- Manter tom conversacional e natural
 
-## Resumo das alteracoes
+## Detalhes técnicos
 
-1. **Migracao SQL**: Deletar mensagens problematicas existentes no banco
-2. **whatsapp-webhook/index.ts**: Filtrar mensagens com padrao "assistente de texto" antes de enviar ao LLM
-3. **Re-deploy** do webhook
+Alterações apenas no arquivo `supabase/functions/whatsapp-webhook/index.ts`:
 
-Nenhuma alteracao no frontend ou banco de dados (schema).
+1. Na função `textToSpeech()`: trocar `model_id` de `eleven_turbo_v2_5` para `eleven_multilingual_v2`
+2. Nova função `prepareTextForSpeech(text)` com regex para:
+   - Converter `R$ X,YY` para formato falado em reais
+   - Remover emojis com regex Unicode
+   - Limpar markdown (`*`, `_`, etc.)
+3. Chamar `prepareTextForSpeech()` antes de enviar o texto ao TTS
+4. Atualizar `audioInstructions` para orientar respostas mais naturais para áudio
+
+Nenhuma mudança no banco de dados, frontend, ou schema.
+
