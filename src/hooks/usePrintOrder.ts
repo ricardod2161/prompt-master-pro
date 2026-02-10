@@ -25,11 +25,11 @@ interface PrintTicketData {
 
 // Format ticket as text for thermal printer (58mm or 80mm)
 // Prefix to compensate for thermal printer left margin mechanical cut
-const P = "  "; // 2-space left padding on every line
+const P = "   "; // 3-space left padding on every line
 
 function formatTicketText(data: PrintTicketData): string {
-  const divider = P + "=".repeat(14);
-  const thinDivider = P + "-".repeat(14);
+  const divider = P + "=".repeat(12);
+  const thinDivider = P + "-".repeat(12);
   
   let ticket = "";
   
@@ -133,10 +133,10 @@ function printViaBrowser(ticketText: string, orderNumber: number): void {
         <style>
           body {
             font-family: 'Courier New', monospace;
-            font-size: 9px;
-            line-height: 1.2;
+            font-size: 12px;
+            line-height: 1.3;
             padding: 1px;
-            padding-left: 2mm;
+            padding-left: 3mm;
             margin: 0 auto;
             max-width: 44mm;
             box-sizing: border-box;
@@ -152,7 +152,7 @@ function printViaBrowser(ticketText: string, orderNumber: number): void {
             @page { margin: 1mm; }
             body { 
               padding: 0;
-              font-size: 8px;
+              font-size: 11px;
               max-width: 100%;
             }
           }
