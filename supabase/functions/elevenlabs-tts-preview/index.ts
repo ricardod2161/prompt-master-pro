@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { voiceId } = await req.json();
+    const { voiceId, elevenlabs_api_key } = await req.json();
 
     if (!voiceId) {
       return new Response(JSON.stringify({ error: 'voiceId é obrigatório' }), {
@@ -20,10 +20,11 @@ serve(async (req) => {
       });
     }
 
-    const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
-    if (!ELEVENLABS_API_KEY) {
-      return new Response(JSON.stringify({ error: 'ELEVENLABS_API_KEY não configurada' }), {
-        status: 500,
+    // Use client key if provided, otherwise fallback to server key
+    const apiKey = elevenlabs_api_key || Deno.env.get('ELEVENLABS_API_KEY');
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: 'API key do ElevenLabs não configurada. Adicione sua chave nas configurações do WhatsApp.' }), {
+        status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -35,7 +36,7 @@ serve(async (req) => {
       {
         method: 'POST',
         headers: {
-          'xi-api-key': ELEVENLABS_API_KEY,
+          'xi-api-key': apiKey,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

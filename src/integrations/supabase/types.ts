@@ -1157,6 +1157,7 @@ export type Database = {
           api_url: string | null
           bot_enabled: boolean | null
           created_at: string
+          elevenlabs_api_key: string | null
           id: string
           instance_name: string | null
           settings_password: string | null
@@ -1172,6 +1173,7 @@ export type Database = {
           api_url?: string | null
           bot_enabled?: boolean | null
           created_at?: string
+          elevenlabs_api_key?: string | null
           id?: string
           instance_name?: string | null
           settings_password?: string | null
@@ -1187,6 +1189,7 @@ export type Database = {
           api_url?: string | null
           bot_enabled?: boolean | null
           created_at?: string
+          elevenlabs_api_key?: string | null
           id?: string
           instance_name?: string | null
           settings_password?: string | null

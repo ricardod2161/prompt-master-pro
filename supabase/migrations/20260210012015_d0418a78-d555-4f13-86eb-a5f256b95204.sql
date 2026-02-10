@@ -1,0 +1,1 @@
+ALTER TABLE public.whatsapp_settings ADD COLUMN elevenlabs_api_key text;

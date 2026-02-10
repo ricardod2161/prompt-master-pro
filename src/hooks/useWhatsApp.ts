@@ -16,6 +16,7 @@ export interface WhatsAppSettings {
   settings_password: string | null;
   tts_mode: string | null;
   tts_voice_id: string | null;
+  elevenlabs_api_key: string | null;
   created_at: string;
   updated_at: string;
 }
