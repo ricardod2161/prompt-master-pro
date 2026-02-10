@@ -1,81 +1,53 @@
 
-# Corrigir erro "Parâmetros inválidos" no Pix
+# Adicionar regras de formatacao para listas no bot WhatsApp
 
-## Causa raiz: Bug no CRC16
+## Problema
 
-O erro "Parâmetros inválidos" acontece porque o **CRC16 está sendo calculado errado**. O algoritmo CRC16-CCITT precisa manter o valor em 16 bits (mascarar com `& 0xFFFF`) a cada iteracao do loop interno. Sem isso, o valor cresce alem de 16 bits e o calculo do checksum fica incorreto.
+Como mostra a screenshot, o bot esta enviando listas numeradas (1. 2. 3.) com multiplas perguntas juntas e sem formatacao visual clara. As listas devem usar quebras de linha e emojis individuais por item para ficar mais organizado e bonito no WhatsApp.
 
-### O bug (nas duas implementacoes):
+## Solucao
+
+Adicionar uma nova regra critica no system prompt do bot (`supabase/functions/whatsapp-webhook/index.ts`) logo apos a regra #4, instruindo o modelo a:
+
+- Usar emojis como marcadores em vez de numeros (ex: `📛 Nome`, `🏠 Entrega`, `💳 Pagamento`)
+- Colocar cada opcao em sua propria linha com quebra de linha
+- Usar negrito com asteriscos do WhatsApp para destacar opcoes
+- Nunca agrupar opcoes na mesma linha separadas por virgula
+
+### Exemplo do formato esperado:
 
 ```text
-// ERRADO - valor cresce alem de 16 bits a cada shift
-crc = (crc << 1) ^ 0x1021;   // pode virar 17, 18... 24 bits!
-crc = crc << 1;                // sem mascara!
+ERRADO (como esta hoje):
+"1. Seu nome completo. 2. A modalidade: *Entrega*, *Retirada* ou *Comer no Local*. 3. A forma de pagamento..."
+
+CERTO (como deve ficar):
+"Qual a forma de pagamento?
+
+💵 *Dinheiro*
+📱 *PIX*
+💳 *Cartao* (Debito/Credito)"
 ```
-
-```text
-// CORRETO - manter sempre em 16 bits
-crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
-crc = (crc << 1) & 0xFFFF;
-```
-
-Quando o CRC esta errado, o banco rejeita o codigo inteiro com "Parametros invalidos".
-
-## Correcoes adicionais
-
-### 1. Adicionar campo "Point of Initiation Method" (ID 01)
-
-O padrao BR Code/Pix recomenda incluir o campo 01 com valor "12" (QR dinamico, com valor) ou "11" (QR estatico, sem valor). Varios bancos exigem esse campo. Atualmente esta faltando.
-
-### 2. Corrigir truncamento do nome do comerciante
-
-O nome "PAULO RICARDO DANTAS DE LIMA" e cortado em 25 caracteres ficando "PAULO RICARDO DANTAS DE L" (letra solta). Corrigir para truncar na ultima palavra completa: "PAULO RICARDO DANTAS DE" (23 chars).
 
 ## Detalhes tecnicos
 
-Arquivos a alterar:
+**Arquivo**: `supabase/functions/whatsapp-webhook/index.ts`
 
-**1. `src/lib/pix-generator.ts`** (usado no frontend/tracking):
-- Corrigir CRC16: adicionar `& 0xFFFF` nas duas linhas do loop interno
-- Adicionar campo 01 ("12" quando tem valor, "11" quando nao tem)
-- Corrigir `normalizeString` para truncar em palavra completa
+Adicionar apos a regra critica #4 (linha ~2122) uma nova regra:
 
-**2. `supabase/functions/send-order-notification/index.ts`** (usado no WhatsApp):
-- Mesmas 3 correcoes acima na copia das funcoes CRC16, generatePixCode e normalizeString
-
-### Mudancas especificas:
-
-**CRC16** (ambos arquivos):
 ```text
-// Linha do if:
-crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
-// Linha do else:
-crc = (crc << 1) & 0xFFFF;
+REGRA CRITICA #5 - FORMATACAO DE LISTAS E OPCOES
+- NUNCA use listas numeradas (1. 2. 3.)
+- Use um emoji relevante como marcador para cada item
+- Cada item/opcao deve estar em sua PROPRIA LINHA (quebra de linha)
+- Use *negrito* do WhatsApp para destacar opcoes
+- ERRADO: "1. Seu nome. 2. Modalidade: *Entrega*, *Retirada*. 3. Pagamento."
+- CERTO:
+  "💵 *Dinheiro*
+   📱 *PIX*
+   💳 *Cartao*"
+- Quando listar itens do pedido, use emojis por item:
+  "🍕 1x Pizza Grande - R$ 45,00
+   🥤 2x Refrigerante - R$ 10,00"
 ```
 
-**normalizeString** (ambos arquivos):
-```text
-function normalizeString(str: string): string {
-  const cleaned = str
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9 ]/g, '')
-    .toUpperCase()
-    .trim();
-
-  if (cleaned.length <= 25) return cleaned;
-
-  // Truncar na ultima palavra completa dentro de 25 chars
-  const truncated = cleaned.substring(0, 25);
-  const lastSpace = truncated.lastIndexOf(' ');
-  return lastSpace > 10 ? truncated.substring(0, lastSpace) : truncated;
-}
-```
-
-**generatePixCode** (ambos arquivos):
-```text
-// Apos campo 00 (Payload Format Indicator), adicionar:
-payload += formatField('01', amount && amount > 0 ? '12' : '11');
-```
-
-Nenhuma mudanca no banco de dados. Apenas correcoes nas funcoes de geracao de codigo Pix.
+Apos a edicao, o edge function sera reimplantado automaticamente.
