@@ -296,6 +296,30 @@ export default function Menu() {
     }
   };
 
+  const handleDeleteCategory = async (categoryId: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta categoria? Os produtos vinculados ficarão sem categoria.")) return;
+
+    try {
+      // Remove category_id from products linked to this category
+      await supabase
+        .from("products")
+        .update({ category_id: null })
+        .eq("category_id", categoryId);
+
+      const { error } = await supabase
+        .from("categories")
+        .delete()
+        .eq("id", categoryId);
+
+      if (error) throw error;
+      toast.success("Categoria excluída!");
+      setCategoryDialogOpen(false);
+      fetchData();
+    } catch (error: any) {
+      toast.error("Erro ao excluir categoria");
+    }
+  };
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
       style: "currency",
@@ -377,24 +401,36 @@ export default function Menu() {
                     />
                   </div>
                 </div>
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setCategoryDialogOpen(false)}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button type="submit" disabled={savingCategory}>
-                    {savingCategory ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Salvando...
-                      </>
-                    ) : (
-                      "Salvar"
-                    )}
-                  </Button>
+                <DialogFooter className="flex justify-between sm:justify-between">
+                  {editingCategory && (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() => handleDeleteCategory(editingCategory.id)}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Excluir
+                    </Button>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setCategoryDialogOpen(false)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button type="submit" disabled={savingCategory}>
+                      {savingCategory ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Salvando...
+                        </>
+                      ) : (
+                        "Salvar"
+                      )}
+                    </Button>
+                  </div>
                 </DialogFooter>
               </form>
             </DialogContent>
