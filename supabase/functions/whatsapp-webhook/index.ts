@@ -2400,6 +2400,20 @@ function prepareTextForSpeech(text: string): string {
   // R$ without cents
   prepared = prepared.replace(/R\$\s*(\d+)/g, '$1 reais');
   
+  // Spell out formatted CPF (XXX.XXX.XXX-XX) digit by digit
+  prepared = prepared.replace(/(\d{3})\.(\d{3})\.(\d{3})-(\d{2})/g, (_, a, b, c, d) => {
+    return (a + b + c + d).split('').join(', ');
+  });
+  // Spell out formatted CNPJ (XX.XXX.XXX/XXXX-XX) digit by digit
+  prepared = prepared.replace(/(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})-(\d{2})/g, (_, a, b, c, d, e) => {
+    return (a + b + c + d + e).split('').join(', ');
+  });
+  // Spell out long digit sequences (11+ digits: CPF, CNPJ, phone, Pix keys) digit by digit
+  prepared = prepared.replace(/\+?(\d{11,})/g, (match) => {
+    const digits = match.replace(/\D/g, '');
+    return digits.split('').join(', ');
+  });
+  
   // Remove emojis
   prepared = prepared.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, '');
   
