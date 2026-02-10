@@ -81,6 +81,8 @@ export function useOrders(filters?: {
       return data as Order[];
     },
     enabled: !!selectedUnit?.id,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   // Realtime subscription
@@ -88,7 +90,7 @@ export function useOrders(filters?: {
     if (!selectedUnit?.id) return;
 
     const channel = supabase
-      .channel("orders-realtime")
+      .channel(`orders-realtime-${selectedUnit.id}`)
       .on(
         "postgres_changes",
         {
@@ -98,7 +100,7 @@ export function useOrders(filters?: {
           filter: `unit_id=eq.${selectedUnit.id}`,
         },
         () => {
-          queryClient.invalidateQueries({ queryKey: ["orders", selectedUnit.id] });
+          queryClient.refetchQueries({ queryKey: ["orders"] });
         }
       )
       .subscribe();
@@ -184,7 +186,7 @@ export function useCreateOrder() {
       return order;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.refetchQueries({ queryKey: ["orders"] });
       toast({ title: "Pedido criado com sucesso!" });
     },
     onError: (error) => {
@@ -216,7 +218,7 @@ export function useUpdateOrderStatus() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.refetchQueries({ queryKey: ["orders"] });
     },
   });
 }
@@ -240,7 +242,7 @@ export function useUpdateKitchenStatus() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.refetchQueries({ queryKey: ["orders"] });
     },
   });
 }
@@ -264,7 +266,7 @@ export function useUpdatePaymentMethod() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.refetchQueries({ queryKey: ["orders"] });
       toast({ title: "Forma de pagamento atualizada!" });
     },
     onError: (error) => {
