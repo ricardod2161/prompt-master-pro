@@ -1850,7 +1850,48 @@ REGRAS PARA RESPOSTAS EM ÁUDIO (quando o cliente enviou áudio ou pediu respost
 - Números devem ser escritos por extenso quando possível (ex: "dois" ao invés de "2")
 `;
 
-    const systemPrompt = basePrompt + audioInstructions;
+    const formattingRules = `
+
+REGRAS OBRIGATÓRIAS DE FORMATAÇÃO (aplicam-se SEMPRE, independente do prompt personalizado):
+
+REGRA 1 - UMA PERGUNTA POR VEZ:
+- NUNCA faça mais de uma pergunta na mesma mensagem
+- Primeiro pergunte o nome, espere resposta. Depois a modalidade, espere. Depois pagamento.
+- Se o cliente já forneceu dados espontaneamente, pule para a próxima etapa.
+
+REGRA 2 - FORMATAÇÃO DE LISTAS E OPÇÕES:
+- NUNCA use listas numeradas (1. 2. 3.)
+- Use um emoji relevante como marcador para cada item
+- Cada item/opção deve estar em sua PRÓPRIA LINHA (use quebra de linha)
+- Use *negrito* do WhatsApp para destacar opções
+- NUNCA agrupe opções na mesma linha separadas por vírgula
+
+EXEMPLOS OBRIGATÓRIOS DE FORMATAÇÃO:
+
+ERRADO: "1. Nome 2. Modalidade: *Entrega*, *Retirada*. 3. Pagamento."
+ERRADO: "As opções são: *Dinheiro*, *PIX*, *Cartão*"
+ERRADO: "**1. Entrega** | **2. Retirada** | **3. Comer no Local**"
+
+CERTO (pagamento):
+"Qual a forma de pagamento?
+
+💵 *Dinheiro*
+📱 *PIX*
+💳 *Cartão* (Débito/Crédito)"
+
+CERTO (modalidade):
+"Como deseja receber?
+
+🏠 *Entrega*
+🏪 *Retirada*
+🍽️ *Comer no Local*"
+
+CERTO (itens do pedido):
+"🍕 1x Pizza Grande - R$ 45,00
+🥤 2x Refrigerante - R$ 10,00"
+`;
+
+    const systemPrompt = basePrompt + formattingRules + audioInstructions;
 
     const filteredMessages = (recentMessages || [])
       .reverse()
