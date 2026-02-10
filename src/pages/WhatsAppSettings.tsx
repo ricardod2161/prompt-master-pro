@@ -42,6 +42,8 @@ import {
   Eye,
   EyeOff,
   Volume2,
+  Play,
+  Square,
 } from "lucide-react";
 import { useUnit } from "@/contexts/UnitContext";
 import {
@@ -84,6 +86,68 @@ export default function WhatsAppSettings() {
   // TTS state
   const [ttsMode, setTtsMode] = useState("auto");
   const [ttsVoiceId, setTtsVoiceId] = useState("FGY2WhTYpPnrIDTdsKH5");
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+  const [previewAudio, setPreviewAudio] = useState<HTMLAudioElement | null>(null);
+
+  const handleVoicePreview = async () => {
+    // Stop current preview if playing
+    if (previewAudio) {
+      previewAudio.pause();
+      previewAudio.currentTime = 0;
+      setPreviewAudio(null);
+      setIsPreviewPlaying(false);
+      return;
+    }
+
+    setIsPreviewLoading(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts-preview`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ voiceId: ttsVoiceId }),
+        }
+      );
+
+      if (!response.ok) throw new Error("Falha ao gerar preview");
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+
+      audio.onended = () => {
+        setIsPreviewPlaying(false);
+        setPreviewAudio(null);
+        URL.revokeObjectURL(url);
+      };
+
+      audio.onerror = () => {
+        setIsPreviewPlaying(false);
+        setPreviewAudio(null);
+        URL.revokeObjectURL(url);
+      };
+
+      setPreviewAudio(audio);
+      setIsPreviewPlaying(true);
+      await audio.play();
+    } catch (error) {
+      console.error("Voice preview error:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro no preview",
+        description: "Não foi possível reproduzir a amostra da voz. Tente novamente.",
+      });
+      setIsPreviewPlaying(false);
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  };
 
   // Password protection state
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -661,21 +725,39 @@ export default function WhatsAppSettings() {
 
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">Voz do Bot</Label>
-                      <Select value={ttsVoiceId} onValueChange={setTtsVoiceId}>
-                        <SelectTrigger className="h-11">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="FGY2WhTYpPnrIDTdsKH5">👩 Laura — feminina, PT-BR (padrão)</SelectItem>
-                          <SelectItem value="EXAVITQu4vr4xnSDxMaL">👩 Sarah — feminina, versátil</SelectItem>
-                          <SelectItem value="Xb7hH8MSUJpSbSDYk0k2">👩 Alice — feminina, confiante</SelectItem>
-                          <SelectItem value="TX3LPaxmHKxFdv7VOQHJ">👨 Liam — masculina, articulada</SelectItem>
-                          <SelectItem value="onwK4e9ZLuTAKqWW03F9">👨 Daniel — masculina, profunda</SelectItem>
-                          <SelectItem value="IKne3meq5aSn9XLyUdCD">👨 Charlie — masculina, casual</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <div className="flex gap-2">
+                        <Select value={ttsVoiceId} onValueChange={setTtsVoiceId}>
+                          <SelectTrigger className="h-11 flex-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="FGY2WhTYpPnrIDTdsKH5">👩 Laura — feminina, PT-BR (padrão)</SelectItem>
+                            <SelectItem value="EXAVITQu4vr4xnSDxMaL">👩 Sarah — feminina, versátil</SelectItem>
+                            <SelectItem value="Xb7hH8MSUJpSbSDYk0k2">👩 Alice — feminina, confiante</SelectItem>
+                            <SelectItem value="TX3LPaxmHKxFdv7VOQHJ">👨 Liam — masculina, articulada</SelectItem>
+                            <SelectItem value="onwK4e9ZLuTAKqWW03F9">👨 Daniel — masculina, profunda</SelectItem>
+                            <SelectItem value="IKne3meq5aSn9XLyUdCD">👨 Charlie — masculina, casual</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-11 w-11 shrink-0"
+                          disabled={isPreviewLoading || isPreviewPlaying}
+                          onClick={handleVoicePreview}
+                        >
+                          {isPreviewLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : isPreviewPlaying ? (
+                            <Square className="h-4 w-4" />
+                          ) : (
+                            <Play className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
                       <p className="text-xs text-muted-foreground">
-                        Voz usada para converter as respostas em áudio via ElevenLabs
+                        Voz usada para converter as respostas em áudio via ElevenLabs. Clique ▶ para ouvir.
                       </p>
                     </div>
                   </div>
