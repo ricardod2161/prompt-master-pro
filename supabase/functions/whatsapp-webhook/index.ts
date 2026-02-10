@@ -1833,8 +1833,16 @@ IMPORTANTE - CAPACIDADE DE ÁUDIO/VOZ:
 - O sistema converte automaticamente suas respostas de texto em áudio quando necessário
 - NUNCA diga que "não consegue enviar áudio", "sou um assistente de texto" ou "não consigo enviar mensagens de voz"
 - Se o cliente pedir para responder em áudio, responda normalmente - o sistema cuidará da conversão
-- Quando a resposta for enviada como áudio, mantenha respostas mais curtas e conversacionais (como uma fala natural)
 - Você pode e deve responder em áudio quando o cliente solicitar
+
+REGRAS PARA RESPOSTAS EM ÁUDIO (quando o cliente enviou áudio ou pediu resposta em voz):
+- Escreva valores monetários por EXTENSO: "trinta e quatro reais e noventa centavos" ao invés de "R$ 34,90"
+- NÃO use emojis, asteriscos, underlines ou qualquer formatação markdown
+- NÃO use símbolos como R$, %, #, etc - escreva tudo por extenso
+- Use tom conversacional e natural, como se estivesse falando pessoalmente
+- Mantenha respostas curtas e diretas, como uma conversa real
+- Use "reais" para a moeda brasileira, NUNCA "dólares"
+- Números devem ser escritos por extenso quando possível (ex: "dois" ao invés de "2")
 `;
 
     const systemPrompt = basePrompt + audioInstructions;
@@ -2301,6 +2309,44 @@ function shouldSendAsAudio(message: string, ttsMode: string, lastUserMessageWasA
   return complexityScore < 2;
 }
 
+// Prepare text for natural speech synthesis in Brazilian Portuguese
+function prepareTextForSpeech(text: string): string {
+  let prepared = text;
+  
+  // Convert R$ X,YY to spoken format
+  prepared = prepared.replace(/R\$\s*(\d+)[,.](\d{2})/g, (_, reais, centavos) => {
+    const centavosNum = parseInt(centavos);
+    if (centavosNum === 0) return `${reais} reais`;
+    return `${reais} reais e ${centavos} centavos`;
+  });
+  // R$ without cents
+  prepared = prepared.replace(/R\$\s*(\d+)/g, '$1 reais');
+  
+  // Remove emojis
+  prepared = prepared.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, '');
+  
+  // Remove markdown formatting
+  prepared = prepared.replace(/\*\*(.*?)\*\*/g, '$1'); // **bold**
+  prepared = prepared.replace(/\*(.*?)\*/g, '$1');     // *italic*
+  prepared = prepared.replace(/_(.*?)_/g, '$1');       // _underline_
+  prepared = prepared.replace(/~(.*?)~/g, '$1');       // ~strikethrough~
+  prepared = prepared.replace(/```[\s\S]*?```/g, '');  // code blocks
+  prepared = prepared.replace(/`(.*?)`/g, '$1');       // inline code
+  
+  // Remove special characters that confuse TTS
+  prepared = prepared.replace(/[#•\-]{2,}/g, ' ');
+  prepared = prepared.replace(/─+/g, ' ');
+  prepared = prepared.replace(/[│┃┆]/g, ' ');
+  
+  // Clean up whitespace
+  prepared = prepared.replace(/\n{2,}/g, '. ');
+  prepared = prepared.replace(/\n/g, ', ');
+  prepared = prepared.replace(/\s{2,}/g, ' ');
+  prepared = prepared.trim();
+  
+  return prepared;
+}
+
 // Convert text to speech using ElevenLabs API
 async function textToSpeech(text: string, voiceId?: string, clientApiKey?: string): Promise<string> {
   const apiKey = clientApiKey || Deno.env.get("ELEVENLABS_API_KEY");
@@ -2309,6 +2355,10 @@ async function textToSpeech(text: string, voiceId?: string, clientApiKey?: strin
   }
   
   const selectedVoiceId = voiceId || "FGY2WhTYpPnrIDTdsKH5"; // Laura default
+  
+  // Pre-process text for natural Brazilian Portuguese speech
+  const preparedText = prepareTextForSpeech(text);
+  console.log("[TTS] Prepared text for speech:", preparedText.substring(0, 100) + "...");
   
   const response = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${selectedVoiceId}?output_format=mp3_22050_32`,
@@ -2319,13 +2369,13 @@ async function textToSpeech(text: string, voiceId?: string, clientApiKey?: strin
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        text,
-        model_id: "eleven_turbo_v2_5",
+        text: preparedText,
+        model_id: "eleven_multilingual_v2",
         voice_settings: {
           stability: 0.5,
           similarity_boost: 0.75,
           style: 0.3,
-          speed: 1.05,
+          speed: 1.0,
         },
       }),
     }
