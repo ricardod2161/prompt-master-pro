@@ -25,8 +25,8 @@ interface PrintTicketData {
 
 // Format ticket as text for thermal printer (58mm or 80mm)
 function formatTicketText(data: PrintTicketData): string {
-  const divider = "=".repeat(32);
-  const thinDivider = "-".repeat(32);
+  const divider = "=".repeat(28);
+  const thinDivider = "-".repeat(28);
   
   let ticket = "";
   
@@ -130,16 +130,25 @@ function printViaBrowser(ticketText: string, orderNumber: number): void {
         <style>
           body {
             font-family: 'Courier New', monospace;
-            font-size: 14px;
-            line-height: 1.4;
-            padding: 10px;
-            max-width: 280px;
+            font-size: 16px;
+            line-height: 1.5;
+            padding: 8px;
             margin: 0 auto;
+            width: 100%;
+            box-sizing: border-box;
+          }
+          pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            margin: 0;
+            font-size: inherit;
           }
           @media print {
+            @page { margin: 2mm; }
             body { 
               padding: 0;
-              font-size: 12px;
+              font-size: 14px;
             }
           }
         </style>
