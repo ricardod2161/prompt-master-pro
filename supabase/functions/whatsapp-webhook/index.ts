@@ -1903,12 +1903,16 @@ serve(async (req) => {
     if (menuMessages && menuMessages.length > 0) {
       console.log("[MENU] Menu sent separately, suppressing AI duplicate response");
     } else {
-      // Decide: send as audio or text
-      if (shouldSendAsAudio(assistantMessage)) {
+      // Decide: send as audio or text based on settings
+      const ttsMode = settings.tts_mode || 'auto';
+      const ttsVoiceId = settings.tts_voice_id || 'FGY2WhTYpPnrIDTdsKH5';
+      const lastUserMessageWasAudio = mediaType === "audio";
+      
+      if (shouldSendAsAudio(assistantMessage, ttsMode, lastUserMessageWasAudio)) {
         // Try to send as audio via ElevenLabs TTS
         try {
           console.log("[TTS] Converting response to audio via ElevenLabs...");
-          const audioBase64 = await textToSpeech(assistantMessage);
+          const audioBase64 = await textToSpeech(assistantMessage, ttsVoiceId);
           
           sentMessageId = await sendWhatsAppAudio(
             settings.api_url,
@@ -2236,37 +2240,41 @@ async function sendMultipleWhatsAppMessages(
   return lastMessageId;
 }
 
-// Determine if a message should be sent as audio (conversational) or text (complex/formatted)
-function shouldSendAsAudio(message: string): boolean {
-  if (!message || message.length < 5) return false;
-  if (message.length > 1500) return false; // Too long for audio
+// Determine if a message should be sent as audio based on tts_mode and message content
+function shouldSendAsAudio(message: string, ttsMode: string, lastUserMessageWasAudio: boolean): boolean {
+  // Check mode first
+  if (ttsMode === 'disabled') return false;
+  if (ttsMode === 'auto' && !lastUserMessageWasAudio) return false;
   
-  // Count formatting indicators that don't work well in audio
+  // Content checks (both 'always' and 'auto' when audio was sent)
+  if (!message || message.length < 5) return false;
+  if (message.length > 1500) return false;
+  
   const formatIndicators = [
-    (message.match(/\n/g) || []).length > 8,           // Many line breaks (lists/tables)
-    (message.match(/[📋🛒💰🏍️🏠📍💳🧾✅❌📦]/g) || []).length > 3, // Many structural emojis
-    message.includes("────"),                            // Horizontal lines (menu)
-    message.includes("*RESUMO*") || message.includes("*PEDIDO*"), // Order summary
-    message.includes("*CARDÁPIO*") || message.includes("*MENU*"), // Menu header
-    (message.match(/R\$ ?\d/g) || []).length > 2,       // Multiple prices (menu/summary)
-    (message.match(/^\s*[-•●]\s/gm) || []).length > 3,  // Bullet lists
+    (message.match(/\n/g) || []).length > 8,
+    (message.match(/[📋🛒💰🏍️🏠📍💳🧾✅❌📦]/g) || []).length > 3,
+    message.includes("────"),
+    message.includes("*RESUMO*") || message.includes("*PEDIDO*"),
+    message.includes("*CARDÁPIO*") || message.includes("*MENU*"),
+    (message.match(/R\$ ?\d/g) || []).length > 2,
+    (message.match(/^\s*[-•●]\s/gm) || []).length > 3,
   ];
   
   const complexityScore = formatIndicators.filter(Boolean).length;
-  return complexityScore < 2; // Send as audio if less than 2 complexity indicators
+  return complexityScore < 2;
 }
 
 // Convert text to speech using ElevenLabs API
-async function textToSpeech(text: string): Promise<string> {
+async function textToSpeech(text: string, voiceId?: string): Promise<string> {
   const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
   if (!ELEVENLABS_API_KEY) {
     throw new Error("ELEVENLABS_API_KEY is not configured");
   }
   
-  const voiceId = "FGY2WhTYpPnrIDTdsKH5"; // Laura - Portuguese Brazilian
+  const selectedVoiceId = voiceId || "FGY2WhTYpPnrIDTdsKH5"; // Laura default
   
   const response = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_22050_32`,
+    `https://api.elevenlabs.io/v1/text-to-speech/${selectedVoiceId}?output_format=mp3_22050_32`,
     {
       method: "POST",
       headers: {

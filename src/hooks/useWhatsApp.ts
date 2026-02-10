@@ -14,6 +14,8 @@ export interface WhatsAppSettings {
   welcome_message: string | null;
   system_prompt: string | null;
   settings_password: string | null;
+  tts_mode: string | null;
+  tts_voice_id: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -10,6 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   MessageSquare,
   Settings,
   Bot,
@@ -34,7 +41,7 @@ import {
   Shield,
   Eye,
   EyeOff,
-  
+  Volume2,
 } from "lucide-react";
 import { useUnit } from "@/contexts/UnitContext";
 import {
@@ -74,6 +81,10 @@ export default function WhatsAppSettings() {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [copied, setCopied] = useState(false);
 
+  // TTS state
+  const [ttsMode, setTtsMode] = useState("auto");
+  const [ttsVoiceId, setTtsVoiceId] = useState("FGY2WhTYpPnrIDTdsKH5");
+
   // Password protection state
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
@@ -98,6 +109,8 @@ export default function WhatsAppSettings() {
       setBotEnabled(settings.bot_enabled || false);
       setWelcomeMessage(settings.welcome_message || "");
       setSystemPrompt(settings.system_prompt || "");
+      setTtsMode(settings.tts_mode || "auto");
+      setTtsVoiceId(settings.tts_voice_id || "FGY2WhTYpPnrIDTdsKH5");
       setEnablePasswordProtection(!!settings.settings_password);
     }
   }, [settings]);
@@ -194,6 +207,8 @@ export default function WhatsAppSettings() {
       bot_enabled: botEnabled,
       welcome_message: welcomeMessage,
       system_prompt: systemPrompt,
+      tts_mode: ttsMode,
+      tts_voice_id: ttsVoiceId,
     };
 
     if (settings?.id) {
@@ -609,6 +624,62 @@ export default function WhatsAppSettings() {
                     onPromptChange={setSystemPrompt}
                   />
                 )}
+
+                <Separator />
+
+                {/* Audio Response Settings */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-500/10 rounded-lg">
+                      <Volume2 className="h-5 w-5 text-purple-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-medium">Respostas em Áudio</h3>
+                      <p className="text-sm text-muted-foreground">Configure quando e como o bot responde com áudio</p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Modo de Áudio</Label>
+                      <Select value={ttsMode} onValueChange={setTtsMode}>
+                        <SelectTrigger className="h-11">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="auto">🎙️ Auto — só quando cliente envia áudio</SelectItem>
+                          <SelectItem value="always">🔊 Sempre — respostas simples em áudio</SelectItem>
+                          <SelectItem value="disabled">📝 Desativado — sempre texto</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {ttsMode === "auto" && "O bot responde em áudio apenas quando o cliente enviar uma mensagem de voz"}
+                        {ttsMode === "always" && "O bot sempre responde com áudio (exceto cardápios e resumos)"}
+                        {ttsMode === "disabled" && "O bot nunca responde com áudio, apenas texto"}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Voz do Bot</Label>
+                      <Select value={ttsVoiceId} onValueChange={setTtsVoiceId}>
+                        <SelectTrigger className="h-11">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="FGY2WhTYpPnrIDTdsKH5">👩 Laura — feminina, PT-BR (padrão)</SelectItem>
+                          <SelectItem value="EXAVITQu4vr4xnSDxMaL">👩 Sarah — feminina, versátil</SelectItem>
+                          <SelectItem value="Xb7hH8MSUJpSbSDYk0k2">👩 Alice — feminina, confiante</SelectItem>
+                          <SelectItem value="TX3LPaxmHKxFdv7VOQHJ">👨 Liam — masculina, articulada</SelectItem>
+                          <SelectItem value="onwK4e9ZLuTAKqWW03F9">👨 Daniel — masculina, profunda</SelectItem>
+                          <SelectItem value="IKne3meq5aSn9XLyUdCD">👨 Charlie — masculina, casual</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Voz usada para converter as respostas em áudio via ElevenLabs
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
                 <Button
                   onClick={handleSaveBotSettings}
