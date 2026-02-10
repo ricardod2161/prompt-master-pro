@@ -546,6 +546,7 @@ function normalizeProductName(nome: string): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '') // remove accents
     .replace(/\b(de|do|da|dos|das|com|e|o|a|os|as|um|uma|uns|umas)\b/g, '') // remove prepositions/articles
+    .replace(/s\b/g, '') // remove trailing 's' (plural) from words
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -604,42 +605,8 @@ function findBestProductMatch(
 }
 
 async function buscarProduto(supabase: any, unitId: string, nome: string): Promise<string> {
-  // First try direct ilike search
-  const { data: directProducts, error } = await supabase
-    .from("products")
-    .select(`
-      name,
-      description,
-      price,
-      delivery_price,
-      category:categories(name)
-    `)
-    .eq("unit_id", unitId)
-    .eq("available", true)
-    .ilike("name", `%${nome}%`);
-
-  if (error) {
-    console.error("Error searching product:", error);
-    return "Erro ao buscar o produto. Por favor, tente novamente.";
-  }
-
-  // If direct search found results, return them
-  if (directProducts && directProducts.length > 0) {
-    let result = `Encontrei ${directProducts.length} produto(s):\n\n`;
-    for (const product of directProducts as Product[]) {
-      const price = product.delivery_price || product.price;
-      result += `🍽️ *${product.name}*\n`;
-      result += `💰 R$ ${price.toFixed(2).replace(".", ",")}\n`;
-      if (product.description) {
-        result += `📝 ${product.description}\n`;
-      }
-      result += "\n";
-    }
-    return result;
-  }
-
-  // Fallback: Get all products and use flexible matching
-  const { data: allProducts } = await supabase
+  // Get all available products for flexible matching
+  const { data: allProducts, error } = await supabase
     .from("products")
     .select(`
       name,
@@ -651,10 +618,36 @@ async function buscarProduto(supabase: any, unitId: string, nome: string): Promi
     .eq("unit_id", unitId)
     .eq("available", true);
 
+  if (error) {
+    console.error("Error searching product:", error);
+    return "Erro ao buscar o produto. Por favor, tente novamente.";
+  }
+
   if (!allProducts || allProducts.length === 0) {
     return `Não encontrei nenhum produto com "${nome}" no nosso cardápio.`;
   }
 
+  // Try direct ilike match first
+  const directMatches = (allProducts as Product[]).filter(p =>
+    p.name.toLowerCase().includes(nome.toLowerCase()) ||
+    nome.toLowerCase().includes(p.name.toLowerCase())
+  );
+
+  if (directMatches.length > 0) {
+    let result = `Encontrei ${directMatches.length} produto(s):\n\n`;
+    for (const product of directMatches) {
+      const price = product.delivery_price || product.price;
+      result += `🍽️ *${product.name}*\n`;
+      result += `💰 R$ ${price.toFixed(2).replace(".", ",")}\n`;
+      if (product.description) {
+        result += `📝 ${product.description}\n`;
+      }
+      result += "\n";
+    }
+    return result;
+  }
+
+  // Fallback: flexible normalized matching
   const bestMatch = findBestProductMatch(allProducts as Product[], nome);
   
   if (bestMatch) {
@@ -680,25 +673,37 @@ async function calcularTotal(
     return "Nenhum item informado para calcular.";
   }
 
+  // Get all available products once for flexible matching
+  const { data: allProducts } = await supabase
+    .from("products")
+    .select("id, name, price, delivery_price")
+    .eq("unit_id", unitId)
+    .eq("available", true);
+
   let total = 0;
   const detalhes: string[] = [];
   const itensNaoEncontrados: string[] = [];
 
   for (const item of itens) {
-    const { data: products } = await supabase
-      .from("products")
-      .select("name, price, delivery_price")
-      .eq("unit_id", unitId)
-      .eq("available", true)
-      .ilike("name", `%${item.nome}%`)
-      .limit(1);
+    // Try direct match first, then fuzzy
+    let product = allProducts?.find((p: any) =>
+      p.name.toLowerCase().includes(item.nome.toLowerCase()) ||
+      item.nome.toLowerCase().includes(p.name.toLowerCase())
+    );
 
-    if (products && products.length > 0) {
-      const product = products[0] as { name: string; price: number; delivery_price: number | null };
-      const preco = product.delivery_price || product.price;
+    if (!product && allProducts) {
+      product = findBestProductMatch(
+        allProducts as Array<{ id: string; name: string; price: number; delivery_price: number | null }>,
+        item.nome
+      );
+    }
+
+    if (product) {
+      const typedProduct = product as { name: string; price: number; delivery_price: number | null };
+      const preco = typedProduct.delivery_price || typedProduct.price;
       const subtotal = preco * item.quantidade;
       total += subtotal;
-      detalhes.push(`• ${item.quantidade}x ${product.name} - R$ ${subtotal.toFixed(2).replace(".", ",")}`);
+      detalhes.push(`• ${item.quantidade}x ${typedProduct.name} - R$ ${subtotal.toFixed(2).replace(".", ",")}`);
     } else {
       itensNaoEncontrados.push(item.nome);
     }
