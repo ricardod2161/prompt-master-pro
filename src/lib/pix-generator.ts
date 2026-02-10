@@ -20,9 +20,9 @@ function crc16(str: string): string {
     crc ^= str.charCodeAt(i) << 8;
     for (let j = 0; j < 8; j++) {
       if (crc & 0x8000) {
-        crc = (crc << 1) ^ 0x1021;
+        crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
       } else {
-        crc = crc << 1;
+        crc = (crc << 1) & 0xFFFF;
       }
     }
   }
@@ -38,12 +38,18 @@ function formatField(id: string, value: string): string {
 
 // Remove acentos e caracteres especiais
 function normalizeString(str: string): string {
-  return str
+  const cleaned = str
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9 ]/g, '')
-    .substring(0, 25)
-    .toUpperCase();
+    .toUpperCase()
+    .trim();
+
+  if (cleaned.length <= 25) return cleaned;
+
+  const truncated = cleaned.substring(0, 25);
+  const lastSpace = truncated.lastIndexOf(' ');
+  return lastSpace > 10 ? truncated.substring(0, lastSpace) : truncated;
 }
 
 // Detecta o tipo de chave Pix
@@ -127,6 +133,9 @@ export function generatePixCode({
   
   // Payload Format Indicator (ID: 00) - obrigatório
   payload += formatField('00', '01');
+  
+  // Point of Initiation Method (ID: 01) - recomendado
+  payload += formatField('01', amount && amount > 0 ? '12' : '11');
   
   // Merchant Account Information (ID: 26)
   payload += formatField('26', merchantAccount);
