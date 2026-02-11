@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, CheckCircle2, Sparkles, Store } from "lucide-react";
+import { ArrowRight, CheckCircle2, Share2, Sparkles, Store } from "lucide-react";
 
 const GUARANTEES = [
   "Sem cartão de crédito",
@@ -59,6 +59,21 @@ export function CTASection() {
                 Ver nossa Loja
               </Button>
             </a>
+            <Button
+              size="lg"
+              variant="outline"
+              className="h-14 px-10 text-lg group"
+              onClick={() => {
+                window.open(
+                  `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent("https://restauranteos.lovable.app")}`,
+                  "facebook-share",
+                  "width=580,height=400"
+                );
+              }}
+            >
+              <Share2 className="mr-2 h-5 w-5" />
+              Compartilhar no Facebook
+            </Button>
           </div>
 
           {/* Guarantees */}
