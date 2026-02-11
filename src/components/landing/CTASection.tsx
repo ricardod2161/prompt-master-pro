@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, CheckCircle2, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, Sparkles, Store } from "lucide-react";
 
 const GUARANTEES = [
   "Sem cartão de crédito",
@@ -45,13 +45,21 @@ export function CTASection() {
             com o RestaurantOS. Comece gratuitamente hoje mesmo.
           </p>
 
-          {/* CTA Button */}
-          <Link to="/login">
-            <Button size="lg" className="h-14 px-10 text-lg group mb-8">
-              Começar Gratuitamente
-              <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
-            </Button>
-          </Link>
+          {/* CTA Buttons */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+            <Link to="/login">
+              <Button size="lg" className="h-14 px-10 text-lg group">
+                Começar Gratuitamente
+                <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
+              </Button>
+            </Link>
+            <a href="https://restauranteos-11roq.myshopify.com" target="_blank" rel="noopener noreferrer">
+              <Button size="lg" variant="outline" className="h-14 px-10 text-lg group">
+                <Store className="mr-2 h-5 w-5" />
+                Ver nossa Loja
+              </Button>
+            </a>
+          </div>
 
           {/* Guarantees */}
           <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
