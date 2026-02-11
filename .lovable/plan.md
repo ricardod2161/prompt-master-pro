@@ -1,30 +1,46 @@
 
 
-# Adicionar Imagens e Ativar Loja Shopify
+# Implementar Meta Pixel, Botao de Compartilhar e Otimizar Open Graph
 
-## 1. Adicionar Imagens aos Produtos
+## O que sera feito
 
-Vamos usar o logo do RestaurantOS (`public/logo.png`) como imagem para os 3 produtos digitais na Shopify. Isso dara uma aparencia mais profissional a loja.
+### 1. Otimizar Meta Tags Open Graph para Facebook
+As meta tags atuais estao incompletas -- faltam `og:image` e `twitter:image`, e a URL esta desatualizada. Vamos corrigir:
+- Adicionar `og:image` e `twitter:image` apontando para o logo
+- Corrigir `og:url` para a URL publicada correta (`restauranteos.lovable.app`)
+- Adicionar `og:site_name`
 
-- **RestaurantOS Starter** (ID: 8180183105590) -- adicionar logo.png
-- **RestaurantOS Pro** (ID: 8180183302198) -- adicionar logo.png
-- **RestaurantOS Enterprise** (ID: 8180183892022) -- adicionar logo.png
+### 2. Instalar Meta Pixel (Facebook Pixel)
+O Meta Pixel e um codigo de rastreamento que permite medir conversoes dos anuncios do Facebook.
+- Adicionar o script do Meta Pixel no `index.html`
+- **Voce precisara fornecer o ID do seu Pixel** (encontrado no Meta Business Suite > Gerenciador de Eventos)
+- Se ainda nao tiver o ID, instalaremos com um placeholder que voce substitui depois
 
-## 2. Ativar a Loja (Claim Store)
+### 3. Adicionar Botao "Compartilhar no Facebook" na Landing Page
+- Adicionar um botao de compartilhar na secao CTA da landing page
+- Ao clicar, abre a janela de compartilhamento do Facebook com o link do RestaurantOS
 
-Apos adicionar as imagens, vamos ativar a loja Shopify usando o "Claim Store". Isso inicia o periodo de **30 dias gratis** do Shopify.
+## Resumo dos Arquivos Alterados
 
-**Importante**: Apos os 30 dias, sera necessario um plano pago do Shopify para continuar vendendo.
-
-## Resumo das Acoes
-
-1. Atualizar os 3 produtos com a imagem do logo
-2. Executar o Claim da loja para iniciar o trial de 30 dias
+| Arquivo | Alteracao |
+|---------|-----------|
+| `index.html` | Corrigir Open Graph, adicionar og:image, instalar Meta Pixel |
+| `src/components/landing/CTASection.tsx` | Adicionar botao "Compartilhar no Facebook" |
 
 ---
 
 ### Detalhes Tecnicos
 
-- Usar `shopify--update_shopify_product` para cada produto com `images: [{ file_path: "public/logo.png", alt: "RestaurantOS" }]`
-- Usar `shopify--claim_shopify_store` para ativar a loja
+**Open Graph (`index.html`)**:
+- Corrigir `og:url` de `polished-prompt-guru.lovable.app` para `restauranteos.lovable.app`
+- Adicionar `<meta property="og:image">` e `<meta name="twitter:image">` com URL absoluta do logo
+- Adicionar `<meta property="og:site_name" content="RestaurantOS">`
+
+**Meta Pixel (`index.html`)**:
+- Inserir script padrao do Facebook Pixel no `<head>` com `fbq('init', 'SEU_PIXEL_ID')` e `fbq('track', 'PageView')`
+- O ID do Pixel sera solicitado via secret ou placeholder
+
+**Botao Compartilhar (`CTASection.tsx`)**:
+- Adicionar botao com icone do Facebook usando `lucide-react`
+- Usar `window.open()` com URL `https://www.facebook.com/sharer/sharer.php?u=URL`
 
