@@ -6,7 +6,7 @@ const FOOTER_LINKS = {
   produto: [
     { label: "Recursos", href: "#features" },
     { label: "Preços", href: "#pricing" },
-    { label: "Integrações", href: "#" },
+    { label: "Nossa Loja", href: "https://restauranteos-11roq.myshopify.com", external: true },
     { label: "Roadmap", href: "#" },
   ],
   empresa: [
@@ -85,12 +85,23 @@ export function LandingFooter() {
             <ul className="space-y-2">
               {FOOTER_LINKS.produto.map((link) => (
                 <li key={link.label}>
-                  <button
-                    onClick={() => scrollToSection(link.href)}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {link.label}
-                  </button>
+                  {(link as any).external ? (
+                    <a
+                      href={link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {link.label}
+                    </a>
+                  ) : (
+                    <button
+                      onClick={() => scrollToSection(link.href)}
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {link.label}
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
