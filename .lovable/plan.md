@@ -1,45 +1,30 @@
 
 
-# Vender RestaurantOS como Produto Digital (Site + Shopify)
+# Adicionar Imagens e Ativar Loja Shopify
 
-## Visao Geral
+## 1. Adicionar Imagens aos Produtos
 
-O sistema sera vendido em dois canais simultaneamente:
-1. **Landing Page atual** -- ja funciona com Stripe (assinaturas Starter/Pro/Enterprise)
-2. **Loja Shopify** -- novo canal marketplace para vender o acesso ao sistema como produto digital
+Vamos usar o logo do RestaurantOS (`public/logo.png`) como imagem para os 3 produtos digitais na Shopify. Isso dara uma aparencia mais profissional a loja.
 
-## Custos Importantes do Shopify
+- **RestaurantOS Starter** (ID: 8180183105590) -- adicionar logo.png
+- **RestaurantOS Pro** (ID: 8180183302198) -- adicionar logo.png
+- **RestaurantOS Enterprise** (ID: 8180183892022) -- adicionar logo.png
 
-- A Lovable cria uma loja de desenvolvimento (sandbox) **sem custo** para voce desenvolver
-- Quando estiver pronto para vender, voce faz o "Claim" da loja e recebe **30 dias gratis** de Shopify
-- Apos os 30 dias, sera necessario um plano pago do Shopify para continuar vendendo
-- Para detalhes de precos dos planos Shopify, consulte a pagina oficial de precos do Shopify
+## 2. Ativar a Loja (Claim Store)
 
-## O que sera feito
+Apos adicionar as imagens, vamos ativar a loja Shopify usando o "Claim Store". Isso inicia o periodo de **30 dias gratis** do Shopify.
 
-### 1. Ativar Shopify na Lovable
-- Conectar ou criar uma loja Shopify
-- Configurar os produtos digitais (planos Starter, Pro, Enterprise)
+**Importante**: Apos os 30 dias, sera necessario um plano pago do Shopify para continuar vendendo.
 
-### 2. Criar os Produtos Digitais no Shopify
-- **Starter** -- R$ 100/mes -- PDV, Cardapio Digital, KDS basico, 1 unidade
-- **Pro** -- R$ 150/mes -- Delivery, WhatsApp, Relatorios, ate 3 unidades
-- **Enterprise** -- R$ 200/mes -- Ilimitado, API, Suporte 24/7
+## Resumo das Acoes
 
-### 3. Manter Landing Page com Stripe
-- O site atual continua funcionando normalmente com checkout Stripe
-- Nenhuma alteracao no fluxo existente
+1. Atualizar os 3 produtos com a imagem do logo
+2. Executar o Claim da loja para iniciar o trial de 30 dias
 
-### 4. Adicionar Link da Loja Shopify no Site
-- Adicionar botao "Ver nossa Loja" na landing page e no footer
-- Link direto para a loja Shopify onde clientes podem comprar
+---
 
-## Resultado Final
+### Detalhes Tecnicos
 
-```text
-Cliente chega pelo site  --> Compra via Stripe (fluxo atual)
-Cliente chega pelo Shopify --> Compra via Shopify (novo canal)
-```
-
-Ambos os canais vendem o mesmo produto digital: acesso ao RestaurantOS.
+- Usar `shopify--update_shopify_product` para cada produto com `images: [{ file_path: "public/logo.png", alt: "RestaurantOS" }]`
+- Usar `shopify--claim_shopify_store` para ativar a loja
 
