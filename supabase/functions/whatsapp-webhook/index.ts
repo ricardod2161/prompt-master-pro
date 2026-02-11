@@ -510,8 +510,7 @@ async function listarCardapio(supabase: any, unitId: string): Promise<{ type: 'm
     firstMsg += `${firstEmoji} *${firstCategory.toUpperCase()}*\n${LINE}\n\n`;
     
     for (const item of firstItems) {
-      const price = item.delivery_price || item.price;
-      firstMsg += `🔶 ${item.name} - R$ ${price.toFixed(2).replace(".", ",")}\n`;
+      firstMsg += `🔶 ${item.name} - R$ ${item.price.toFixed(2).replace(".", ",")}\n`;
     }
     
     messages.push(firstMsg.trim());
@@ -526,8 +525,7 @@ async function listarCardapio(supabase: any, unitId: string): Promise<{ type: 'm
     let categoryMsg = `${LINE}\n${emoji} *${category.toUpperCase()}*\n${LINE}\n\n`;
     
     for (const item of items) {
-      const price = item.delivery_price || item.price;
-      categoryMsg += `🔶 ${item.name} - R$ ${price.toFixed(2).replace(".", ",")}\n`;
+      categoryMsg += `🔶 ${item.name} - R$ ${item.price.toFixed(2).replace(".", ",")}\n`;
     }
     
     messages.push(categoryMsg.trim());
@@ -636,7 +634,7 @@ async function buscarProduto(supabase: any, unitId: string, nome: string): Promi
   if (directMatches.length > 0) {
     let result = `Encontrei ${directMatches.length} produto(s):\n\n`;
     for (const product of directMatches) {
-      const price = product.delivery_price || product.price;
+      const price = product.price;
       result += `🍽️ *${product.name}*\n`;
       result += `💰 R$ ${price.toFixed(2).replace(".", ",")}\n`;
       if (product.description) {
@@ -651,7 +649,7 @@ async function buscarProduto(supabase: any, unitId: string, nome: string): Promi
   const bestMatch = findBestProductMatch(allProducts as Product[], nome);
   
   if (bestMatch) {
-    const price = bestMatch.delivery_price || bestMatch.price;
+    const price = bestMatch.price;
     let result = `Encontrei um produto similar:\n\n`;
     result += `🍽️ *${bestMatch.name}*\n`;
     result += `💰 R$ ${price.toFixed(2).replace(".", ",")}\n`;
@@ -700,7 +698,7 @@ async function calcularTotal(
 
     if (product) {
       const typedProduct = product as { name: string; price: number; delivery_price: number | null };
-      const preco = typedProduct.delivery_price || typedProduct.price;
+      const preco = typedProduct.price;
       const subtotal = preco * item.quantidade;
       total += subtotal;
       detalhes.push(`• ${item.quantidade}x ${typedProduct.name} - R$ ${subtotal.toFixed(2).replace(".", ",")}`);
@@ -811,7 +809,7 @@ async function confirmarPedido(
 
     if (product) {
       const typedProduct = product as { id: string; name: string; price: number; delivery_price: number | null };
-      const preco = modalidade === "entrega" ? (typedProduct.delivery_price || typedProduct.price) : typedProduct.price;
+      const preco = typedProduct.price;
       const subtotal = preco * item.quantidade;
       totalPrice += subtotal;
       orderItems.push({
@@ -902,6 +900,93 @@ async function confirmarPedido(
     amount: totalPrice
   });
 
+  // Generate Pix code if payment method is pix
+  let pixPaymentCode: string | null = null;
+  if (pagamento.forma === "pix") {
+    try {
+      const { data: unitSettings } = await supabase
+        .from("unit_settings")
+        .select("pix_key, pix_merchant_name, pix_merchant_city")
+        .eq("unit_id", unitId)
+        .maybeSingle();
+
+      const { data: unitInfo } = await supabase
+        .from("units")
+        .select("name")
+        .eq("id", unitId)
+        .maybeSingle();
+
+      if (unitSettings?.pix_key) {
+        // Inline Pix generation (same logic as send-order-notification)
+        const formatFieldLocal = (id: string, value: string): string => {
+          const length = value.length.toString().padStart(2, '0');
+          return `${id}${length}${value}`;
+        };
+        const normalizeStr = (str: string): string => {
+          const cleaned = str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9 ]/g, '').toUpperCase().trim();
+          if (cleaned.length <= 25) return cleaned;
+          const truncated = cleaned.substring(0, 25);
+          const lastSpace = truncated.lastIndexOf(' ');
+          return lastSpace > 10 ? truncated.substring(0, lastSpace) : truncated;
+        };
+        const crc16Local = (str: string): string => {
+          let crc = 0xFFFF;
+          for (let i = 0; i < str.length; i++) {
+            crc ^= str.charCodeAt(i) << 8;
+            for (let j = 0; j < 8; j++) {
+              if (crc & 0x8000) { crc = ((crc << 1) ^ 0x1021) & 0xFFFF; }
+              else { crc = (crc << 1) & 0xFFFF; }
+            }
+          }
+          return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
+        };
+
+        const cleanKey = unitSettings.pix_key.replace(/\D/g, '');
+        let formattedKey = unitSettings.pix_key;
+        if (/^\d{11}$/.test(cleanKey)) formattedKey = cleanKey; // CPF
+        else if (/^\d{14}$/.test(cleanKey)) formattedKey = cleanKey; // CNPJ
+        else if (/^\+?55\d{10,11}$/.test(unitSettings.pix_key.replace(/[\s\-()]/g, ''))) {
+          const cp = unitSettings.pix_key.replace(/\D/g, '');
+          formattedKey = cp.startsWith('55') ? `+${cp}` : `+55${cp}`;
+        } else if (/@/.test(unitSettings.pix_key)) formattedKey = unitSettings.pix_key.toLowerCase();
+
+        let ma = formatFieldLocal('00', 'br.gov.bcb.pix') + formatFieldLocal('01', formattedKey);
+        let payload = formatFieldLocal('00', '01') + formatFieldLocal('01', '12') + formatFieldLocal('26', ma) + formatFieldLocal('52', '0000') + formatFieldLocal('53', '986') + formatFieldLocal('54', totalPrice.toFixed(2)) + formatFieldLocal('58', 'BR') + formatFieldLocal('59', normalizeStr(unitSettings.pix_merchant_name || unitInfo?.name || 'RESTAURANTE')) + formatFieldLocal('60', normalizeStr(unitSettings.pix_merchant_city || 'BRASIL'));
+        const txId = `PED${order.order_number}`;
+        payload += formatFieldLocal('62', formatFieldLocal('05', txId.substring(0, 25).toUpperCase()));
+        payload += '6304';
+        payload += crc16Local(payload);
+        pixPaymentCode = payload;
+      }
+    } catch (e) {
+      console.error("Error generating Pix code in confirmarPedido:", e);
+    }
+  }
+
+  // Generate Stripe payment link
+  let stripePaymentUrl: string | null = null;
+  try {
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (stripeKey) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+      const response = await fetch(`${supabaseUrl}/functions/v1/create-order-payment`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_ANON_KEY") || ""}`,
+        },
+        body: JSON.stringify({ orderId: order.id, unitId }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        stripePaymentUrl = data.url;
+        console.log(`[ORDER] Stripe payment link generated: ${stripePaymentUrl}`);
+      }
+    }
+  } catch (e) {
+    console.error("Error generating Stripe payment link:", e);
+  }
+
   // Build confirmation message
   const formasPagamentoLabel: Record<string, string> = {
     "dinheiro": "💵 Dinheiro",
@@ -949,6 +1034,24 @@ async function confirmarPedido(
   }
   
   resultado += `\n⏱️ *Tempo estimado:* ${modalidade === "entrega" ? "30-45 minutos" : "15-25 minutos"}\n`;
+
+  // Add Pix code if payment is pix
+  if (pixPaymentCode && pagamento.forma === "pix") {
+    resultado += `\n━━━━━━━━━━━━━━━━\n`;
+    resultado += `📱 *Pague via Pix:*\n`;
+    resultado += `Copie o código abaixo e cole no seu app de banco:\n\n`;
+    resultado += `\`\`\`${pixPaymentCode}\`\`\`\n`;
+  }
+
+  // Add Stripe payment link
+  if (stripePaymentUrl) {
+    resultado += `\n💳 *Pagar online (cartão):*\n${stripePaymentUrl}\n`;
+  }
+
+  // Add tracking link
+  const trackingUrl = `https://restauranteos.lovable.app/track/${order.id}`;
+  resultado += `\n📍 *Acompanhe seu pedido:*\n${trackingUrl}\n`;
+
   resultado += `\n🙏 *Agradecemos a preferência!*`;
   
   // Add warning about items not found if any

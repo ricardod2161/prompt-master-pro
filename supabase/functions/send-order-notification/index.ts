@@ -587,7 +587,30 @@ serve(async (req) => {
         break;
 
       case "confirmed":
-        // Order confirmation message with Pix payment option
+        // Generate Stripe payment link
+        let stripeUrl: string | null = null;
+        try {
+          const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+          if (stripeKey) {
+            const paymentResponse = await fetch(`${supabaseUrl}/functions/v1/create-order-payment`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${supabaseAnon}`,
+              },
+              body: JSON.stringify({ orderId: order.id, unitId }),
+            });
+            if (paymentResponse.ok) {
+              const paymentData = await paymentResponse.json();
+              stripeUrl = paymentData.url;
+              console.log("Stripe payment link generated:", stripeUrl);
+            }
+          }
+        } catch (e) {
+          console.error("Error generating Stripe link:", e);
+        }
+
+        // Order confirmation message with Pix + Stripe payment options
         if (order.channel === "table" && tableNumber) {
           message = `✅ *Pedido Confirmado!*\n\n` +
             `Olá ${customerName}! Seu pedido *#${order.order_number}* na *Mesa ${tableNumber}* foi recebido!\n\n` +
@@ -598,21 +621,50 @@ serve(async (req) => {
               `Copie o código abaixo e cole no seu app de banco:\n\n` +
               `\`\`\`${pixCode}\`\`\`\n`;
           }
+
+          if (stripeUrl) {
+            message += `\n💳 *Pagar online (cartão):*\n${stripeUrl}\n`;
+          }
           
+          message += `\n📍 *Acompanhe:* ${trackingUrl}\n`;
           message += `\n⏱️ Tempo estimado: 15-20 min\n\n` +
             `Agradecemos a preferência! 💚`;
         } else if (order.channel === "delivery") {
           message = `✅ *Pedido Confirmado!*\n\n` +
             `Olá ${customerName}! Seu pedido *#${order.order_number}* foi recebido!\n\n` +
             `💰 *Valor Total: ${formattedTotal}*\n` +
-            `📍 *Endereço:* ${deliveryAddress || "Conforme informado"}\n\n` +
-            `⏱️ Tempo estimado: 30-45 min\n\n` +
+            `📍 *Endereço:* ${deliveryAddress || "Conforme informado"}\n`;
+          
+          if (pixCode) {
+            message += `\n📱 *Pague via Pix:*\n` +
+              `Copie o código abaixo e cole no seu app de banco:\n\n` +
+              `\`\`\`${pixCode}\`\`\`\n`;
+          }
+
+          if (stripeUrl) {
+            message += `\n💳 *Pagar online (cartão):*\n${stripeUrl}\n`;
+          }
+
+          message += `\n📍 *Acompanhe:* ${trackingUrl}\n`;
+          message += `\n⏱️ Tempo estimado: 30-45 min\n\n` +
             `Agradecemos a preferência! 💚`;
         } else {
           message = `✅ *Pedido Confirmado!*\n\n` +
             `Olá ${customerName}! Seu pedido *#${order.order_number}* foi recebido!\n\n` +
-            `💰 *Valor Total: ${formattedTotal}*\n\n` +
-            `⏱️ Tempo estimado: 15-20 min\n\n` +
+            `💰 *Valor Total: ${formattedTotal}*\n`;
+          
+          if (pixCode) {
+            message += `\n📱 *Pague via Pix:*\n` +
+              `Copie o código abaixo e cole no seu app de banco:\n\n` +
+              `\`\`\`${pixCode}\`\`\`\n`;
+          }
+
+          if (stripeUrl) {
+            message += `\n💳 *Pagar online (cartão):*\n${stripeUrl}\n`;
+          }
+
+          message += `\n📍 *Acompanhe:* ${trackingUrl}\n`;
+          message += `\n⏱️ Tempo estimado: 15-20 min\n\n` +
             `Agradecemos a preferência! 💚`;
         }
         break;
