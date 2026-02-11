@@ -1,46 +1,55 @@
 
-
-# Implementar Meta Pixel, Botao de Compartilhar e Otimizar Open Graph
+# Criar Marmitas Completas e Melhorar o Cardapio
 
 ## O que sera feito
 
-### 1. Otimizar Meta Tags Open Graph para Facebook
-As meta tags atuais estao incompletas -- faltam `og:image` e `twitter:image`, e a URL esta desatualizada. Vamos corrigir:
-- Adicionar `og:image` e `twitter:image` apontando para o logo
-- Corrigir `og:url` para a URL publicada correta (`restauranteos.lovable.app`)
-- Adicionar `og:site_name`
+### 1. Criar Categoria "Marmitas" no banco de dados
+- Nova categoria dedicada para marmitas completas
 
-### 2. Instalar Meta Pixel (Facebook Pixel)
-O Meta Pixel e um codigo de rastreamento que permite medir conversoes dos anuncios do Facebook.
-- Adicionar o script do Meta Pixel no `index.html`
-- **Voce precisara fornecer o ID do seu Pixel** (encontrado no Meta Business Suite > Gerenciador de Eventos)
-- Se ainda nao tiver o ID, instalaremos com um placeholder que voce substitui depois
+### 2. Criar Produtos de Marmita (uma por proteina)
+Cada marmita inclui todos os acompanhamentos fixos, o cliente so escolhe a carne:
 
-### 3. Adicionar Botao "Compartilhar no Facebook" na Landing Page
-- Adicionar um botao de compartilhar na secao CTA da landing page
-- Ao clicar, abre a janela de compartilhamento do Facebook com o link do RestaurantOS
+| Produto | Descricao (acompanhamentos inclusos) | Preco Sugerido |
+|---------|---------------------------------------|----------------|
+| Marmita de Frango Cozido | Feijao carioca, feijao mexido, arroz de leite, arroz refogado, arroz solto, baiao, macarrao, farofa de farinha, maionese, vinagrete, batata doce, salada verde, fruta | R$ 20,00 |
+| Marmita de Boi Assado | Mesmos acompanhamentos | R$ 25,00 |
+| Marmita de Porco Assado | Mesmos acompanhamentos | R$ 22,00 |
+| Marmita de Frango Assado | Mesmos acompanhamentos | R$ 22,00 |
+| Marmita de Linguica Assada | Mesmos acompanhamentos | R$ 20,00 |
+| Marmita Mista (2 carnes) | Mesmos acompanhamentos - escolha 2 proteinas | R$ 28,00 |
+
+### 3. Reorganizar categorias dos produtos existentes
+- Mover "Prato Feito" para a categoria "Refeicao"
+- Vincular sobremesas (Brownie, Petit Gateau, Pudim, Acai, Doces de Caju) a categoria "Sobremesas"
+
+### 4. Melhorar a pagina de Cardapio (Menu.tsx)
+Tornar a interface mais profissional e responsiva:
+- **Cards visuais** em grid responsivo em vez de tabela simples
+- **Design mobile-first** com cards empilhaveis
+- **Badges de categoria** com cores distintas
+- **Toggle de disponibilidade** mais visivel
+- **Secao de categorias** com contagem de produtos
+- **Precos destacados** com formatacao visual
 
 ## Resumo dos Arquivos Alterados
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `index.html` | Corrigir Open Graph, adicionar og:image, instalar Meta Pixel |
-| `src/components/landing/CTASection.tsx` | Adicionar botao "Compartilhar no Facebook" |
+| Migracao SQL | Criar categoria "Marmitas", inserir 6 produtos de marmita, reorganizar categorias dos produtos existentes |
+| `src/pages/Menu.tsx` | Redesign completo com layout em cards responsivos, visual profissional mobile-first |
 
 ---
 
 ### Detalhes Tecnicos
 
-**Open Graph (`index.html`)**:
-- Corrigir `og:url` de `polished-prompt-guru.lovable.app` para `restauranteos.lovable.app`
-- Adicionar `<meta property="og:image">` e `<meta name="twitter:image">` com URL absoluta do logo
-- Adicionar `<meta property="og:site_name" content="RestaurantOS">`
+**Migracao SQL**:
+- INSERT na tabela `categories` com nome "Marmitas" e sort_order 0 (primeira posicao)
+- INSERT de 6 produtos na tabela `products` vinculados a nova categoria, com descricao detalhada dos acompanhamentos
+- UPDATE dos produtos existentes sem categoria para vincular as categorias corretas (Sobremesas, Refeicao)
 
-**Meta Pixel (`index.html`)**:
-- Inserir script padrao do Facebook Pixel no `<head>` com `fbq('init', 'SEU_PIXEL_ID')` e `fbq('track', 'PageView')`
-- O ID do Pixel sera solicitado via secret ou placeholder
-
-**Botao Compartilhar (`CTASection.tsx`)**:
-- Adicionar botao com icone do Facebook usando `lucide-react`
-- Usar `window.open()` com URL `https://www.facebook.com/sharer/sharer.php?u=URL`
-
+**Menu.tsx - Redesign**:
+- Substituir `Table` por grid de `Card` responsivo (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`)
+- Cada card mostra: nome, descricao, preco, badge da categoria, toggle de disponibilidade e botoes de acao
+- Secao de filtros com chips de categoria clicaveis
+- Empty state melhorado
+- Manter toda a logica CRUD existente (dialogs de produto e categoria)
