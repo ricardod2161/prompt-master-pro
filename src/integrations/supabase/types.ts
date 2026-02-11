@@ -834,6 +834,7 @@ export type Database = {
       }
       tables: {
         Row: {
+          capacity: number | null
           created_at: string
           id: string
           number: number
@@ -843,6 +844,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          capacity?: number | null
           created_at?: string
           id?: string
           number: number
@@ -852,6 +854,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          capacity?: number | null
           created_at?: string
           id?: string
           number?: number

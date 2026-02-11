@@ -62,7 +62,7 @@ export function useCreateTable() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (number: number) => {
+    mutationFn: async ({ number, capacity = 4 }: { number: number; capacity?: number }) => {
       if (!selectedUnit?.id) throw new Error("No unit selected");
 
       const { data, error } = await supabase
@@ -71,7 +71,8 @@ export function useCreateTable() {
           unit_id: selectedUnit.id,
           number,
           status: "free",
-        })
+          capacity,
+        } as any)
         .select()
         .single();
 

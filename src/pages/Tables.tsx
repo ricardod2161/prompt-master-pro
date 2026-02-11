@@ -110,14 +110,16 @@ function TableCard({
   onGenerateQR, 
   onDelete,
   onViewOrder,
+  onRelease,
   isUpdating
 }: { 
-  table: Table;
+  table: Table & { capacity?: number };
   activeOrder?: { id: string; order_number: number; total_price: number; created_at: string; status: string };
   onToggleStatus: () => void;
   onGenerateQR: () => void;
   onDelete: () => void;
   onViewOrder?: () => void;
+  onRelease?: () => void;
   isUpdating?: boolean;
 }) {
   const status = table.status || "free";
@@ -126,6 +128,19 @@ function TableCard({
   const occupiedTime = table.updated_at && status !== "free" 
     ? formatDistanceToNow(new Date(table.updated_at), { locale: ptBR, addSuffix: false })
     : null;
+
+  // Time-based alert: yellow > 1h, red > 2h
+  const occupiedMs = status !== "free" && table.updated_at
+    ? Date.now() - new Date(table.updated_at).getTime()
+    : 0;
+  const isOverdue2h = occupiedMs > 2 * 60 * 60 * 1000;
+  const isOverdue1h = occupiedMs > 1 * 60 * 60 * 1000;
+
+  const timeBorderClass = isOverdue2h
+    ? "!border-red-500 ring-2 ring-red-500/30"
+    : isOverdue1h
+    ? "!border-yellow-500 ring-2 ring-yellow-500/30"
+    : "";
 
   return (
     <Card
@@ -136,7 +151,8 @@ function TableCard({
         config.shadowColor,
         "shadow-md",
         isUpdating && "opacity-50 pointer-events-none",
-        config.pulseClass
+        config.pulseClass,
+        timeBorderClass
       )}
       onClick={onToggleStatus}
     >
@@ -176,6 +192,12 @@ function TableCard({
             >
               {config.label}
             </Badge>
+            {(table as any).capacity && (
+              <Badge variant="secondary" className="text-xs mt-2 ml-1 gap-1">
+                <Users className="h-3 w-3" />
+                {(table as any).capacity}
+              </Badge>
+            )}
           </div>
           {status !== "free" && occupiedTime && (
             <Tooltip>
@@ -226,7 +248,26 @@ function TableCard({
         )}
 
         {/* Action Buttons */}
-        <div className="flex gap-3 opacity-90 group-hover:opacity-100 transition-opacity">
+        <div className="flex gap-3 flex-wrap opacity-90 group-hover:opacity-100 transition-opacity">
+          {status !== "free" && onRelease && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 h-10 sm:h-11 text-sm bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-500/30"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRelease();
+                  }}
+                >
+                  <Check className="h-4 w-4 mr-2" />
+                  <span>Liberar</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Liberar mesa (status → Livre)</TooltipContent>
+            </Tooltip>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -548,14 +589,14 @@ export default function Tables() {
   const existingNumbers = useMemo(() => tables.map(t => t.number), [tables]);
 
   const handleCreateSingle = async (number: number) => {
-    await createTable.mutateAsync(number);
+    await createTable.mutateAsync({ number });
   };
 
   const handleCreateBatch = async (start: number, end: number) => {
     const promises = [];
     for (let i = start; i <= end; i++) {
       if (!existingNumbers.includes(i)) {
-        promises.push(createTable.mutateAsync(i));
+        promises.push(createTable.mutateAsync({ number: i }));
       }
     }
     await Promise.all(promises);
@@ -704,6 +745,10 @@ export default function Tables() {
                 onToggleStatus={() => handleToggleStatus(table.id, table.status || "free")}
                 onGenerateQR={() => handleGenerateQR(table.id, table.number)}
                 onDelete={() => deleteTable.mutate(table.id)}
+                onRelease={table.status !== "free" ? () => {
+                  setUpdatingTableId(table.id);
+                  updateTableStatus.mutateAsync({ tableId: table.id, status: "free" }).finally(() => setUpdatingTableId(null));
+                } : undefined}
                 onViewOrder={() => {
                   const order = tableOrders.get(table.id);
                   if (order) {

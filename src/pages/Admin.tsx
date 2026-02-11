@@ -8,6 +8,7 @@ import { AdminUsersList } from "@/components/admin/AdminUsersList";
 import { AdminUnitsManager } from "@/components/admin/AdminUnitsManager";
 import { AdminActivityLogs } from "@/components/admin/AdminActivityLogs";
 import { Card } from "@/components/ui/card";
+import { AdminCustomersList } from "@/components/admin/AdminCustomersList";
 import { 
   LayoutDashboard, 
   Users, 
@@ -17,6 +18,7 @@ import {
   ShieldAlert,
   Sparkles,
   Crown,
+  UserCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -100,9 +102,10 @@ export default function Admin() {
 
       {/* Tabs with premium styling */}
       <Tabs defaultValue="dashboard" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid h-auto p-1 bg-muted/50 backdrop-blur">
+        <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid h-auto p-1 bg-muted/50 backdrop-blur">
           {[
             { value: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
+            { value: "customers", icon: UserCheck, label: "Clientes" },
             { value: "users", icon: Users, label: "Usuários" },
             { value: "units", icon: Building2, label: "Unidades" },
             { value: "logs", icon: ScrollText, label: "Logs" },
@@ -123,6 +126,10 @@ export default function Admin() {
 
         <TabsContent value="dashboard" className="space-y-4 animate-fade-in">
           <AdminDashboard />
+        </TabsContent>
+
+        <TabsContent value="customers" className="space-y-4 animate-fade-in">
+          <AdminCustomersList />
         </TabsContent>
 
         <TabsContent value="users" className="space-y-4 animate-fade-in">
