@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useUnit } from "@/contexts/UnitContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -15,12 +15,23 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { StatCard } from "@/components/ui/stat-card";
 import { toast } from "sonner";
 import {
   Plus,
@@ -29,6 +40,14 @@ import {
   Search,
   UtensilsCrossed,
   Trash2,
+  Package,
+  CheckCircle2,
+  Tags,
+  DollarSign,
+  Upload,
+  X,
+  ArrowUpDown,
+  FilterX,
 } from "lucide-react";
 import { ProductCard } from "@/components/menu/ProductCard";
 import { CategoryChips } from "@/components/menu/CategoryChips";
@@ -50,8 +69,12 @@ interface Product {
   category_id: string | null;
   available: boolean;
   preparation_time: number;
+  image_url?: string | null;
+  created_at?: string;
   categories?: Category;
 }
+
+type SortOption = "name-asc" | "name-desc" | "price-asc" | "price-desc" | "recent";
 
 export default function Menu() {
   const { selectedUnit } = useUnit();
@@ -60,6 +83,7 @@ export default function Menu() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<SortOption>("name-asc");
 
   // Product dialog state
   const [productDialogOpen, setProductDialogOpen] = useState(false);
@@ -73,6 +97,10 @@ export default function Menu() {
     preparation_time: "15",
   });
   const [savingProduct, setSavingProduct] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Category dialog state
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
@@ -82,6 +110,14 @@ export default function Menu() {
     description: "",
   });
   const [savingCategory, setSavingCategory] = useState(false);
+
+  // Delete dialog state
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    type: "product" | "category";
+    id: string;
+    name: string;
+  }>({ open: false, type: "product", id: "", name: "" });
 
   useEffect(() => {
     if (selectedUnit) {
@@ -117,6 +153,47 @@ export default function Menu() {
     }
   };
 
+  // Image upload
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Imagem muito grande", { description: "Máximo 5MB" });
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const uploadImage = async (): Promise<string | null> => {
+    if (!imageFile || !selectedUnit) return null;
+    setUploadingImage(true);
+    try {
+      const ext = imageFile.name.split(".").pop();
+      const fileName = `${selectedUnit.id}/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage
+        .from("product-images")
+        .upload(fileName, imageFile, { upsert: true });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage
+        .from("product-images")
+        .getPublicUrl(fileName);
+      return urlData.publicUrl;
+    } catch (error: any) {
+      console.error("Error uploading image:", error);
+      toast.error("Erro ao enviar imagem");
+      return null;
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   // Product CRUD
   const openProductDialog = (product?: Product) => {
     if (product) {
@@ -129,6 +206,8 @@ export default function Menu() {
         category_id: product.category_id || "",
         preparation_time: String(product.preparation_time),
       });
+      setImagePreview(product.image_url || null);
+      setImageFile(null);
     } else {
       setEditingProduct(null);
       setProductForm({
@@ -139,6 +218,8 @@ export default function Menu() {
         category_id: "",
         preparation_time: "15",
       });
+      setImagePreview(null);
+      setImageFile(null);
     }
     setProductDialogOpen(true);
   };
@@ -148,7 +229,17 @@ export default function Menu() {
     if (!selectedUnit) return;
     setSavingProduct(true);
     try {
-      const productData = {
+      let imageUrl: string | null | undefined = undefined;
+
+      // Upload new image if selected
+      if (imageFile) {
+        imageUrl = await uploadImage();
+      } else if (imagePreview === null && editingProduct?.image_url) {
+        // Image was removed
+        imageUrl = null;
+      }
+
+      const baseData = {
         unit_id: selectedUnit.id,
         name: productForm.name,
         description: productForm.description || null,
@@ -156,13 +247,15 @@ export default function Menu() {
         delivery_price: productForm.delivery_price ? parseFloat(productForm.delivery_price) : null,
         category_id: productForm.category_id || null,
         preparation_time: parseInt(productForm.preparation_time) || 15,
+        ...(imageUrl !== undefined ? { image_url: imageUrl } : {}),
       };
+
       if (editingProduct) {
-        const { error } = await supabase.from("products").update(productData).eq("id", editingProduct.id);
+        const { error } = await supabase.from("products").update(baseData).eq("id", editingProduct.id);
         if (error) throw error;
         toast.success("Produto atualizado!");
       } else {
-        const { error } = await supabase.from("products").insert(productData);
+        const { error } = await supabase.from("products").insert(baseData);
         if (error) throw error;
         toast.success("Produto criado!");
       }
@@ -186,12 +279,22 @@ export default function Menu() {
     }
   };
 
-  const handleDeleteProduct = async (productId: string) => {
-    if (!confirm("Tem certeza que deseja excluir este produto?")) return;
+  const confirmDeleteProduct = (productId: string) => {
+    const product = products.find((p) => p.id === productId);
+    setDeleteDialog({
+      open: true,
+      type: "product",
+      id: productId,
+      name: product?.name || "este produto",
+    });
+  };
+
+  const handleDeleteProduct = async () => {
     try {
-      const { error } = await supabase.from("products").delete().eq("id", productId);
+      const { error } = await supabase.from("products").delete().eq("id", deleteDialog.id);
       if (error) throw error;
       toast.success("Produto excluído!");
+      setDeleteDialog({ open: false, type: "product", id: "", name: "" });
       fetchData();
     } catch {
       toast.error("Erro ao excluir produto");
@@ -240,13 +343,23 @@ export default function Menu() {
     }
   };
 
-  const handleDeleteCategory = async (categoryId: string) => {
-    if (!confirm("Tem certeza que deseja excluir esta categoria? Os produtos vinculados ficarão sem categoria.")) return;
+  const confirmDeleteCategory = (categoryId: string) => {
+    const category = categories.find((c) => c.id === categoryId);
+    setDeleteDialog({
+      open: true,
+      type: "category",
+      id: categoryId,
+      name: category?.name || "esta categoria",
+    });
+  };
+
+  const handleDeleteCategory = async () => {
     try {
-      await supabase.from("products").update({ category_id: null }).eq("category_id", categoryId);
-      const { error } = await supabase.from("categories").delete().eq("id", categoryId);
+      await supabase.from("products").update({ category_id: null }).eq("category_id", deleteDialog.id);
+      const { error } = await supabase.from("categories").delete().eq("id", deleteDialog.id);
       if (error) throw error;
       toast.success("Categoria excluída!");
+      setDeleteDialog({ open: false, type: "category", id: "", name: "" });
       setCategoryDialogOpen(false);
       fetchData();
     } catch {
@@ -267,15 +380,45 @@ export default function Menu() {
     return counts;
   }, [products]);
 
+  const availableCount = useMemo(() => products.filter((p) => p.available).length, [products]);
+
+  const avgPrice = useMemo(() => {
+    if (products.length === 0) return 0;
+    return products.reduce((sum, p) => sum + p.price, 0) / products.length;
+  }, [products]);
+
   const filteredProducts = useMemo(() => {
-    return products.filter((product) => {
-      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
+    let result = products.filter((product) => {
+      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.description?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory =
         filterCategory === "all" ||
         (filterCategory === "uncategorized" ? !product.category_id : product.category_id === filterCategory);
       return matchesSearch && matchesCategory;
     });
-  }, [products, searchTerm, filterCategory]);
+
+    // Sort
+    result.sort((a, b) => {
+      switch (sortBy) {
+        case "name-asc": return a.name.localeCompare(b.name);
+        case "name-desc": return b.name.localeCompare(a.name);
+        case "price-asc": return a.price - b.price;
+        case "price-desc": return b.price - a.price;
+        case "recent": return (b.created_at || "").localeCompare(a.created_at || "");
+        default: return 0;
+      }
+    });
+
+    return result;
+  }, [products, searchTerm, filterCategory, sortBy]);
+
+  const hasActiveFilters = searchTerm || filterCategory !== "all" || sortBy !== "name-asc";
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setFilterCategory("all");
+    setSortBy("name-asc");
+  };
 
   if (loading) {
     return (
@@ -292,7 +435,7 @@ export default function Menu() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold">Cardápio</h1>
           <p className="text-sm text-muted-foreground">
-            {products.length} produto(s) • {categories.length} categoria(s)
+            Gerencie produtos e categorias do seu cardápio
           </p>
         </div>
         <div className="flex gap-2">
@@ -332,7 +475,7 @@ export default function Menu() {
                 </div>
                 <DialogFooter className="flex justify-between sm:justify-between">
                   {editingCategory && (
-                    <Button type="button" variant="destructive" onClick={() => handleDeleteCategory(editingCategory.id)}>
+                    <Button type="button" variant="destructive" onClick={() => confirmDeleteCategory(editingCategory.id)}>
                       <Trash2 className="w-4 h-4 mr-2" />
                       Excluir
                     </Button>
@@ -357,7 +500,7 @@ export default function Menu() {
                 Produto
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg">
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
               <form onSubmit={handleSaveProduct}>
                 <DialogHeader>
                   <DialogTitle>{editingProduct ? "Editar Produto" : "Novo Produto"}</DialogTitle>
@@ -366,6 +509,45 @@ export default function Menu() {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
+                  {/* Image Upload */}
+                  <div className="space-y-2">
+                    <Label>Foto do Produto</Label>
+                    <div className="flex items-center gap-3">
+                      {imagePreview ? (
+                        <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-border">
+                          <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={removeImage}
+                            className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-0.5"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-24 h-24 rounded-lg border-2 border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center gap-1 transition-colors"
+                        >
+                          <Upload className="w-5 h-5 text-muted-foreground" />
+                          <span className="text-[10px] text-muted-foreground">Upload</span>
+                        </button>
+                      )}
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageSelect}
+                        className="hidden"
+                      />
+                      <div className="text-xs text-muted-foreground">
+                        <p>JPG, PNG ou WebP</p>
+                        <p>Máximo 5MB</p>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
                     <Label>Nome *</Label>
                     <Input
@@ -440,14 +622,44 @@ export default function Menu() {
                   <Button type="button" variant="outline" onClick={() => setProductDialogOpen(false)}>
                     Cancelar
                   </Button>
-                  <Button type="submit" disabled={savingProduct}>
-                    {savingProduct ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Salvando...</> : "Salvar"}
+                  <Button type="submit" disabled={savingProduct || uploadingImage}>
+                    {savingProduct || uploadingImage ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{uploadingImage ? "Enviando foto..." : "Salvando..."}</>
+                    ) : "Salvar"}
                   </Button>
                 </DialogFooter>
               </form>
             </DialogContent>
           </Dialog>
         </div>
+      </div>
+
+      {/* Metrics Dashboard */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard
+          title="Total de Produtos"
+          value={products.length}
+          icon={Package}
+          iconColor="primary"
+        />
+        <StatCard
+          title="Disponíveis"
+          value={`${availableCount}/${products.length}`}
+          icon={CheckCircle2}
+          iconColor="success"
+        />
+        <StatCard
+          title="Categorias"
+          value={categories.filter((c) => c.active !== false).length}
+          icon={Tags}
+          iconColor="info"
+        />
+        <StatCard
+          title="Preço Médio"
+          value={formatCurrency(avgPrice)}
+          icon={DollarSign}
+          iconColor="warning"
+        />
       </div>
 
       {/* Category Chips */}
@@ -461,28 +673,58 @@ export default function Menu() {
         />
       )}
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar produtos..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-9"
-        />
+      {/* Search + Sort */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar produtos..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <div className="flex gap-2">
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+            <SelectTrigger className="w-[160px]">
+              <ArrowUpDown className="w-3.5 h-3.5 mr-1.5 shrink-0" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name-asc">Nome (A-Z)</SelectItem>
+              <SelectItem value="name-desc">Nome (Z-A)</SelectItem>
+              <SelectItem value="price-asc">Preço (menor)</SelectItem>
+              <SelectItem value="price-desc">Preço (maior)</SelectItem>
+              <SelectItem value="recent">Mais recentes</SelectItem>
+            </SelectContent>
+          </Select>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="icon" onClick={clearFilters} title="Limpar filtros">
+              <FilterX className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Results indicator */}
+      {hasActiveFilters && (
+        <p className="text-xs text-muted-foreground">
+          {filteredProducts.length} resultado(s) encontrado(s)
+        </p>
+      )}
 
       {/* Products Grid */}
       {filteredProducts.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-          {filteredProducts.map((product) => (
+          {filteredProducts.map((product, index) => (
             <ProductCard
               key={product.id}
               product={product}
               onEdit={openProductDialog}
-              onDelete={handleDeleteProduct}
+              onDelete={confirmDeleteProduct}
               onToggleAvailability={handleToggleProductAvailability}
               formatCurrency={formatCurrency}
+              index={index}
             />
           ))}
         </div>
@@ -495,6 +737,34 @@ export default function Menu() {
           </p>
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog((prev) => ({ ...prev, open }))}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Excluir {deleteDialog.type === "product" ? "Produto" : "Categoria"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir <strong>"{deleteDialog.name}"</strong>?
+              {deleteDialog.type === "category"
+                ? " Os produtos vinculados ficarão sem categoria."
+                : ""}{" "}
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={deleteDialog.type === "product" ? handleDeleteProduct : handleDeleteCategory}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

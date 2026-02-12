@@ -1,8 +1,9 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Pencil, Trash2, Clock, Truck } from "lucide-react";
+import { Card3D } from "@/components/ui/card-3d";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
+import { Pencil, Trash2, Clock, Truck, ImageOff } from "lucide-react";
 
 interface Category {
   id: string;
@@ -21,6 +22,7 @@ interface Product {
   category_id: string | null;
   available: boolean;
   preparation_time: number;
+  image_url?: string | null;
   categories?: Category;
 }
 
@@ -30,6 +32,7 @@ interface ProductCardProps {
   onDelete: (productId: string) => void;
   onToggleAvailability: (product: Product) => void;
   formatCurrency: (value: number) => string;
+  index?: number;
 }
 
 export function ProductCard({
@@ -38,11 +41,44 @@ export function ProductCard({
   onDelete,
   onToggleAvailability,
   formatCurrency,
+  index = 0,
 }: ProductCardProps) {
   return (
-    <Card className={`group transition-all duration-200 hover:shadow-md ${!product.available ? "opacity-60" : ""}`}>
-      <CardContent className="p-4 space-y-3">
-        {/* Header: Name + Category */}
+    <Card3D
+      variant="subtle"
+      className={`group overflow-hidden transition-all duration-300 ${!product.available ? "opacity-60 grayscale-[30%]" : ""}`}
+      style={{ animationDelay: `${index * 50}ms` }}
+    >
+      {/* Product Image */}
+      <div className="relative">
+        <AspectRatio ratio={16 / 10}>
+          {product.image_url ? (
+            <img
+              src={product.image_url}
+              alt={product.name}
+              className="w-full h-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full bg-muted/50 flex items-center justify-center">
+              <ImageOff className="w-8 h-8 text-muted-foreground/30" />
+            </div>
+          )}
+        </AspectRatio>
+
+        {/* Unavailable overlay */}
+        {!product.available && (
+          <div className="absolute inset-0 bg-background/60 flex items-center justify-center">
+            <Badge variant="destructive" className="text-xs font-semibold">
+              Indisponível
+            </Badge>
+          </div>
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="p-4 space-y-3">
+        {/* Header: Name + Toggle */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-sm leading-tight truncate">{product.name}</h3>
@@ -104,7 +140,7 @@ export function ProductCard({
             </Button>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </Card3D>
   );
 }
