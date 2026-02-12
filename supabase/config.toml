@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.create-order-payment]
 verify_jwt = false
+
+[functions.test-bot-chat]
+verify_jwt = false

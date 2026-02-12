@@ -832,6 +832,38 @@ export type Database = {
         }
         Relationships: []
       }
+      prompt_history: {
+        Row: {
+          created_at: string
+          form_data: Json | null
+          id: string
+          prompt_text: string
+          unit_id: string
+        }
+        Insert: {
+          created_at?: string
+          form_data?: Json | null
+          id?: string
+          prompt_text: string
+          unit_id: string
+        }
+        Update: {
+          created_at?: string
+          form_data?: Json | null
+          id?: string
+          prompt_text?: string
+          unit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prompt_history_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tables: {
         Row: {
           capacity: number | null
