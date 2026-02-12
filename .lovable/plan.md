@@ -1,108 +1,89 @@
 
-# Auto-Preenchimento dos Campos Operacionais no Gerador de Prompt com IA
 
-## Situação Atual
+# Melhorias Profissionais na Gestao de Mesas
 
-O componente `AIPromptGenerator.tsx` inicializa o formulário com dados padrão (`defaultFormData`), mas **não carrega** os dados já cadastrados em `unit_settings`. Isso significa que o usuário precisa preencher tudo novamente, mesmo que já tenha configurado horários, formas de pagamento e delivery nas configurações gerais da unidade.
+## Bugs Encontrados e Correcoes
 
-## O Que Precisa Acontecer
-
-Quando o `AIPromptGenerator` for aberto, deve:
-1. Usar o hook `useUnitSettings()` para carregar as configurações existentes
-2. Mapear os campos de `unit_settings` para os campos do formulário (`PromptFormData`)
-3. Pré-preencher o formulário com dados reais da unidade
-4. Permitir que o usuário edite ou mantenha os dados carregados
-
-## Mapeamento de Campos
-
-| Campo `PromptFormData` | Fonte em `UnitSettings` | Transformação |
+| Bug | Descricao | Correcao |
 |---|---|---|
-| `operatingHours` | `opening_hours.monday.open/close` | Usar segunda como padrão, ou média |
-| `paymentMethods` | `payment_methods` (object com booleans) | Converter para array: `["pix", "credito", ...]` |
-| `pixKey` | `pix_key` | Usar valor direto |
-| `hasDelivery` | `delivery_enabled` | Usar valor direto |
-| `deliveryFee` | `delivery_fee` | Converter número para string |
-| `hasPickup` | (inferir de regras operacionais) | Padrão `true` |
-| `avgPrepTime` | `default_preparation_time` | Converter minutos para string (ex: "30 min") |
+| Warning React Refs | `Function components cannot be given refs` em `CreateTablesDialog` e `Tables` | Envolver componentes internos com `React.forwardRef` ou reestruturar o Dialog |
+| Type cast desnecessario | `(table as any).capacity` usado no TableCard, mas `capacity` ja existe no tipo `Tables<"tables">` | Remover o cast e usar `table.capacity` diretamente |
+| "Ver Pedido" so mostra toast | Clicar em "Ver" no pedido ativo apenas exibe um toast com o total, sem nenhuma acao util | Navegar para a pagina de pedidos ou abrir um modal com detalhes completos |
+| Batch creation multiple toasts | Criar mesas em lote dispara N toasts individuais + 1 final | Silenciar toasts individuais durante criacao em lote |
+| tableOrders sobrescreve | O Map de pedidos por mesa so guarda o ultimo pedido, ignorando multiplos pedidos ativos na mesma mesa | Guardar array de pedidos ou mostrar contagem total |
+
+## Melhorias de Funcionalidade
+
+### 1. Card de Mesa Mais Inteligente
+- Mostrar receita total da mesa (soma de todos pedidos ativos) alem do pedido individual
+- Exibir contagem de pedidos ativos quando houver mais de 1
+- Adicionar indicador visual de capacidade (icone de pessoas com numero)
+- Campo de capacidade no dialog de criacao de mesa (atualmente hardcoded em 4)
+
+### 2. Acoes Rapidas Melhoradas
+- **"Ver Pedidos"**: Abrir um Sheet/modal com a lista completa de pedidos da mesa (reutilizando o `TableBillSheet` do lado admin)
+- **"Fechar Conta"**: Botao direto no card para fechar a conta da mesa sem precisar navegar
+- **"Novo Pedido"**: Botao para criar pedido direto pelo POS vinculado a mesa
+
+### 3. Metricas Mais Inteligentes
+- Adicionar metrica de **Receita Total** (soma de todos pedidos ativos em mesas ocupadas)
+- Adicionar metrica de **Tempo Medio de Ocupacao**
+- Animacao de contagem nos numeros das metricas
+
+### 4. Criacao de Mesas com Capacidade
+- Adicionar campo de capacidade no `CreateTablesDialog` (single e batch)
+- Capacidade padrao configuravel (atualmente fixo em 4)
+
+### 5. Filtro e Ordenacao Avancados
+- Opcao de ordenar por: numero, status, tempo de ocupacao, receita
+- Indicador visual no filtro mostrando quantos resultados existem
+
+### 6. Realtime mais confiavel
+- Usar `refetchQueries` em vez de `invalidateQueries` no hook `useTables` para garantir atualizacao imediata (seguindo o padrao ja usado em `useOrders`)
 
 ## Arquivos a Serem Modificados
 
-1. **`src/components/settings/AIPromptGenerator.tsx`**:
-   - Importar `useUnitSettings` hook
-   - Adicionar `useEffect` para carregar dados de `unit_settings` quando o componente montar
-   - Mapear dados do `UnitSettings` para `PromptFormData`
-   - Pré-preencher o estado `formData` com dados carregados
-   - Adicionar indicador de carregamento (`isLoading`)
-   - Adicionar estado que rastreie se os dados foram carregados pela primeira vez (para não sobrescrever edições do usuário)
+| Arquivo | Alteracao |
+|---|---|
+| `src/pages/Tables.tsx` | Corrigir bugs de refs, melhorar TableCard (receita, multi-pedidos), melhorar CreateTablesDialog (campo capacidade), melhorar metricas (receita total, tempo medio), melhorar acoes (ver pedidos reais, fechar conta), adicionar ordenacao |
+| `src/hooks/useTables.ts` | Trocar `invalidateQueries` por `refetchQueries` para sincronizacao confiavel, silenciar toast em batch |
 
-2. **`src/components/settings/ai-prompt/types.ts`** (opcional):
-   - Pode adicionar uma função auxiliar `mapUnitSettingsToPromptFormData()` para melhor organização e reutilização
+## Detalhes Tecnicos
 
-## Fluxo de Implementação
+### TableCard Melhorado
+- Remover `(table as any).capacity` e usar `table.capacity` direto
+- Receber `activeOrders: Order[]` (array) em vez de `activeOrder` (singular)
+- Exibir soma de receita de todos pedidos ativos
+- Badge com contagem de pedidos quando > 1
 
-### Passo 1: Criar Função de Mapeamento
-Na `types.ts`, adicionar:
-```typescript
-export function mapUnitSettingsToPromptFormData(
-  settings: UnitSettings | null,
-  restaurantName: string
-): Partial<PromptFormData> {
-  if (!settings) return {};
-  
-  // Converter payment_methods object para array
-  const paymentMethods: string[] = [];
-  if (settings.payment_methods.pix) paymentMethods.push("pix");
-  if (settings.payment_methods.credit) paymentMethods.push("credito");
-  if (settings.payment_methods.debit) paymentMethods.push("debito");
-  if (settings.payment_methods.cash) paymentMethods.push("dinheiro");
-  if (settings.payment_methods.voucher) paymentMethods.push("vale_refeicao");
-  
-  // Extrair horário da segunda-feira como padrão
-  const mondayHours = settings.opening_hours.monday;
-  
-  return {
-    operatingHours: {
-      open: mondayHours.open,
-      close: mondayHours.close,
-    },
-    paymentMethods,
-    pixKey: settings.pix_key || "",
-    hasDelivery: settings.delivery_enabled,
-    deliveryFee: settings.delivery_fee?.toString() || "0",
-    avgPrepTime: settings.default_preparation_time 
-      ? `${settings.default_preparation_time} min`
-      : "",
-  };
-}
+### CreateTablesDialog com Capacidade
+```text
++---------------------------+
+| Criar Mesas               |
+|  [Mesa Unica] [Em Lote]   |
+|                           |
+|  Numero: [___]            |
+|  Capacidade: [4] pessoas  |
+|                           |
+|  [Cancelar]  [Criar Mesa] |
++---------------------------+
 ```
 
-### Passo 2: Integrar no AIPromptGenerator
-- Importar `useUnitSettings`
-- Usar `useEffect` para carregar dados quando `unitId` mudar
-- Combinar `defaultFormData` com dados mapeados de `unit_settings`
-- Mostrar estado de carregamento enquanto busca dados
-- Permitir edição normal após carregamento
-
-## Estado Adicional Necessário
-
-```typescript
-const [dataLoaded, setDataLoaded] = useState(false);
-const { settings, isLoading: isLoadingSettings } = useUnitSettings();
+### Metricas com Receita
+```text
++----------+----------+----------+----------+----------+
+|  Total   |  Livres  | Ocupadas | Aguard.  | Receita  |
+|   12     |    5     |    6     |    1     | R$450,00 |
++----------+----------+----------+----------+----------+
 ```
 
-Usar `dataLoaded` para evitar sobrescrever dados quando o usuário edita o formulário.
+### Acoes do Card - "Ver Pedidos"
+Em vez de mostrar apenas um toast, o botao "Ver" abrira o `TableBillSheet` existente diretamente do lado admin, permitindo ao funcionario ver todos os pedidos da mesa, o total, e fechar a conta se necessario.
 
-## Benefícios
-
-- ✅ UX melhorada: dados já aparecem preenchidos
-- ✅ Menos digitação: usa informações já cadastradas
-- ✅ Consistência: garante que o prompt reflete a configuração real da unidade
-- ✅ Edição fácil: usuário pode ajustar se necessário antes de gerar
-
-## Casos Extremos
-
-1. **Unit Settings vazio**: Usa `defaultFormData` normalmente
-2. **Alguns campos vazios em unit_settings**: Usa valor padrão (ex: delivery_fee = "0")
-3. **Usuário faz edições manuais**: Respeita as edições (não sobrescreve)
-4. **Clica em Resetar**: Volta aos dados de `unit_settings` ou aos padrões
+### Ordenacao
+Adicionar um Select ao lado do filtro de status:
+- Por numero (padrao)
+- Por status (livres primeiro ou ocupadas primeiro)
+- Por tempo de ocupacao (mais antigas primeiro)
+- Por receita (maior primeiro)
 
