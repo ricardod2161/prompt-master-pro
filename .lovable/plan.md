@@ -1,118 +1,112 @@
 
-# Cardapio Profissional - Melhorias Completas
+# Melhorias no Gerador de Prompt com IA
 
-## Situacao Atual
+## O Que Ja Existe
+O gerador atual tem: 4 secoes (Basica, Operacional, Personalidade, Regras), auto-preenchimento de `unit_settings`, geracao via Gemini 2.5 Flash, edicao manual do prompt e salvamento em `whatsapp_settings`.
 
-A pagina de Cardapio (`Menu.tsx`) e funcional mas basica:
-- Cards de produto simples sem imagem
-- Sem metricas/dashboard do cardapio
-- Sem upload de imagem de produto (o campo `image_url` existe no banco mas nao e usado no admin)
-- Sem ordenacao de produtos
-- Busca simples sem destaque nos resultados
-- Sem confirmacao visual de exclusao (usa `confirm()` nativo do browser)
-- Formulario de produto sem upload de foto
-- Sem indicador de produtos indisponiveis vs disponiveis nas metricas
-- Sem drag-and-drop ou reordenacao de categorias
+## Melhorias Propostas
 
-## Melhorias Planejadas
+### 1. Preview em Tempo Real do Prompt (Simulador de Conversa)
+Adicionar um botao "Simular Conversa" que envia o prompt gerado para a IA e simula uma interacao de teste (como se fosse um cliente pedindo algo). Isso permite ao usuario ver como o bot vai se comportar ANTES de ativar.
 
-### 1. Dashboard de Metricas do Cardapio
-Adicionar cards de estatisticas no topo:
-- Total de produtos
-- Produtos disponiveis vs indisponiveis
-- Total de categorias
-- Preco medio dos produtos
+- Botao "Testar Prompt" ao lado do "Gerar Prompt com IA"
+- Abre um mini-chat simulado (tipo WhatsApp) onde o usuario pode enviar mensagens de teste
+- Usa o prompt gerado como system prompt para responder
+- Implementado via edge function `test-bot-chat`
 
-Usar o componente `StatCard` ja existente no projeto.
+### 2. Historico de Prompts Gerados
+Salvar versoes anteriores do prompt para permitir comparacao e rollback.
 
-### 2. Upload de Imagem de Produto
-- Criar bucket `product-images` no storage
-- Adicionar campo de upload no dialog de criacao/edicao de produto
-- Preview da imagem antes de salvar
-- Remover imagem antiga ao substituir
-- Exibir imagem no `ProductCard` quando disponivel
+- Tabela `prompt_history` no banco: `id`, `unit_id`, `prompt_text`, `form_data` (JSON), `created_at`
+- Botao "Historico" que abre um Sheet com a lista de prompts anteriores
+- Cada item mostra: data, primeiras linhas do prompt, botao "Restaurar"
+- Maximo de 10 versoes guardadas por unidade
 
-### 3. ProductCard Melhorado
-- Exibir imagem do produto (quando existir) com aspect-ratio e lazy loading
-- Placeholder visual quando nao tem imagem (icone do tipo de produto)
-- Animacao de entrada (fade-in-up escalonado)
-- Usar `Card3D` em vez de `Card` simples para consistencia visual com o resto do sistema
-- Badge de "Indisponivel" mais visivel quando o produto esta desativado
+### 3. Barra de Qualidade do Prompt
+Indicador visual que avalia a completude do prompt gerado em tempo real:
 
-### 4. Ordenacao e Filtros Avancados
-- Select de ordenacao: por nome (A-Z, Z-A), por preco (maior/menor), por data de criacao
-- Indicador de quantos resultados filtrados aparecem
-- Limpar filtros com um clique
+- Verificar se contem: saudacao, fluxo de atendimento, formas de pagamento, regras de formatacao, limites, escalacao humana
+- Barra de progresso colorida (vermelho -> amarelo -> verde)
+- Checklist visual mostrando quais secoes estao presentes e quais faltam
+- Calculado no frontend via regex simples no texto do prompt
 
-### 5. Dialog de Exclusao Profissional
-- Substituir `confirm()` nativo por `AlertDialog` do Radix UI
-- Mensagem clara com nome do produto/categoria sendo excluido
+### 4. Templates Prontos por Tipo de Negocio
+Oferecer templates pre-configurados baseados no tipo de negocio selecionado.
 
-### 6. Formulario de Produto Melhorado
-- Campo de upload de imagem com preview
-- Layout mais organizado com secoes visuais
-- Validacao visual nos campos obrigatorios
+- Botao "Usar Template" que aparece quando o tipo de negocio e selecionado
+- Templates para: Pizzaria, Hamburgueria, Cafeteria, Padaria, Acaiteria, etc.
+- Pre-preenche `businessDescription`, `specialRules`, `voiceTone` e `botName` com valores tipicos
+- Usuario pode editar apos aplicar o template
 
-### 7. CategoryChips Melhorado
-- ScrollArea horizontal para muitas categorias
-- Animacao de transicao ao selecionar
-- Tooltip mostrando descricao da categoria ao passar o mouse
+### 5. Copiar Prompt com Um Clique
+Botao de copiar ao lado do campo de prompt gerado (atualmente so tem "Salvar").
 
-## Arquivos a Serem Modificados/Criados
+### 6. Contagem de Tokens Estimada
+Exibir estimativa de tokens do prompt (caracteres / 4) para o usuario ter nocao do tamanho.
+
+### 7. Secao de Cardapio Resumido (Nova Secao)
+Nova secao colapsavel "Cardapio" que carrega automaticamente os produtos do banco e permite o usuario selecionar quais incluir como contexto no prompt.
+
+- Busca produtos da unidade via `useProducts()`
+- Lista com checkboxes para selecionar categorias/produtos
+- Gera um resumo do cardapio que e enviado junto ao prompt para a IA
+- O bot tera conhecimento dos produtos reais disponíveis
+
+## Arquivos a Serem Criados/Modificados
 
 | Arquivo | Alteracao |
 |---|---|
-| `src/pages/Menu.tsx` | Adicionar metricas, ordenacao, AlertDialog de exclusao, upload de imagem no form, melhorar layout geral |
-| `src/components/menu/ProductCard.tsx` | Adicionar suporte a imagem, usar Card3D, animacao de entrada, badge de indisponivel melhorado |
-| `src/components/menu/CategoryChips.tsx` | ScrollArea horizontal, tooltips |
+| `supabase/functions/test-bot-chat/index.ts` | Nova edge function para simular conversa com o prompt |
+| `src/components/settings/AIPromptGenerator.tsx` | Adicionar simulador, historico, barra de qualidade, templates, copiar, tokens |
+| `src/components/settings/ai-prompt/PromptQualityBar.tsx` | Novo componente de barra de qualidade |
+| `src/components/settings/ai-prompt/BotSimulator.tsx` | Novo componente de mini-chat simulado |
+| `src/components/settings/ai-prompt/PromptHistory.tsx` | Novo componente de historico de prompts |
+| `src/components/settings/ai-prompt/MenuContextSection.tsx` | Nova secao de cardapio resumido |
+| `src/components/settings/ai-prompt/BusinessTemplates.tsx` | Templates prontos por tipo de negocio |
+| Migracao SQL | Tabela `prompt_history` |
 
 ## Detalhes Tecnicos
 
-### Storage Bucket
-Criar bucket `product-images` via migracao SQL com politicas publicas de leitura e escrita autenticada.
+### Simulador de Conversa (BotSimulator)
+- Usa streaming via `test-bot-chat` edge function
+- Envia o `system_prompt` atual + mensagens do usuario
+- Interface tipo WhatsApp (bolhas de chat, verde/cinza)
+- Botao "Limpar conversa" para resetar
+- Maximo 10 mensagens de teste por sessao
 
-### Upload de Imagem
-Reutilizar o padrao ja usado em `LogoUpload.tsx`:
+### Barra de Qualidade
+Verifica presenca no prompt via regex:
+- Saudacao/boas-vindas
+- Fluxo de atendimento (etapas numeradas)
+- Formas de pagamento
+- Regras de formatacao WhatsApp
+- Limites e proibicoes
+- Escalacao humana
+- Tool calling / funcoes
+
+Cada item encontrado = +1 ponto. Score de 0-7 mapeado para cores.
+
+### Templates de Negocio
+Dados estaticos no frontend com valores tipicos:
 ```text
-1. Selecionar arquivo (accept: image/*)
-2. Upload para storage bucket "product-images"
-3. Obter URL publica
-4. Salvar URL no campo image_url do produto
+Pizzaria -> botName: "PizzaBot", voiceTone: "descontraido",
+            specialRules: "Pedido minimo R$30 para delivery..."
+Hamburgueria -> botName: "BurgerBot", voiceTone: "divertido"...
 ```
 
-### Metricas (topo da pagina)
+### Historico de Prompts (Tabela)
 ```text
-+------------+------------+------------+------------+
-| Produtos   | Disponiveis| Categorias | Preco Medio|
-|    24      |   20/24    |     6      |  R$ 32,50  |
-+------------+------------+------------+------------+
+prompt_history
+  - id (uuid, PK)
+  - unit_id (uuid, FK -> units)
+  - prompt_text (text)
+  - form_data (jsonb)
+  - created_at (timestamptz)
 ```
+RLS: usuarios autenticados podem ler/inserir da propria unidade.
 
-### Ordenacao
-Adicionar um Select ao lado da busca:
-- Nome (A-Z) - padrao
-- Nome (Z-A)
-- Preco (menor)
-- Preco (maior)
-- Mais recentes
-
-### ProductCard com Imagem
-```text
-+---------------------------+
-| [  IMAGEM DO PRODUTO    ] |
-| [  ou placeholder       ] |
-|                           |
-| Nome do Produto    [ON/OFF]|
-| [Categoria]               |
-| Descricao curta...        |
-|                           |
-| R$ 29,90   Delivery R$35 |
-| 15 min   [Editar][Excluir]|
-+---------------------------+
-```
-
-### AlertDialog de Exclusao
-Substituir o `confirm()` por AlertDialog do shadcn/radix:
-- Titulo: "Excluir Produto"
-- Descricao: "Tem certeza que deseja excluir 'X-Burger'? Esta acao nao pode ser desfeita."
-- Botoes: "Cancelar" e "Excluir" (vermelho)
+### Secao de Cardapio
+- Carrega produtos e categorias existentes
+- Gera resumo tipo: "Categorias: Lanches (5 itens), Bebidas (8 itens)..."
+- Envia como campo adicional `menuSummary` para a edge function
+- O META_PROMPT da edge function sera atualizado para considerar o resumo do cardapio
