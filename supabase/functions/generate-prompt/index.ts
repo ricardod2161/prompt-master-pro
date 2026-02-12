@@ -98,7 +98,8 @@ Se o usuário forneceu regras especiais, incorporá-las naturalmente no prompt c
 - Faça o prompt parecer escrito por um especialista em atendimento ao cliente
 - Seja MUITO específico nas instruções — evite generalidades
 - Se o tipo de negócio não foi informado, infira pelo nome e descrição
-- Se dados operacionais não foram fornecidos, use valores genéricos razoáveis mas mencione que devem ser configurados`;
+- Se dados operacionais não foram fornecidos, use valores genéricos razoáveis mas mencione que devem ser configurados
+- Se um resumo do cardápio real for fornecido, use-o como referência para personalizar o prompt (mencionando categorias e exemplos de itens disponíveis)`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -123,6 +124,7 @@ serve(async (req) => {
       emojiLevel,
       botName,
       specialRules,
+      menuSummary,
     } = body;
 
     if (!businessDescription || businessDescription.trim().length < 5) {
@@ -186,6 +188,10 @@ serve(async (req) => {
 
     if (specialRules) {
       userMessage += `\n=== REGRAS ESPECIAIS ===\n${specialRules}\n`;
+    }
+
+    if (menuSummary) {
+      userMessage += `\n=== CARDÁPIO REAL (resumo) ===\n${menuSummary}\n`;
     }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

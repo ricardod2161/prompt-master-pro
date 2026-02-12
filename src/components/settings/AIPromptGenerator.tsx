@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { Sparkles, Loader2, Save, RotateCcw, ChevronDown, Store, Clock, Smile, AlertTriangle } from "lucide-react";
+import { Sparkles, Loader2, Save, RotateCcw, ChevronDown, Store, Clock, Smile, AlertTriangle, Copy, UtensilsCrossed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,10 +9,16 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { defaultFormData, mapUnitSettingsToPromptFormData, type PromptFormData } from "./ai-prompt/types";
 import { useUnitSettings } from "@/hooks/useUnitSettings";
+import { useProducts, useCategories } from "@/hooks/useProducts";
 import { BasicSection } from "./ai-prompt/BasicSection";
 import { OperationalSection } from "./ai-prompt/OperationalSection";
 import { PersonalitySection } from "./ai-prompt/PersonalitySection";
 import { SpecialRulesSection } from "./ai-prompt/SpecialRulesSection";
+import { PromptQualityBar } from "./ai-prompt/PromptQualityBar";
+import { BusinessTemplates } from "./ai-prompt/BusinessTemplates";
+import { BotSimulator } from "./ai-prompt/BotSimulator";
+import { PromptHistory } from "./ai-prompt/PromptHistory";
+import { MenuContextSection, generateMenuSummary } from "./ai-prompt/MenuContextSection";
 
 interface AIPromptGeneratorProps {
   unitName: string;
@@ -27,6 +33,7 @@ const SECTIONS = [
   { id: "operational", label: "Operacional", icon: Clock },
   { id: "personality", label: "Personalidade", icon: Smile },
   { id: "rules", label: "Regras Especiais", icon: AlertTriangle },
+  { id: "menu", label: "Cardápio (contexto)", icon: UtensilsCrossed },
 ] as const;
 
 export function AIPromptGenerator({
@@ -38,11 +45,14 @@ export function AIPromptGenerator({
 }: AIPromptGeneratorProps) {
   const { toast } = useToast();
   const { settings, isLoading: isLoadingSettings } = useUnitSettings();
+  const { data: products } = useProducts();
+  const { data: categories } = useCategories();
   const [dataLoaded, setDataLoaded] = useState(false);
   const [formData, setFormData] = useState<PromptFormData>({
     ...defaultFormData,
     restaurantName: unitName,
   });
+  const [selectedMenuCategories, setSelectedMenuCategories] = useState<string[]>([]);
   const [generatedPrompt, setGeneratedPrompt] = useState(externalPrompt || "");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -51,6 +61,7 @@ export function AIPromptGenerator({
     operational: false,
     personality: false,
     rules: false,
+    menu: false,
   });
 
   // Auto-prefill form with unit_settings data
@@ -92,6 +103,8 @@ export function AIPromptGenerator({
 
   const canGenerate = formData.restaurantName.trim() && formData.businessDescription.trim();
 
+  const tokenEstimate = useMemo(() => Math.ceil(prompt.length / 4), [prompt]);
+
   const handleGenerate = async () => {
     if (!canGenerate) {
       toast({ variant: "destructive", title: "Campos obrigatórios", description: "Preencha o nome e a descrição do negócio." });
@@ -99,6 +112,8 @@ export function AIPromptGenerator({
     }
     setIsGenerating(true);
     try {
+      const menuSummary = generateMenuSummary(products, categories, selectedMenuCategories);
+
       const { data, error } = await supabase.functions.invoke("generate-prompt", {
         body: {
           restaurantName: formData.restaurantName.trim(),
@@ -116,6 +131,7 @@ export function AIPromptGenerator({
           emojiLevel: formData.emojiLevel,
           botName: formData.botName.trim(),
           specialRules: formData.specialRules.trim(),
+          menuSummary: menuSummary || undefined,
         },
       });
       if (error) throw error;
@@ -144,7 +160,15 @@ export function AIPromptGenerator({
         .from("whatsapp_settings")
         .upsert({ unit_id: unitId, system_prompt: prompt.trim() }, { onConflict: "unit_id" });
       if (error) throw error;
-      toast({ title: "Prompt salvo!", description: "O prompt do bot foi atualizado." });
+
+      // Save to history
+      await supabase.from("prompt_history").insert({
+        unit_id: unitId,
+        prompt_text: prompt.trim(),
+        form_data: formData as any,
+      });
+
+      toast({ title: "Prompt salvo!", description: "O prompt do bot foi atualizado e salvo no histórico." });
       onPromptSaved?.(prompt.trim());
     } catch (error: any) {
       toast({ variant: "destructive", title: "Erro ao salvar", description: error.message || "Tente novamente." });
@@ -167,8 +191,19 @@ export function AIPromptGenerator({
         Object.entries(mapped).filter(([, v]) => v !== undefined)
       ),
     });
+    setSelectedMenuCategories([]);
     if (onPromptChange) onPromptChange("");
     else setGeneratedPrompt("");
+  };
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(prompt);
+    toast({ title: "Copiado!", description: "Prompt copiado para a área de transferência." });
+  };
+
+  const handleRestoreFromHistory = (text: string) => {
+    if (onPromptChange) onPromptChange(text);
+    else setGeneratedPrompt(text);
   };
 
   const renderSection = (id: string) => {
@@ -177,6 +212,12 @@ export function AIPromptGenerator({
       case "operational": return <OperationalSection data={formData} onChange={updateForm} />;
       case "personality": return <PersonalitySection data={formData} onChange={updateForm} />;
       case "rules": return <SpecialRulesSection data={formData} onChange={updateForm} />;
+      case "menu": return (
+        <MenuContextSection
+          selectedCategories={selectedMenuCategories}
+          onCategoriesChange={setSelectedMenuCategories}
+        />
+      );
       default: return null;
     }
   };
@@ -190,9 +231,15 @@ export function AIPromptGenerator({
             <Sparkles className="h-5 w-5 text-primary" />
             <Label className="text-base font-semibold">Gerador de Prompt com IA</Label>
           </div>
-          <span className="text-xs font-medium text-muted-foreground bg-muted px-2.5 py-1 rounded-full">
-            {filledCount}/8 campos
-          </span>
+          <div className="flex items-center gap-2">
+            <BusinessTemplates
+              businessType={formData.businessType}
+              onApply={(template) => updateForm(template)}
+            />
+            <span className="text-xs font-medium text-muted-foreground bg-muted px-2.5 py-1 rounded-full">
+              {filledCount}/8 campos
+            </span>
+          </div>
         </div>
         <p className="text-sm text-muted-foreground">
           Preencha os campos abaixo para gerar um prompt ultra-detalhado e profissional para o bot WhatsApp.
@@ -246,11 +293,15 @@ export function AIPromptGenerator({
           {isGenerating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
           {isGenerating ? "Gerando..." : "Gerar Prompt com IA"}
         </Button>
+        <BotSimulator prompt={prompt} disabled={!prompt.trim()} />
         <Button variant="outline" onClick={handleReset} className="h-11" type="button">
           <RotateCcw className="h-4 w-4 mr-2" />
           Resetar
         </Button>
       </div>
+
+      {/* Quality Bar */}
+      <PromptQualityBar prompt={prompt} />
 
       {/* Generated Prompt */}
       <div className="space-y-2">
@@ -258,9 +309,14 @@ export function AIPromptGenerator({
           <Label htmlFor="generated-prompt" className="text-sm font-medium">
             Prompt do Sistema (editável)
           </Label>
-          {prompt && (
-            <span className="text-xs text-muted-foreground">{prompt.length} caracteres</span>
-          )}
+          <div className="flex items-center gap-3">
+            {prompt && (
+              <>
+                <span className="text-xs text-muted-foreground">~{tokenEstimate} tokens</span>
+                <span className="text-xs text-muted-foreground">{prompt.length} chars</span>
+              </>
+            )}
+          </div>
         </div>
         <Textarea
           id="generated-prompt"
@@ -272,11 +328,20 @@ export function AIPromptGenerator({
         />
       </div>
 
-      {/* Save */}
-      <Button onClick={handleSave} disabled={isSaving || !prompt.trim()} className="h-11 bg-green-600 hover:bg-green-700">
-        {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-        Salvar Prompt
-      </Button>
+      {/* Bottom actions */}
+      <div className="flex flex-wrap gap-3">
+        <Button onClick={handleSave} disabled={isSaving || !prompt.trim()} className="h-11 bg-green-600 hover:bg-green-700">
+          {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+          Salvar Prompt
+        </Button>
+        {prompt.trim() && (
+          <Button variant="outline" onClick={handleCopy} className="h-11 gap-2">
+            <Copy className="h-4 w-4" />
+            Copiar
+          </Button>
+        )}
+        <PromptHistory unitId={unitId} onRestore={handleRestoreFromHistory} />
+      </div>
     </div>
   );
 }
