@@ -1,80 +1,102 @@
 
 
-# Cardapio Digital Publico + Integracao de Pagamento Pix/Stripe via WhatsApp
+# Melhorias no Gerador de Prompt com IA
 
-## Situacao Atual
+## Visao Geral
 
-O sistema **ja possui** as seguintes funcionalidades implementadas e funcionando:
+Transformar o gerador de prompt atual (que tem apenas 2 campos simples) em um formulario inteligente e completo que coleta informacoes detalhadas do negocio para gerar prompts muito mais ricos, longos e profissionais.
 
-| Funcionalidade | Status |
-|---|---|
-| Cardapio digital publico (`/order/:tableId`) | Implementado |
-| QR Code por mesa com impressao de ticket | Implementado |
-| Seletor de pagamento (Dinheiro, Pix, Cartao) | Implementado |
-| Gerador de codigo Pix EMV (copia e cola) | Implementado |
-| Notificacao WhatsApp com Pix automatico | Implementado |
-| Rastreamento de pedidos (`/track/:orderId`) | Implementado |
-| Stripe (assinaturas do sistema) | Implementado |
+## Problemas Atuais
 
-## O que Falta Configurar
+- Apenas 2 campos: nome do restaurante e descricao generica
+- META_PROMPT no backend e curto (limita prompt a 800-1500 caracteres)
+- Nao coleta informacoes essenciais como horario, pagamento, delivery, tom de voz
+- O prompt gerado e generico e falta personalidade
 
-### 1. Chave Pix da Churrascaria Santo Antonio
-A chave Pix nao esta cadastrada nas configuracoes da unidade (`pix_key`, `pix_merchant_name`, `pix_merchant_city` estao vazios). Sem isso, o QR Code Pix nao e gerado nas notificacoes WhatsApp nem no cardapio digital.
+## O que Muda
 
-**Acao:** Adicionar campo de QR Code Pix visivel no cardapio digital apos o pedido, e garantir que a tela de configuracoes permita salvar a chave Pix.
+### 1. Formulario Inteligente no Frontend (AIPromptGenerator.tsx)
 
-### 2. QR Code Pix na Tela de Sucesso do Pedido
-Quando o cliente faz um pedido via cardapio digital e seleciona "Pix", ele e redirecionado para a pagina de rastreamento sem ver o QR Code Pix. Precisamos adicionar o QR Code Pix na pagina de rastreamento.
+Adicionar campos estruturados organizados em secoes visuais com acordeoes/cards:
 
-### 3. Stripe para Pagamentos de Pedidos via WhatsApp
-Atualmente o Stripe e usado apenas para assinaturas do sistema (Starter/Pro/Enterprise). Para aceitar pagamentos online de pedidos via WhatsApp, sera necessario criar um fluxo de pagamento avulso (one-time payment) por pedido.
+**Secao Basica (obrigatoria):**
+- Nome do restaurante (ja existe)
+- Tipo de negocio (select: Pizzaria, Hamburgueria, Churrascaria, Restaurante, Lanchonete, Padaria, Doceria, Outro)
+- Descricao do negocio (ja existe, mas como Textarea maior)
 
-## Plano de Implementacao
+**Secao Operacional:**
+- Dias de funcionamento (multi-select: Seg a Dom)
+- Horario de funcionamento (inputs de hora inicio/fim)
+- Formas de pagamento aceitas (checkboxes: Pix, Cartao Credito, Debito, Dinheiro, Vale Refeicao)
+- Chave Pix (campo texto, se Pix for selecionado)
+- Oferece delivery? (switch) + Taxa de entrega (input, se sim)
+- Oferece retirada no local? (switch)
+- Tempo medio de preparo (input)
 
-### Etapa 1 - QR Code Pix no Rastreamento do Pedido
-Adicionar na pagina `/track/:orderId` (`OrderTracking.tsx`) a exibicao do QR Code Pix quando:
-- O metodo de pagamento for "pix"
-- A unidade tiver chave Pix configurada
-- O pedido ainda estiver pendente
+**Secao Personalidade:**
+- Tom de voz (select: Descontrado, Profissional, Formal, Divertido)
+- Nivel de uso de emojis (slider: Nenhum, Moderado, Bastante)
+- Nome do bot/assistente (opcional, ex: "Bia", "Chef Virtual")
 
-Isso permite que o cliente escaneie o QR Code Pix direto pelo celular apos fazer o pedido.
+**Secao Regras Especiais:**
+- Textarea para observacoes extras (ex: "nao aceitamos pedido apos 22h", "entrega gratis acima de R$50")
 
-### Etapa 2 - Link de Pagamento Stripe via WhatsApp
-Criar uma edge function `create-order-payment` que gera um link de pagamento Stripe (Checkout Session em modo `payment`) para um pedido especifico. O link sera enviado automaticamente pelo WhatsApp quando o bot finalizar um pedido.
+### 2. META_PROMPT Muito Mais Inteligente (generate-prompt/index.ts)
 
-### Etapa 3 - Integrar Pagamento Stripe no Webhook do WhatsApp
-Atualizar a funcao `whatsapp-webhook` para, apos criar um pedido, gerar automaticamente o link de pagamento Stripe e envia-lo na mensagem de confirmacao junto com o codigo Pix.
+Atualizar o META_PROMPT no backend para:
+- Aceitar todos os novos campos estruturados
+- Gerar prompts de 2000-4000 caracteres (muito mais completo)
+- Incluir instrucoes sobre tool calling (func_anotar_pedido, Listar Cardapio, Buscar Produtos, Calculator)
+- Incluir regras de formatacao WhatsApp (negrito com asteriscos, sem listas numeradas, um item por linha com emoji bullet)
+- Incluir protocolos de escalacao e limites
 
-## Detalhes Tecnicos
+Usar modelo `google/gemini-2.5-flash` (mais capaz que flash-preview para esta tarefa)
 
-### Arquivos Alterados
+### 3. UI Responsiva e Profissional
+
+- Layout responsivo com grid de 1 coluna em mobile e 2 colunas em desktop
+- Secoes colapsaveis para nao sobrecarregar visualmente
+- Indicadores de progresso (quantos campos foram preenchidos)
+- Preview do prompt em tempo real com contagem de caracteres
+- Botao de "Resetar" para limpar tudo
+- Textarea do prompt gerado com mais linhas (15-20 rows)
+
+## Arquivos Alterados
 
 | Arquivo | Alteracao |
 |---|---|
-| `src/pages/OrderTracking.tsx` | Adicionar componente de QR Code Pix com codigo copia-e-cola quando pagamento for Pix |
-| `supabase/functions/create-order-payment/index.ts` | **Novo** - Edge function que cria Stripe Checkout Session (mode: payment) para um pedido |
-| `supabase/functions/send-order-notification/index.ts` | Adicionar link de pagamento Stripe na mensagem de confirmacao (alem do Pix) |
-| `supabase/functions/whatsapp-webhook/index.ts` | Apos criar pedido, chamar `create-order-payment` e incluir link na resposta |
-| `supabase/config.toml` | Registrar nova funcao `create-order-payment` com `verify_jwt = false` |
+| `src/components/settings/AIPromptGenerator.tsx` | Redesign completo com formulario multi-secao, campos estruturados, layout responsivo |
+| `supabase/functions/generate-prompt/index.ts` | META_PROMPT muito mais detalhado, aceitar novos campos, gerar prompts maiores e mais inteligentes |
 
-### Edge Function `create-order-payment`
-- Recebe `orderId` e `unitId`
-- Busca dados do pedido no banco
-- Cria um produto Stripe temporario com nome "Pedido #X - Churrascaria"
-- Cria Checkout Session com `mode: "payment"` e valor do pedido
-- Retorna URL do checkout
-- Success URL redireciona para `/track/:orderId`
+## Detalhes Tecnicos
 
-### Mensagem WhatsApp Atualizada
-A mensagem de confirmacao de pedido incluira:
-1. Detalhes do pedido (itens, total)
-2. Codigo Pix copia-e-cola (se configurado)
-3. Link de pagamento online Stripe (cartao de credito/debito)
-4. Link de rastreamento do pedido
+### Payload Enviado ao Backend
+```typescript
+{
+  restaurantName: "Churrascaria Santo Antonio",
+  businessType: "churrascaria",
+  businessDescription: "Churrascaria tradicional com cortes nobres...",
+  operatingDays: ["ter", "qua", "qui", "sex", "sab", "dom"],
+  operatingHours: { open: "11:00", close: "22:00" },
+  paymentMethods: ["pix", "credito", "debito", "vale_refeicao"],
+  pixKey: "38734543864",
+  hasDelivery: true,
+  deliveryFee: 0,
+  hasPickup: true,
+  avgPrepTime: "30-45 min",
+  voiceTone: "profissional",
+  emojiLevel: "moderado",
+  botName: "",
+  specialRules: "Entrega gratuita. Fechamos na segunda."
+}
+```
 
-### QR Code Pix no OrderTracking
-- Usa `qrcode.react` (ja instalado) para renderizar QR Code visual
-- Exibe codigo copia-e-cola com botao de copiar
-- So aparece quando `payment_method = 'pix'` e status e pendente
-- Busca `unit_settings` para obter chave Pix e gerar codigo EMV
+### META_PROMPT Atualizado (resumo)
+O novo meta prompt instruira a IA a:
+- Gerar prompts de 2000-4000 caracteres
+- Incluir secoes de identidade, fluxo de atendimento passo-a-passo, regras de formatacao WhatsApp, limites criticos, protocolos de escalacao e instrucoes de tool calling
+- Usar as informacoes operacionais reais fornecidas (horarios, pagamentos, delivery)
+- Adaptar personalidade ao tipo de negocio e tom selecionado
+- Incluir instrucoes sobre como o bot deve formatar listas (emoji bullets, um por linha, negrito em opcoes)
+- Proibir invencao de itens, descontos e informacoes falsas
 
