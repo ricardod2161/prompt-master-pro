@@ -41,9 +41,11 @@ import {
   ArrowLeft,
   Sparkles,
   Receipt,
+  Layers,
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 // Premium Loading skeleton with shimmer
 const LoadingSkeleton = memo(function LoadingSkeleton() {
@@ -163,25 +165,50 @@ const OrderSuccess = memo(function OrderSuccess({
   );
 });
 
+// Variation type
+interface ProductVariation {
+  id: string;
+  name: string;
+  price: number;
+  delivery_price: number | null;
+  available: boolean;
+  sort_order: number;
+}
+
 // Premium Product card component
 const ProductCard = memo(function ProductCard({
   product,
   onAdd,
   index,
+  variations,
 }: {
   product: Tables<"products"> & { category?: Tables<"categories"> | null };
-  onAdd: (product: Tables<"products">) => void;
+  onAdd: (product: Tables<"products">, variationName?: string, variationPrice?: number) => void;
   index: number;
+  variations?: ProductVariation[];
 }) {
   const [showDetails, setShowDetails] = useState(false);
+  const [showVariations, setShowVariations] = useState(false);
+  const hasVariations = variations && variations.length > 0;
+
+  const minPrice = useMemo(() => {
+    if (!hasVariations) return product.price;
+    return Math.min(product.price, ...variations.map((v) => v.price));
+  }, [product.price, variations, hasVariations]);
 
   const formattedPrice = useMemo(() => 
-    new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(product.price),
-    [product.price]
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(hasVariations ? minPrice : product.price),
+    [product.price, minPrice, hasVariations]
   );
+
+  const handleAddClick = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (hasVariations) {
+      setShowVariations(true);
+    } else {
+      onAdd(product);
+    }
+  };
 
   return (
     <>
@@ -214,26 +241,28 @@ const ProductCard = memo(function ProductCard({
           {/* Gradient overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
           
-          {/* Preparation time badge */}
-          {product.preparation_time && (
-            <Badge
-              variant="secondary"
-              className="absolute top-2 right-2 text-xs bg-background/90 backdrop-blur-sm border-0"
-            >
-              <Clock className="h-3 w-3 mr-1" />
-              {product.preparation_time}min
-            </Badge>
-          )}
+          {/* Badges */}
+          <div className="absolute top-2 right-2 flex flex-col gap-1">
+            {product.preparation_time && (
+              <Badge variant="secondary" className="text-xs bg-background/90 backdrop-blur-sm border-0">
+                <Clock className="h-3 w-3 mr-1" />
+                {product.preparation_time}min
+              </Badge>
+            )}
+            {hasVariations && (
+              <Badge variant="secondary" className="text-xs bg-background/90 backdrop-blur-sm border-0">
+                <Layers className="h-3 w-3 mr-1" />
+                {variations.length} opções
+              </Badge>
+            )}
+          </div>
           
           {/* Quick add button on hover */}
           <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
             <Button
               size="icon"
               className="h-10 w-10 rounded-full shadow-lg"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAdd(product);
-              }}
+              onClick={handleAddClick}
             >
               <Plus className="h-5 w-5" />
             </Button>
@@ -246,7 +275,7 @@ const ProductCard = memo(function ProductCard({
             {product.name}
           </h3>
           <p className="text-primary font-bold text-lg">
-            {formattedPrice}
+            {hasVariations ? `A partir de ${formattedPrice}` : formattedPrice}
           </p>
         </div>
       </div>
@@ -257,11 +286,7 @@ const ProductCard = memo(function ProductCard({
           <div className="space-y-0">
             {product.image_url && (
               <div className="aspect-video relative overflow-hidden">
-                <img
-                  src={product.image_url}
-                  alt={product.name}
-                  className="w-full h-full object-cover"
-                />
+                <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
               </div>
             )}
@@ -271,14 +296,12 @@ const ProductCard = memo(function ProductCard({
               </DialogHeader>
               
               {product.description && (
-                <p className="text-muted-foreground text-sm leading-relaxed">
-                  {product.description}
-                </p>
+                <p className="text-muted-foreground text-sm leading-relaxed">{product.description}</p>
               )}
               
               <div className="flex items-center justify-between pt-2">
                 <span className="text-3xl font-black text-primary">
-                  {formattedPrice}
+                  {hasVariations ? `A partir de ${formattedPrice}` : formattedPrice}
                 </span>
                 {product.preparation_time && (
                   <Badge variant="outline" className="rounded-full">
@@ -292,8 +315,8 @@ const ProductCard = memo(function ProductCard({
                 className="w-full h-12 rounded-full text-base font-semibold"
                 size="lg"
                 onClick={() => {
-                  onAdd(product);
                   setShowDetails(false);
+                  handleAddClick();
                 }}
               >
                 <Plus className="h-5 w-5 mr-2" />
@@ -303,6 +326,50 @@ const ProductCard = memo(function ProductCard({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Variation Selection Dialog */}
+      {hasVariations && (
+        <Dialog open={showVariations} onOpenChange={setShowVariations}>
+          <DialogContent className="max-w-sm mx-4 rounded-3xl glass border-border/50">
+            <DialogHeader>
+              <DialogTitle className="text-lg">{product.name}</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">Escolha uma opção:</p>
+            <div className="space-y-2">
+              {variations.filter((v) => v.available).map((variation) => (
+                <Button
+                  key={variation.id}
+                  variant="outline"
+                  className="w-full justify-between h-12 rounded-xl"
+                  onClick={() => {
+                    onAdd(product, variation.name, variation.price);
+                    setShowVariations(false);
+                  }}
+                >
+                  <span className="font-medium">{variation.name}</span>
+                  <span className="font-bold text-primary">
+                    {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(variation.price)}
+                  </span>
+                </Button>
+              ))}
+              {/* Base price option */}
+              <Button
+                variant="outline"
+                className="w-full justify-between h-12 rounded-xl"
+                onClick={() => {
+                  onAdd(product);
+                  setShowVariations(false);
+                }}
+              >
+                <span className="font-medium">Padrão</span>
+                <span className="font-bold text-primary">
+                  {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(product.price)}
+                </span>
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 });
@@ -317,11 +384,16 @@ const CartItemRow = memo(function CartItemRow({
   onUpdateQuantity: (productId: string, quantity: number) => void;
   onRemove: (productId: string) => void;
 }) {
-  const subtotal = useMemo(() => item.product.price * item.quantity, [item.product.price, item.quantity]);
+  const subtotal = useMemo(() => {
+    const price = item.variationPrice ?? item.product.price;
+    return price * item.quantity;
+  }, [item.product.price, item.quantity, item.variationPrice]);
+  
+  const unitPrice = item.variationPrice ?? item.product.price;
   
   const formattedUnitPrice = useMemo(() => 
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.product.price),
-    [item.product.price]
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(unitPrice),
+    [unitPrice]
   );
   
   const formattedSubtotal = useMemo(() => 
@@ -352,6 +424,7 @@ const CartItemRow = memo(function CartItemRow({
         <div className="flex items-start justify-between gap-2">
           <p className="font-semibold text-sm leading-tight line-clamp-2">
             {item.product.name}
+            {item.variationName && <span className="text-muted-foreground font-normal"> ({item.variationName})</span>}
           </p>
           <Button
             variant="ghost"
@@ -428,6 +501,7 @@ export default function CustomerOrder() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [cartOpen, setCartOpen] = useState(false);
   const [billOpen, setBillOpen] = useState(false);
+  const [productVariations, setProductVariations] = useState<Record<string, ProductVariation[]>>({});
 
   const {
     table,
@@ -468,6 +542,27 @@ export default function CustomerOrder() {
     billClosed,
     resetBillState,
   } = useTableBill(tableId || "", table?.unit_id);
+
+  // Fetch product variations
+  useEffect(() => {
+    if (products.length > 0) {
+      const productIds = products.map((p) => p.id);
+      supabase
+        .from("product_variations")
+        .select("*")
+        .in("product_id", productIds)
+        .eq("available", true)
+        .order("sort_order")
+        .then(({ data }) => {
+          const map: Record<string, ProductVariation[]> = {};
+          data?.forEach((v: any) => {
+            if (!map[v.product_id]) map[v.product_id] = [];
+            map[v.product_id].push(v);
+          });
+          setProductVariations(map);
+        });
+    }
+  }, [products]);
 
   // Redirect to tracking page when order is successful
   useEffect(() => {
@@ -512,8 +607,8 @@ export default function CustomerOrder() {
   );
 
   // Callbacks
-  const handleAddToCart = useCallback((product: Tables<"products">) => {
-    addToCart(product);
+  const handleAddToCart = useCallback((product: Tables<"products">, variationName?: string, variationPrice?: number) => {
+    addToCart(product, 1, undefined, variationName, variationPrice);
   }, [addToCart]);
 
   // Loading state
@@ -633,6 +728,7 @@ export default function CustomerOrder() {
                   product={product}
                   onAdd={handleAddToCart}
                   index={index}
+                  variations={productVariations[product.id]}
                 />
               ))}
             </div>

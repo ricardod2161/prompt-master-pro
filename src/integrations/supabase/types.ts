@@ -526,6 +526,7 @@ export type Database = {
           total_price: number
           unit_price: number
           updated_at: string
+          variation_name: string | null
         }
         Insert: {
           created_at?: string
@@ -539,6 +540,7 @@ export type Database = {
           total_price: number
           unit_price: number
           updated_at?: string
+          variation_name?: string | null
         }
         Update: {
           created_at?: string
@@ -552,6 +554,7 @@ export type Database = {
           total_price?: number
           unit_price?: number
           updated_at?: string
+          variation_name?: string | null
         }
         Relationships: [
           {
@@ -738,6 +741,47 @@ export type Database = {
           },
           {
             foreignKeyName: "product_ingredients_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_variations: {
+        Row: {
+          available: boolean
+          created_at: string
+          delivery_price: number | null
+          id: string
+          name: string
+          price: number
+          product_id: string
+          sort_order: number
+        }
+        Insert: {
+          available?: boolean
+          created_at?: string
+          delivery_price?: number | null
+          id?: string
+          name: string
+          price: number
+          product_id: string
+          sort_order?: number
+        }
+        Update: {
+          available?: boolean
+          created_at?: string
+          delivery_price?: number | null
+          id?: string
+          name?: string
+          price?: number
+          product_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_variations_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
