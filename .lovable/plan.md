@@ -1,112 +1,138 @@
 
-# Melhorias no Gerador de Prompt com IA
 
-## O Que Ja Existe
-O gerador atual tem: 4 secoes (Basica, Operacional, Personalidade, Regras), auto-preenchimento de `unit_settings`, geracao via Gemini 2.5 Flash, edicao manual do prompt e salvamento em `whatsapp_settings`.
+# Cardapio Profissional - Drag-and-Drop, Variacoes e Melhorias Extras
 
-## Melhorias Propostas
+## Resumo
 
-### 1. Preview em Tempo Real do Prompt (Simulador de Conversa)
-Adicionar um botao "Simular Conversa" que envia o prompt gerado para a IA e simula uma interacao de teste (como se fosse um cliente pedindo algo). Isso permite ao usuario ver como o bot vai se comportar ANTES de ativar.
+Tres grandes frentes de melhorias: reordenacao de categorias por drag-and-drop, sistema de variacoes de produtos (tamanhos/sabores com precos diferentes), e melhorias adicionais para tornar o sistema completo e profissional.
 
-- Botao "Testar Prompt" ao lado do "Gerar Prompt com IA"
-- Abre um mini-chat simulado (tipo WhatsApp) onde o usuario pode enviar mensagens de teste
-- Usa o prompt gerado como system prompt para responder
-- Implementado via edge function `test-bot-chat`
+---
 
-### 2. Historico de Prompts Gerados
-Salvar versoes anteriores do prompt para permitir comparacao e rollback.
+## 1. Drag-and-Drop de Categorias
 
-- Tabela `prompt_history` no banco: `id`, `unit_id`, `prompt_text`, `form_data` (JSON), `created_at`
-- Botao "Historico" que abre um Sheet com a lista de prompts anteriores
-- Cada item mostra: data, primeiras linhas do prompt, botao "Restaurar"
-- Maximo de 10 versoes guardadas por unidade
+### O que muda
+Os chips de categorias poderao ser arrastados para reordenar. A nova ordem e salva automaticamente no banco (campo `sort_order` ja existe na tabela `categories`).
 
-### 3. Barra de Qualidade do Prompt
-Indicador visual que avalia a completude do prompt gerado em tempo real:
+### Implementacao
+- Usar HTML5 Drag and Drop API nativo (sem biblioteca extra)
+- Ao soltar, atualizar `sort_order` de todas as categorias afetadas via batch update
+- Indicador visual durante o arrasto (borda pontilhada, opacidade)
+- Feedback "Ordem salva!" via toast
 
-- Verificar se contem: saudacao, fluxo de atendimento, formas de pagamento, regras de formatacao, limites, escalacao humana
-- Barra de progresso colorida (vermelho -> amarelo -> verde)
-- Checklist visual mostrando quais secoes estao presentes e quais faltam
-- Calculado no frontend via regex simples no texto do prompt
+### Arquivo
+- `src/components/menu/CategoryChips.tsx` - adicionar handlers de drag
 
-### 4. Templates Prontos por Tipo de Negocio
-Oferecer templates pre-configurados baseados no tipo de negocio selecionado.
+---
 
-- Botao "Usar Template" que aparece quando o tipo de negocio e selecionado
-- Templates para: Pizzaria, Hamburgueria, Cafeteria, Padaria, Acaiteria, etc.
-- Pre-preenche `businessDescription`, `specialRules`, `voiceTone` e `botName` com valores tipicos
-- Usuario pode editar apos aplicar o template
+## 2. Variacoes de Produtos (P/M/G)
 
-### 5. Copiar Prompt com Um Clique
-Botao de copiar ao lado do campo de prompt gerado (atualmente so tem "Salvar").
+### Nova tabela: `product_variations`
 
-### 6. Contagem de Tokens Estimada
-Exibir estimativa de tokens do prompt (caracteres / 4) para o usuario ter nocao do tamanho.
+| Coluna | Tipo | Descricao |
+|---|---|---|
+| id | uuid (PK) | Identificador |
+| product_id | uuid (FK -> products) | Produto pai |
+| name | text | Nome da variacao (ex: "Grande", "500ml") |
+| price | numeric | Preco desta variacao |
+| delivery_price | numeric (nullable) | Preco delivery |
+| available | boolean (default true) | Disponibilidade |
+| sort_order | integer (default 0) | Ordem de exibicao |
+| created_at | timestamptz | Data de criacao |
 
-### 7. Secao de Cardapio Resumido (Nova Secao)
-Nova secao colapsavel "Cardapio" que carrega automaticamente os produtos do banco e permite o usuario selecionar quais incluir como contexto no prompt.
+RLS: mesmas politicas dos produtos (acesso via `unit_id` do produto pai usando subquery).
 
-- Busca produtos da unidade via `useProducts()`
-- Lista com checkboxes para selecionar categorias/produtos
-- Gera um resumo do cardapio que e enviado junto ao prompt para a IA
-- O bot tera conhecimento dos produtos reais disponíveis
+### Fluxo no Admin (Menu.tsx)
+- No dialog de produto, nova secao "Variacoes" abaixo dos campos de preco
+- Botao "+ Adicionar Variacao" com campos inline: nome e preco
+- Ao salvar o produto, salva as variacoes junto
+- Se o produto tem variacoes, o preco base fica como "a partir de R$ X"
+- Pode remover variacoes individuais
+
+### Fluxo no Cardapio Digital (CustomerOrder.tsx)
+- Ao clicar em "Adicionar" num produto com variacoes, abre um mini-dialog para selecionar qual variacao
+- Cada variacao vira um item separado no carrinho com o preco correto
+- O `order_items` recebe um novo campo `variation_name` (text, nullable) para registro
+
+### ProductCard
+- Se o produto tem variacoes, mostrar "A partir de R$ X" em vez do preco fixo
+- Badge indicando "X opcoes" ao lado do preco
+
+---
+
+## 3. Melhorias Extras Profissionais
+
+### 3a. Duplicar Produto
+- Botao "Duplicar" no ProductCard (icone Copy)
+- Cria uma copia do produto com nome "Copia de [nome]"
+- Copia tambem as variacoes
+- Util para criar produtos similares rapidamente
+
+### 3b. Filtro por Disponibilidade
+- Adicionar filtro "Todos / Disponiveis / Indisponiveis" na barra de filtros
+- Permite ao gestor ver rapidamente o que esta desativado
+
+### 3c. Acao em Lote (Bulk Actions)
+- Checkbox nos ProductCards para selecao multipla
+- Barra de acoes: "Ativar Selecionados", "Desativar Selecionados", "Excluir Selecionados"
+- Aparece apenas quando ha itens selecionados
+
+### 3d. Contagem de Pedidos por Produto
+- Exibir badge discreto no ProductCard mostrando quantas vezes o produto foi pedido (dados da tabela `order_items`)
+- Ajuda o gestor a identificar produtos mais populares
+
+### 3e. Exportar Cardapio
+- Botao "Exportar" no header que gera um CSV com todos os produtos
+- Campos: Nome, Categoria, Preco, Preco Delivery, Disponivel, Variacoes
+
+---
 
 ## Arquivos a Serem Criados/Modificados
 
 | Arquivo | Alteracao |
 |---|---|
-| `supabase/functions/test-bot-chat/index.ts` | Nova edge function para simular conversa com o prompt |
-| `src/components/settings/AIPromptGenerator.tsx` | Adicionar simulador, historico, barra de qualidade, templates, copiar, tokens |
-| `src/components/settings/ai-prompt/PromptQualityBar.tsx` | Novo componente de barra de qualidade |
-| `src/components/settings/ai-prompt/BotSimulator.tsx` | Novo componente de mini-chat simulado |
-| `src/components/settings/ai-prompt/PromptHistory.tsx` | Novo componente de historico de prompts |
-| `src/components/settings/ai-prompt/MenuContextSection.tsx` | Nova secao de cardapio resumido |
-| `src/components/settings/ai-prompt/BusinessTemplates.tsx` | Templates prontos por tipo de negocio |
-| Migracao SQL | Tabela `prompt_history` |
+| Migracao SQL | Tabela `product_variations`, campo `variation_name` em `order_items` |
+| `src/components/menu/CategoryChips.tsx` | Drag-and-drop para reordenar categorias |
+| `src/components/menu/ProductCard.tsx` | Botao duplicar, checkbox selecao, badge de pedidos, exibir variacoes |
+| `src/pages/Menu.tsx` | Secao de variacoes no form, filtro disponibilidade, bulk actions, exportar CSV, duplicar produto |
+| `src/pages/CustomerOrder.tsx` | Dialog de selecao de variacao ao adicionar produto com variacoes |
+| `src/hooks/useCustomerOrder.ts` | Suporte a `variation_name` no carrinho e no insert de order_items |
+
+---
 
 ## Detalhes Tecnicos
 
-### Simulador de Conversa (BotSimulator)
-- Usa streaming via `test-bot-chat` edge function
-- Envia o `system_prompt` atual + mensagens do usuario
-- Interface tipo WhatsApp (bolhas de chat, verde/cinza)
-- Botao "Limpar conversa" para resetar
-- Maximo 10 mensagens de teste por sessao
+### Drag-and-Drop (CategoryChips)
+Usando `draggable`, `onDragStart`, `onDragOver`, `onDrop` nativos do HTML5:
+- Cada chip recebe `draggable="true"`
+- Ao arrastar, armazena o indice de origem
+- Ao soltar, recalcula `sort_order` e faz batch update no banco
+- Animacao de transicao CSS durante o arrasto
 
-### Barra de Qualidade
-Verifica presenca no prompt via regex:
-- Saudacao/boas-vindas
-- Fluxo de atendimento (etapas numeradas)
-- Formas de pagamento
-- Regras de formatacao WhatsApp
-- Limites e proibicoes
-- Escalacao humana
-- Tool calling / funcoes
+### Variacoes - Migracao SQL
 
-Cada item encontrado = +1 ponto. Score de 0-7 mapeado para cores.
-
-### Templates de Negocio
-Dados estaticos no frontend com valores tipicos:
 ```text
-Pizzaria -> botName: "PizzaBot", voiceTone: "descontraido",
-            specialRules: "Pedido minimo R$30 para delivery..."
-Hamburgueria -> botName: "BurgerBot", voiceTone: "divertido"...
+product_variations
+  id UUID PK
+  product_id UUID FK -> products ON DELETE CASCADE
+  name TEXT NOT NULL
+  price NUMERIC NOT NULL
+  delivery_price NUMERIC
+  available BOOLEAN DEFAULT true
+  sort_order INTEGER DEFAULT 0
+  created_at TIMESTAMPTZ DEFAULT now()
+
+order_items
+  + variation_name TEXT (nullable) -- novo campo
 ```
 
-### Historico de Prompts (Tabela)
-```text
-prompt_history
-  - id (uuid, PK)
-  - unit_id (uuid, FK -> units)
-  - prompt_text (text)
-  - form_data (jsonb)
-  - created_at (timestamptz)
-```
-RLS: usuarios autenticados podem ler/inserir da propria unidade.
+### Bulk Actions
+- Estado `selectedProducts: Set<string>` no Menu.tsx
+- Checkbox no canto superior esquerdo de cada ProductCard
+- Barra flutuante na parte inferior quando ha selecao ativa
+- Chamadas em batch via Promise.all para performance
 
-### Secao de Cardapio
-- Carrega produtos e categorias existentes
-- Gera resumo tipo: "Categorias: Lanches (5 itens), Bebidas (8 itens)..."
-- Envia como campo adicional `menuSummary` para a edge function
-- O META_PROMPT da edge function sera atualizado para considerar o resumo do cardapio
+### Exportar CSV
+- Gerar string CSV no frontend com `products` + `product_variations`
+- Download via `Blob` e `URL.createObjectURL`
+- Sem necessidade de backend
+
