@@ -1,10 +1,11 @@
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useUnit } from "@/contexts/UnitContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -48,9 +49,16 @@ import {
   X,
   ArrowUpDown,
   FilterX,
+  Download,
+  Eye,
+  EyeOff,
+  Layers,
+  Power,
+  PowerOff,
 } from "lucide-react";
 import { ProductCard } from "@/components/menu/ProductCard";
 import { CategoryChips } from "@/components/menu/CategoryChips";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface Category {
   id: string;
@@ -58,6 +66,16 @@ interface Category {
   description: string | null;
   sort_order: number;
   active: boolean;
+}
+
+interface ProductVariation {
+  id: string;
+  product_id: string;
+  name: string;
+  price: number;
+  delivery_price: number | null;
+  available: boolean;
+  sort_order: number;
 }
 
 interface Product {
@@ -72,9 +90,20 @@ interface Product {
   image_url?: string | null;
   created_at?: string;
   categories?: Category;
+  variations?: ProductVariation[];
 }
 
 type SortOption = "name-asc" | "name-desc" | "price-asc" | "price-desc" | "recent";
+type AvailabilityFilter = "all" | "available" | "unavailable";
+
+// Variation form item
+interface VariationFormItem {
+  id?: string;
+  name: string;
+  price: string;
+  delivery_price: string;
+  _deleted?: boolean;
+}
 
 export default function Menu() {
   const { selectedUnit } = useUnit();
@@ -84,6 +113,14 @@ export default function Menu() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [sortBy, setSortBy] = useState<SortOption>("name-asc");
+  const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>("all");
+
+  // Bulk selection
+  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+
+  // Order counts
+  const [orderCounts, setOrderCounts] = useState<Record<string, number>>({});
 
   // Product dialog state
   const [productDialogOpen, setProductDialogOpen] = useState(false);
@@ -96,6 +133,7 @@ export default function Menu() {
     category_id: "",
     preparation_time: "15",
   });
+  const [variationsForm, setVariationsForm] = useState<VariationFormItem[]>([]);
   const [savingProduct, setSavingProduct] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -129,7 +167,7 @@ export default function Menu() {
     if (!selectedUnit) return;
     setLoading(true);
     try {
-      const [categoriesRes, productsRes] = await Promise.all([
+      const [categoriesRes, productsRes, variationsRes, orderCountsRes] = await Promise.all([
         supabase
           .from("categories")
           .select("*")
@@ -140,11 +178,52 @@ export default function Menu() {
           .select("*, categories(*)")
           .eq("unit_id", selectedUnit.id)
           .order("name"),
+        supabase
+          .from("product_variations")
+          .select("*")
+          .in(
+            "product_id",
+            (await supabase.from("products").select("id").eq("unit_id", selectedUnit.id)).data?.map(
+              (p) => p.id
+            ) || []
+          )
+          .order("sort_order"),
+        supabase
+          .from("order_items")
+          .select("product_id, quantity")
+          .not("product_id", "is", null),
       ]);
+
       if (categoriesRes.error) throw categoriesRes.error;
       if (productsRes.error) throw productsRes.error;
+
+      // Map variations to products
+      const variationsMap: Record<string, ProductVariation[]> = {};
+      if (variationsRes.data) {
+        variationsRes.data.forEach((v: any) => {
+          if (!variationsMap[v.product_id]) variationsMap[v.product_id] = [];
+          variationsMap[v.product_id].push(v);
+        });
+      }
+
+      const productsWithVariations = (productsRes.data || []).map((p: any) => ({
+        ...p,
+        variations: variationsMap[p.id] || [],
+      }));
+
+      // Count orders per product
+      const counts: Record<string, number> = {};
+      if (orderCountsRes.data) {
+        orderCountsRes.data.forEach((item: any) => {
+          if (item.product_id) {
+            counts[item.product_id] = (counts[item.product_id] || 0) + item.quantity;
+          }
+        });
+      }
+
       setCategories(categoriesRes.data || []);
-      setProducts(productsRes.data || []);
+      setProducts(productsWithVariations);
+      setOrderCounts(counts);
     } catch (error: any) {
       console.error("Error fetching menu data:", error);
       toast.error("Erro ao carregar dados");
@@ -208,6 +287,15 @@ export default function Menu() {
       });
       setImagePreview(product.image_url || null);
       setImageFile(null);
+      // Load variations
+      setVariationsForm(
+        (product.variations || []).map((v) => ({
+          id: v.id,
+          name: v.name,
+          price: String(v.price),
+          delivery_price: v.delivery_price ? String(v.delivery_price) : "",
+        }))
+      );
     } else {
       setEditingProduct(null);
       setProductForm({
@@ -220,8 +308,30 @@ export default function Menu() {
       });
       setImagePreview(null);
       setImageFile(null);
+      setVariationsForm([]);
     }
     setProductDialogOpen(true);
+  };
+
+  const addVariation = () => {
+    setVariationsForm((prev) => [...prev, { name: "", price: "", delivery_price: "" }]);
+  };
+
+  const updateVariation = (index: number, field: keyof VariationFormItem, value: string) => {
+    setVariationsForm((prev) =>
+      prev.map((v, i) => (i === index ? { ...v, [field]: value } : v))
+    );
+  };
+
+  const removeVariation = (index: number) => {
+    setVariationsForm((prev) => {
+      const item = prev[index];
+      if (item.id) {
+        // Mark for deletion
+        return prev.map((v, i) => (i === index ? { ...v, _deleted: true } : v));
+      }
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   const handleSaveProduct = async (e: React.FormEvent) => {
@@ -231,11 +341,9 @@ export default function Menu() {
     try {
       let imageUrl: string | null | undefined = undefined;
 
-      // Upload new image if selected
       if (imageFile) {
         imageUrl = await uploadImage();
       } else if (imagePreview === null && editingProduct?.image_url) {
-        // Image was removed
         imageUrl = null;
       }
 
@@ -250,15 +358,49 @@ export default function Menu() {
         ...(imageUrl !== undefined ? { image_url: imageUrl } : {}),
       };
 
+      let productId: string;
+
       if (editingProduct) {
         const { error } = await supabase.from("products").update(baseData).eq("id", editingProduct.id);
         if (error) throw error;
-        toast.success("Produto atualizado!");
+        productId = editingProduct.id;
       } else {
-        const { error } = await supabase.from("products").insert(baseData);
+        const { data, error } = await supabase.from("products").insert(baseData).select("id").single();
         if (error) throw error;
-        toast.success("Produto criado!");
+        productId = data.id;
       }
+
+      // Handle variations
+      const activeVariations = variationsForm.filter((v) => !v._deleted);
+      const deletedVariations = variationsForm.filter((v) => v._deleted && v.id);
+
+      // Delete removed variations
+      if (deletedVariations.length > 0) {
+        await supabase
+          .from("product_variations")
+          .delete()
+          .in("id", deletedVariations.map((v) => v.id!));
+      }
+
+      // Upsert active variations
+      for (let i = 0; i < activeVariations.length; i++) {
+        const v = activeVariations[i];
+        if (!v.name || !v.price) continue;
+        const varData = {
+          product_id: productId,
+          name: v.name,
+          price: parseFloat(v.price),
+          delivery_price: v.delivery_price ? parseFloat(v.delivery_price) : null,
+          sort_order: i,
+        };
+        if (v.id) {
+          await supabase.from("product_variations").update(varData).eq("id", v.id);
+        } else {
+          await supabase.from("product_variations").insert(varData);
+        }
+      }
+
+      toast.success(editingProduct ? "Produto atualizado!" : "Produto criado!");
       setProductDialogOpen(false);
       fetchData();
     } catch (error: any) {
@@ -299,6 +441,119 @@ export default function Menu() {
     } catch {
       toast.error("Erro ao excluir produto");
     }
+  };
+
+  // Duplicate product
+  const handleDuplicateProduct = async (product: Product) => {
+    if (!selectedUnit) return;
+    try {
+      const { data, error } = await supabase
+        .from("products")
+        .insert({
+          unit_id: selectedUnit.id,
+          name: `Cópia de ${product.name}`,
+          description: product.description,
+          price: product.price,
+          delivery_price: product.delivery_price,
+          category_id: product.category_id,
+          preparation_time: product.preparation_time,
+          image_url: product.image_url,
+          available: product.available,
+        })
+        .select("id")
+        .single();
+      if (error) throw error;
+
+      // Copy variations
+      if (product.variations && product.variations.length > 0) {
+        const variationsCopy = product.variations.map((v) => ({
+          product_id: data.id,
+          name: v.name,
+          price: v.price,
+          delivery_price: v.delivery_price,
+          available: v.available,
+          sort_order: v.sort_order,
+        }));
+        await supabase.from("product_variations").insert(variationsCopy);
+      }
+
+      toast.success("Produto duplicado!");
+      fetchData();
+    } catch {
+      toast.error("Erro ao duplicar produto");
+    }
+  };
+
+  // Bulk actions
+  const toggleSelectProduct = (productId: string, selected: boolean) => {
+    setSelectedProducts((prev) => {
+      const next = new Set(prev);
+      if (selected) next.add(productId);
+      else next.delete(productId);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedProducts(new Set(filteredProducts.map((p) => p.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedProducts(new Set());
+  };
+
+  const handleBulkAction = async (action: "activate" | "deactivate" | "delete") => {
+    if (selectedProducts.size === 0) return;
+    setBulkProcessing(true);
+    try {
+      const ids = Array.from(selectedProducts);
+      if (action === "delete") {
+        const { error } = await supabase.from("products").delete().in("id", ids);
+        if (error) throw error;
+        toast.success(`${ids.length} produto(s) excluído(s)!`);
+      } else {
+        const available = action === "activate";
+        const { error } = await supabase
+          .from("products")
+          .update({ available })
+          .in("id", ids);
+        if (error) throw error;
+        toast.success(`${ids.length} produto(s) ${available ? "ativado(s)" : "desativado(s)"}!`);
+      }
+      clearSelection();
+      fetchData();
+    } catch {
+      toast.error("Erro na ação em lote");
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
+  // Export CSV
+  const exportCSV = () => {
+    const headers = ["Nome", "Categoria", "Preço", "Preço Delivery", "Disponível", "Tempo Preparo", "Variações"];
+    const rows = products.map((p) => {
+      const vars = (p.variations || []).map((v) => `${v.name}: R$${v.price.toFixed(2)}`).join("; ");
+      return [
+        p.name,
+        p.categories?.name || "Sem categoria",
+        p.price.toFixed(2),
+        p.delivery_price?.toFixed(2) || "",
+        p.available ? "Sim" : "Não",
+        String(p.preparation_time),
+        vars,
+      ];
+    });
+
+    const csvContent = [headers.join(","), ...rows.map((r) => r.map((c) => `"${c}"`).join(","))].join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `cardapio_${new Date().toISOString().split("T")[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("Cardápio exportado!");
   };
 
   // Category CRUD
@@ -367,6 +622,10 @@ export default function Menu() {
     }
   };
 
+  const handleCategoryReorder = (reorderedCategories: Category[]) => {
+    setCategories(reorderedCategories);
+  };
+
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
@@ -394,10 +653,12 @@ export default function Menu() {
       const matchesCategory =
         filterCategory === "all" ||
         (filterCategory === "uncategorized" ? !product.category_id : product.category_id === filterCategory);
-      return matchesSearch && matchesCategory;
+      const matchesAvailability =
+        availabilityFilter === "all" ||
+        (availabilityFilter === "available" ? product.available : !product.available);
+      return matchesSearch && matchesCategory && matchesAvailability;
     });
 
-    // Sort
     result.sort((a, b) => {
       switch (sortBy) {
         case "name-asc": return a.name.localeCompare(b.name);
@@ -410,15 +671,18 @@ export default function Menu() {
     });
 
     return result;
-  }, [products, searchTerm, filterCategory, sortBy]);
+  }, [products, searchTerm, filterCategory, sortBy, availabilityFilter]);
 
-  const hasActiveFilters = searchTerm || filterCategory !== "all" || sortBy !== "name-asc";
+  const hasActiveFilters = searchTerm || filterCategory !== "all" || sortBy !== "name-asc" || availabilityFilter !== "all";
 
   const clearFilters = () => {
     setSearchTerm("");
     setFilterCategory("all");
     setSortBy("name-asc");
+    setAvailabilityFilter("all");
   };
+
+  const selectionMode = selectedProducts.size > 0;
 
   if (loading) {
     return (
@@ -438,7 +702,11 @@ export default function Menu() {
             Gerencie produtos e categorias do seu cardápio
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={exportCSV}>
+            <Download className="w-4 h-4 mr-1" />
+            Exportar
+          </Button>
           <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" size="sm" onClick={() => openCategoryDialog()}>
@@ -567,7 +835,7 @@ export default function Menu() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Preço *</Label>
+                      <Label>Preço Base *</Label>
                       <Input
                         type="number"
                         step="0.01"
@@ -616,6 +884,61 @@ export default function Menu() {
                         onChange={(e) => setProductForm({ ...productForm, preparation_time: e.target.value })}
                       />
                     </div>
+                  </div>
+
+                  {/* Variations Section */}
+                  <div className="space-y-3 pt-2 border-t border-border">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-1.5">
+                        <Layers className="w-4 h-4" />
+                        Variações (P/M/G)
+                      </Label>
+                      <Button type="button" variant="outline" size="sm" onClick={addVariation}>
+                        <Plus className="w-3 h-3 mr-1" />
+                        Adicionar
+                      </Button>
+                    </div>
+                    {variationsForm.filter((v) => !v._deleted).length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Nenhuma variação. Adicione para oferecer tamanhos ou sabores com preços diferentes.
+                      </p>
+                    )}
+                    {variationsForm.map((variation, index) =>
+                      variation._deleted ? null : (
+                        <div key={index} className="flex gap-2 items-end">
+                          <div className="flex-1 space-y-1">
+                            <Label className="text-xs">Nome</Label>
+                            <Input
+                              value={variation.name}
+                              onChange={(e) => updateVariation(index, "name", e.target.value)}
+                              placeholder="Ex: Grande"
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <div className="w-24 space-y-1">
+                            <Label className="text-xs">Preço</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={variation.price}
+                              onChange={(e) => updateVariation(index, "price", e.target.value)}
+                              placeholder="0,00"
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0"
+                            onClick={() => removeVariation(index)}
+                          >
+                            <X className="w-3.5 h-3.5 text-destructive" />
+                          </Button>
+                        </div>
+                      )
+                    )}
                   </div>
                 </div>
                 <DialogFooter>
@@ -670,10 +993,11 @@ export default function Menu() {
           onFilterChange={setFilterCategory}
           onEditCategory={openCategoryDialog}
           productCounts={productCounts}
+          onReorder={handleCategoryReorder}
         />
       )}
 
-      {/* Search + Sort */}
+      {/* Search + Sort + Filters */}
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -684,7 +1008,20 @@ export default function Menu() {
             className="pl-9"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {/* Availability filter */}
+          <Select value={availabilityFilter} onValueChange={(v) => setAvailabilityFilter(v as AvailabilityFilter)}>
+            <SelectTrigger className="w-[140px]">
+              {availabilityFilter === "all" ? <Eye className="w-3.5 h-3.5 mr-1.5 shrink-0" /> : availabilityFilter === "available" ? <Eye className="w-3.5 h-3.5 mr-1.5 shrink-0" /> : <EyeOff className="w-3.5 h-3.5 mr-1.5 shrink-0" />}
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="available">Disponíveis</SelectItem>
+              <SelectItem value="unavailable">Indisponíveis</SelectItem>
+            </SelectContent>
+          </Select>
+
           <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
             <SelectTrigger className="w-[160px]">
               <ArrowUpDown className="w-3.5 h-3.5 mr-1.5 shrink-0" />
@@ -706,6 +1043,52 @@ export default function Menu() {
         </div>
       </div>
 
+      {/* Bulk selection bar */}
+      {filteredProducts.length > 0 && (
+        <div className="flex items-center gap-3 text-sm">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={selectedProducts.size === filteredProducts.length && filteredProducts.length > 0}
+              onCheckedChange={(checked) => (checked ? selectAll() : clearSelection())}
+            />
+            <span className="text-muted-foreground">
+              {selectionMode ? `${selectedProducts.size} selecionado(s)` : "Selecionar"}
+            </span>
+          </div>
+          {selectionMode && (
+            <div className="flex gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleBulkAction("activate")}
+                disabled={bulkProcessing}
+              >
+                <Power className="w-3.5 h-3.5 mr-1" />
+                Ativar
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleBulkAction("deactivate")}
+                disabled={bulkProcessing}
+              >
+                <PowerOff className="w-3.5 h-3.5 mr-1" />
+                Desativar
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => handleBulkAction("delete")}
+                disabled={bulkProcessing}
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1" />
+                Excluir
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Results indicator */}
       {hasActiveFilters && (
         <p className="text-xs text-muted-foreground">
@@ -723,8 +1106,13 @@ export default function Menu() {
               onEdit={openProductDialog}
               onDelete={confirmDeleteProduct}
               onToggleAvailability={handleToggleProductAvailability}
+              onDuplicate={handleDuplicateProduct}
               formatCurrency={formatCurrency}
               index={index}
+              selected={selectedProducts.has(product.id)}
+              onSelect={toggleSelectProduct}
+              selectionMode={selectionMode}
+              orderCount={orderCounts[product.id]}
             />
           ))}
         </div>

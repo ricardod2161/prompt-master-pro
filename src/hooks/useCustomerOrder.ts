@@ -7,6 +7,8 @@ export type CartItem = {
   product: Tables<"products">;
   quantity: number;
   notes?: string;
+  variationName?: string;
+  variationPrice?: number;
 };
 
 export type CustomerInfo = {
@@ -101,17 +103,22 @@ export function useCustomerOrder(tableId: string) {
   });
 
   // Cart management - memoized callbacks
-  const addToCart = useCallback((product: Tables<"products">, quantity: number = 1, notes?: string) => {
+  const addToCart = useCallback((product: Tables<"products">, quantity: number = 1, notes?: string, variationName?: string, variationPrice?: number) => {
     setCart((prev) => {
-      const existing = prev.find((item) => item.product.id === product.id);
+      const cartKey = variationName ? `${product.id}_${variationName}` : product.id;
+      const existing = prev.find((item) => {
+        const itemKey = item.variationName ? `${item.product.id}_${item.variationName}` : item.product.id;
+        return itemKey === cartKey;
+      });
       if (existing) {
-        return prev.map((item) =>
-          item.product.id === product.id
+        return prev.map((item) => {
+          const itemKey = item.variationName ? `${item.product.id}_${item.variationName}` : item.product.id;
+          return itemKey === cartKey
             ? { ...item, quantity: item.quantity + quantity, notes: notes || item.notes }
-            : item
-        );
+            : item;
+        });
       }
-      return [...prev, { product, quantity, notes }];
+      return [...prev, { product, quantity, notes, variationName, variationPrice }];
     });
   }, []);
 
@@ -137,7 +144,10 @@ export function useCustomerOrder(tableId: string) {
 
   // Memoized cart calculations
   const cartTotal = useMemo(() => 
-    cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0),
+    cart.reduce((sum, item) => {
+      const price = item.variationPrice ?? item.product.price;
+      return sum + price * item.quantity;
+    }, 0),
     [cart]
   );
 
@@ -183,15 +193,21 @@ export function useCustomerOrder(tableId: string) {
       if (orderError) throw orderError;
 
       // Create order items
-      const orderItems = cart.map((item) => ({
-        order_id: order.id,
-        product_id: item.product.id,
-        product_name: item.product.name,
-        quantity: item.quantity,
-        unit_price: item.product.price,
-        total_price: item.product.price * item.quantity,
-        notes: item.notes || null,
-      }));
+      const orderItems = cart.map((item) => {
+        const price = item.variationPrice ?? item.product.price;
+        return {
+          order_id: order.id,
+          product_id: item.product.id,
+          product_name: item.variationName
+            ? `${item.product.name} (${item.variationName})`
+            : item.product.name,
+          quantity: item.quantity,
+          unit_price: price,
+          total_price: price * item.quantity,
+          notes: item.notes || null,
+          variation_name: item.variationName || null,
+        };
+      });
 
       const { error: itemsError } = await supabase
         .from("order_items")
