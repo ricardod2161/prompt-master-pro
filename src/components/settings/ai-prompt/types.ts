@@ -78,3 +78,50 @@ export const EMOJI_LEVELS = [
   { value: "moderado", label: "Moderado" },
   { value: "bastante", label: "Bastante" },
 ];
+
+export interface UnitSettingsForMapping {
+  opening_hours: {
+    monday: { open: string; close: string; closed: boolean };
+  };
+  payment_methods: {
+    cash: boolean;
+    credit: boolean;
+    debit: boolean;
+    pix: boolean;
+    voucher: boolean;
+  };
+  pix_key?: string | null;
+  delivery_enabled: boolean;
+  delivery_fee: number;
+  default_preparation_time: number;
+  counter_ordering_enabled?: boolean;
+}
+
+export function mapUnitSettingsToPromptFormData(
+  settings: UnitSettingsForMapping | null
+): Partial<PromptFormData> {
+  if (!settings) return {};
+
+  const paymentMethods: string[] = [];
+  if (settings.payment_methods?.pix) paymentMethods.push("pix");
+  if (settings.payment_methods?.credit) paymentMethods.push("credito");
+  if (settings.payment_methods?.debit) paymentMethods.push("debito");
+  if (settings.payment_methods?.cash) paymentMethods.push("dinheiro");
+  if (settings.payment_methods?.voucher) paymentMethods.push("vale_refeicao");
+
+  const mondayHours = settings.opening_hours?.monday;
+
+  return {
+    operatingHours: mondayHours
+      ? { open: mondayHours.open, close: mondayHours.close }
+      : undefined,
+    paymentMethods: paymentMethods.length > 0 ? paymentMethods : undefined,
+    pixKey: settings.pix_key || "",
+    hasDelivery: settings.delivery_enabled ?? false,
+    deliveryFee: settings.delivery_fee?.toString() || "0",
+    hasPickup: settings.counter_ordering_enabled ?? true,
+    avgPrepTime: settings.default_preparation_time
+      ? `${settings.default_preparation_time} min`
+      : "",
+  };
+}

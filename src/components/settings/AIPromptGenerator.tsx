@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { Sparkles, Loader2, Save, RotateCcw, ChevronDown, Store, Clock, Smile, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { defaultFormData, type PromptFormData } from "./ai-prompt/types";
+import { defaultFormData, mapUnitSettingsToPromptFormData, type PromptFormData } from "./ai-prompt/types";
+import { useUnitSettings } from "@/hooks/useUnitSettings";
 import { BasicSection } from "./ai-prompt/BasicSection";
 import { OperationalSection } from "./ai-prompt/OperationalSection";
 import { PersonalitySection } from "./ai-prompt/PersonalitySection";
@@ -36,6 +37,8 @@ export function AIPromptGenerator({
   onPromptChange,
 }: AIPromptGeneratorProps) {
   const { toast } = useToast();
+  const { settings, isLoading: isLoadingSettings } = useUnitSettings();
+  const [dataLoaded, setDataLoaded] = useState(false);
   const [formData, setFormData] = useState<PromptFormData>({
     ...defaultFormData,
     restaurantName: unitName,
@@ -49,6 +52,20 @@ export function AIPromptGenerator({
     personality: false,
     rules: false,
   });
+
+  // Auto-prefill form with unit_settings data
+  useEffect(() => {
+    if (!dataLoaded && settings && !isLoadingSettings) {
+      const mapped = mapUnitSettingsToPromptFormData(settings);
+      setFormData((prev) => ({
+        ...prev,
+        ...Object.fromEntries(
+          Object.entries(mapped).filter(([, v]) => v !== undefined)
+        ),
+      }));
+      setDataLoaded(true);
+    }
+  }, [settings, isLoadingSettings, dataLoaded]);
 
   const prompt = externalPrompt !== undefined ? externalPrompt : generatedPrompt;
 
@@ -142,7 +159,14 @@ export function AIPromptGenerator({
   };
 
   const handleReset = () => {
-    setFormData({ ...defaultFormData, restaurantName: unitName });
+    const mapped = settings ? mapUnitSettingsToPromptFormData(settings) : {};
+    setFormData({
+      ...defaultFormData,
+      restaurantName: unitName,
+      ...Object.fromEntries(
+        Object.entries(mapped).filter(([, v]) => v !== undefined)
+      ),
+    });
     if (onPromptChange) onPromptChange("");
     else setGeneratedPrompt("");
   };
