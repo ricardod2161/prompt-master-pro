@@ -44,7 +44,7 @@ export function useTables() {
           filter: `unit_id=eq.${selectedUnit.id}`,
         },
         () => {
-          queryClient.invalidateQueries({ queryKey: ["tables", selectedUnit.id] });
+          queryClient.refetchQueries({ queryKey: ["tables", selectedUnit.id] });
         }
       )
       .subscribe();
@@ -62,7 +62,7 @@ export function useCreateTable() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ number, capacity = 4 }: { number: number; capacity?: number }) => {
+    mutationFn: async ({ number, capacity = 4, silent = false }: { number: number; capacity?: number; silent?: boolean }) => {
       if (!selectedUnit?.id) throw new Error("No unit selected");
 
       const { data, error } = await supabase
@@ -72,23 +72,27 @@ export function useCreateTable() {
           number,
           status: "free",
           capacity,
-        } as any)
+        })
         .select()
         .single();
 
       if (error) throw error;
-      return data;
+      return { data, silent };
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tables"] });
-      toast({ title: "Mesa criada com sucesso!" });
+    onSuccess: (result) => {
+      queryClient.refetchQueries({ queryKey: ["tables"] });
+      if (!result.silent) {
+        toast({ title: "Mesa criada com sucesso!" });
+      }
     },
-    onError: (error) => {
-      toast({
-        title: "Erro ao criar mesa",
-        description: error.message,
-        variant: "destructive",
-      });
+    onError: (error, variables) => {
+      if (!(variables as any).silent) {
+        toast({
+          title: "Erro ao criar mesa",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
     },
   });
 }
@@ -112,7 +116,7 @@ export function useUpdateTableStatus() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tables"] });
+      queryClient.refetchQueries({ queryKey: ["tables"] });
     },
   });
 }
@@ -130,7 +134,7 @@ export function useDeleteTable() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tables"] });
+      queryClient.refetchQueries({ queryKey: ["tables"] });
       toast({ title: "Mesa removida!" });
     },
     onError: (error) => {
@@ -159,7 +163,7 @@ export function useGenerateQRCode() {
       return qrCode;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tables"] });
+      queryClient.refetchQueries({ queryKey: ["tables"] });
       toast({ title: "QR Code gerado!" });
     },
   });
