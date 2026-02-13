@@ -529,6 +529,7 @@ export default function CustomerOrder() {
     orderNumber,
     orderId,
     resetOrder,
+    unitSettings,
   } = useCustomerOrder(tableId || "");
 
   // Use table bill hook
@@ -858,6 +859,7 @@ export default function CustomerOrder() {
                       changeFor={changeFor}
                       onChangeForChange={setChangeFor}
                       cartTotal={cartTotal}
+                      pixConfig={unitSettings}
                     />
                   </div>
                 </>
@@ -937,6 +939,7 @@ export default function CustomerOrder() {
         onCloseBill={closeBill}
         closingBill={closingBill}
         billClosed={billClosed}
+        pixConfig={unitSettings}
       />
     </div>
   );

@@ -28,6 +28,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 import { SplitBillSheet } from "./SplitBillSheet";
+import { PixPaymentCard } from "./PixPaymentCard";
 
 type OrderWithItems = Tables<"orders"> & {
   order_items: Tables<"order_items">[];
@@ -46,6 +47,11 @@ interface TableBillSheetProps {
   onCloseBill: (phone: string) => Promise<unknown>;
   closingBill: boolean;
   billClosed: boolean;
+  pixConfig?: {
+    pix_key: string;
+    pix_merchant_name: string | null;
+    pix_merchant_city: string | null;
+  } | null;
 }
 
 // Order item row component
@@ -224,6 +230,7 @@ export const TableBillSheet = memo(function TableBillSheet({
   onCloseBill,
   closingBill,
   billClosed,
+  pixConfig,
 }: TableBillSheetProps) {
   const [phone, setPhone] = useState("");
   const [showPhoneInput, setShowPhoneInput] = useState(false);
@@ -311,6 +318,16 @@ export const TableBillSheet = memo(function TableBillSheet({
                 {orders.map((order, index) => (
                   <OrderCard key={order.id} order={order} index={index} />
                 ))}
+
+                {/* Pix Payment */}
+                {pixConfig?.pix_key && billTotal > 0 && (
+                  <PixPaymentCard
+                    pixKey={pixConfig.pix_key}
+                    merchantName={pixConfig.pix_merchant_name || "RESTAURANTE"}
+                    merchantCity={pixConfig.pix_merchant_city || "BRASIL"}
+                    amount={billTotal}
+                  />
+                )}
 
                 {/* Phone input for closing bill */}
                 {showPhoneInput && (
@@ -427,6 +444,7 @@ export const TableBillSheet = memo(function TableBillSheet({
             setShowSplitBill(false);
             onOpenChange(false);
           }}
+          pixConfig={pixConfig}
         />
       </SheetContent>
     </Sheet>
