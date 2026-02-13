@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Play, Star, Sparkles } from "lucide-react";
+import { trackPixelEvent } from "@/hooks/usePixelTracking";
 
 export function HeroSection() {
   return (
@@ -47,7 +48,7 @@ export function HeroSection() {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12 animate-fade-in">
-            <Link to="/login">
+            <Link to="/login" onClick={() => trackPixelEvent("StartTrial", { content_name: "hero_cta" })}>
               <Button size="lg" className="group h-12 px-8 text-base">
                 Começar Gratuitamente
                 <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />

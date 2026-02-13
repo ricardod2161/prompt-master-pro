@@ -2,6 +2,7 @@ import { useState } from "react";
 import { MessageCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { trackPixelEvent } from "@/hooks/usePixelTracking";
 
 const WHATSAPP_NUMBER = "5598982549505";
 const DEFAULT_MESSAGE = "Olá! Gostaria de saber mais sobre o RestaurantOS para meu restaurante.";
@@ -10,6 +11,7 @@ export function FloatingWhatsApp() {
   const [isOpen, setIsOpen] = useState(false);
 
   const handleWhatsAppClick = () => {
+    trackPixelEvent("Contact", { content_name: "whatsapp_floating", content_category: "landing_page" });
     const encodedMessage = encodeURIComponent(DEFAULT_MESSAGE);
     window.open(
       `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMessage}`,

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import { trackPixelEvent, trackPixelCustomEvent } from "@/hooks/usePixelTracking";
 
 // Mock data for demos
 const MOCK_PRODUCTS = [
@@ -353,7 +354,7 @@ export function InteractiveDemoSection() {
 
           {/* CTA */}
           <div className="text-center mt-10">
-            <Button size="lg" onClick={() => navigate("/login")}>
+            <Button size="lg" onClick={() => { trackPixelEvent("StartTrial", { content_name: "demo_section" }); navigate("/login"); }}>
               Começar Gratuitamente →
             </Button>
             <p className="text-sm text-muted-foreground mt-3">
