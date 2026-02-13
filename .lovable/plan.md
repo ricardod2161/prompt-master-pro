@@ -1,78 +1,50 @@
 
-# Pix Integrado na Interface da Mesa e WhatsApp
 
-## Contexto
-Atualmente o codigo Pix "copia e cola" ja e enviado via WhatsApp nas notificacoes (confirmacao de pedido, fechamento de conta, pagamento parcial). Porem, **na interface visual** do cardapio digital (mesa), o codigo Pix nao aparece em nenhum momento para o cliente.
+## Plano: Enviar audio apenas quando o cliente pedir explicitamente
 
-O objetivo e: quando o cliente escolher "Pix" como forma de pagamento, exibir o QR Code e o codigo copia-e-cola diretamente na tela, tanto no checkout quanto no sheet da conta da mesa.
+### Problema atual
+No modo `auto`, a funcao `shouldSendAsAudio` envia resposta em audio sempre que o cliente envia uma mensagem de audio. O usuario quer que o bot so responda em audio quando o cliente **pedir explicitamente** por voz/audio no texto da mensagem.
 
----
+### Mudanca proposta
 
-## O que sera feito
+Modificar a funcao `shouldSendAsAudio` no arquivo `supabase/functions/whatsapp-webhook/index.ts` para:
 
-### 1. Buscar configuracao Pix da unidade no CustomerOrder
-- Criar uma query no `useCustomerOrder.ts` que busca `pix_key`, `pix_merchant_name` e `pix_merchant_city` da tabela `unit_settings` usando o `unit_id` da mesa
-- Retornar esses dados para uso nos componentes
+1. **Remover** a logica que envia audio automaticamente quando o cliente envia audio (`lastUserMessageWasAudio`)
+2. **Adicionar** um novo parametro `userMessageText` que sera analisado para detectar pedidos explicitos de audio
+3. Detectar frases como:
+   - "manda em audio", "envia em audio", "fala em audio"
+   - "manda por voz", "envia por voz", "responde em voz"
+   - "quero ouvir", "manda audio", "envia audio"
+   - "pode falar", "fala pra mim"
+   - E variacoes similares
 
-### 2. Mostrar Pix no PaymentMethodSelector quando "Pix" for selecionado
-- Quando o cliente selecionar "Pix", exibir abaixo das opcoes:
-  - QR Code do Pix (usando `qrcode.react` que ja esta instalado)
-  - Codigo copia-e-cola completo com botao "Copiar"
-  - Valor total do pedido formatado
-- Usar `generatePixCode()` do `src/lib/pix-generator.ts` para gerar o codigo EMV
-- Design em tons de esmeralda, consistente com a pagina de tracking
+### Detalhes tecnicos
 
-### 3. Mostrar Pix no TableBillSheet ao fechar conta
-- Adicionar secao de Pix no footer do TableBillSheet, visivel quando a unidade tem `pix_key` configurada
-- Exibir QR Code + codigo copia-e-cola para o valor total da conta
-- Botao "Copiar Pix" com feedback visual e haptico
+**Arquivo:** `supabase/functions/whatsapp-webhook/index.ts`
 
-### 4. Mostrar Pix no SplitBillSheet (pagamento parcial)
-- Quando o cliente divide a conta e seleciona seu valor, gerar Pix para o valor parcial
-- Mesmo padrao visual do TableBillSheet
+**1. Atualizar a funcao `shouldSendAsAudio` (linhas ~2470-2491):**
+- Adicionar parametro `userMessageText: string`
+- No modo `auto`: verificar se o texto do usuario contem pedido explicito de audio em vez de checar se a ultima mensagem foi audio
+- Modo `always` continua funcionando como antes
+- Modo `disabled` continua desativado
 
----
+**2. Atualizar a chamada da funcao (linha ~2102):**
+- Passar o conteudo da mensagem do usuario (variavel `userText` ou `transcribedContent`) como novo parametro
 
-## Arquivos a modificar
-
-| Arquivo | Alteracao |
-|---|---|
-| `src/hooks/useCustomerOrder.ts` | Adicionar query de `unit_settings` para buscar dados Pix |
-| `src/components/customer-order/PaymentMethodSelector.tsx` | Exibir QR Code + codigo quando Pix selecionado |
-| `src/components/customer-order/TableBillSheet.tsx` | Secao de Pix com QR Code no footer |
-| `src/components/customer-order/SplitBillSheet.tsx` | Pix para valor parcial |
-
-### Nenhuma alteracao no backend
-O WhatsApp ja envia o codigo Pix corretamente. As mudancas sao puramente no frontend.
-
----
-
-## Detalhes Tecnicos
-
-### Geracao do codigo Pix no frontend
-Reutilizar `generatePixCode()` de `src/lib/pix-generator.ts` que ja esta implementado e testado:
-
-```text
-import { generatePixCode } from "@/lib/pix-generator";
-import { QRCodeSVG } from "qrcode.react";
-
-const pixCode = generatePixCode({
-  pixKey: unitSettings.pix_key,
-  merchantName: unitSettings.pix_merchant_name || "RESTAURANTE",
-  merchantCity: unitSettings.pix_merchant_city || "BRASIL",
-  amount: totalValue,
-  transactionId: `PED${orderNumber}`,
-});
+**Palavras-chave detectadas (case-insensitive, sem acento):**
+```
+"manda em audio", "envia em audio", "responde em audio",
+"manda por voz", "envia por voz", "responde por voz",
+"manda audio", "envia audio", "quero audio",
+"quero ouvir", "fala pra mim", "pode falar",
+"manda um audio", "envia um audio",
+"por audio", "em audio", "por voz", "em voz"
 ```
 
-### Componente de Pix reutilizavel
-Criar um componente `PixPaymentCard` que recebe `pixCode`, `amount` e renderiza:
-- QR Code SVG (200x200)
-- Codigo copia-e-cola em area clicavel
-- Botao "Copiar" com feedback
-- Valor formatado em destaque
+### Resultado esperado
+- Cliente envia texto normal -> bot responde com texto
+- Cliente envia audio -> bot responde com **texto** (transcreve o audio e responde por texto)
+- Cliente escreve "me manda em audio" -> bot responde com audio
+- Modo `always` nas configuracoes -> sempre envia audio (sem mudanca)
+- Modo `disabled` nas configuracoes -> nunca envia audio (sem mudanca)
 
-### Fluxo de dados
-- `useCustomerOrder` busca `unit_settings` ao carregar a mesa
-- Se `pix_key` existe, passa para `PaymentMethodSelector` e `TableBillSheet`
-- Cada componente gera o codigo Pix localmente com o valor correto (carrinho, conta total, ou valor parcial)
