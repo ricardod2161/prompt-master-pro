@@ -1,62 +1,56 @@
 
-# Implementação do Meta Pixel e Estratégia de Tracking
 
-## Análise Atual
-- Meta Pixel está configurado no `index.html` com placeholders `SEU_PIXEL_ID_AQUI` (linhas 49 e 56)
-- Seu ID real: **1615900189547750**
-- Landing page possui múltiplos componentes de marketing que poderiam gerar eventos rastreáveis
-- Formulário de contato e CTAs já existem mas sem tracking específico
+# Implementação de ViewContent Tracking ao Scroll para Seção de Preços
 
-## Plano de Implementação
+## Status Atual do Meta Pixel
+✅ **Meta Pixel está corretamente configurado:**
+- ID `1615900189547750` está implementado em `index.html` (linha 49 e 56)
+- Script do Facebook Pixel está carregando corretamente
+- Hook `usePixelTracking.ts` com funções `trackPixelEvent()` e `trackPixelCustomEvent()` está pronto
+- Eventos já implementados: Lead, Contact, StartTrial
 
-### 1. Substituir ID no Meta Pixel (index.html)
-- Linha 49: `fbq('init', 'SEU_PIXEL_ID_AQUI')` → `fbq('init', '1615900189547750')`
-- Linha 56: `src="https://www.facebook.com/tr?id=SEU_PIXEL_ID_AQUI&ev=PageView&noscript=1"` → `src="https://www.facebook.com/tr?id=1615900189547750&ev=PageView&noscript=1"`
+## Objetivo
+Adicionar tracking automático de evento `ViewContent` quando o usuário faz scroll e visualiza a seção de preços (`#pricing`).
 
-### 2. Criar Hook Utilitário para Rastreamento (usePixelTracking.ts)
-Hook que abstrair a chamada ao `fbq` globalmente para:
-- Rastrear eventos padrão do Facebook (PageView já rastreado automaticamente)
-- Implementar conversão quando leads são capturados
-- Rastrear interações com CTAs principais
-- Executar com segurança (check se fbq existe)
+## Implementação
 
-### 3. Instrumentar Eventos-Chave
-Eventos a rastrear na landing page:
+### 1. Criar Hook de Scroll Detection (`useIntersectionObserver.ts`)
+Novo hook reutilizável que usa a **Intersection Observer API** para detectar quando um elemento entra no viewport:
+- Parâmetros: `ref`, `threshold` (padrão 0.1), `onIntersect` callback
+- Retorna: boolean indicando se o elemento é visível
+- Benefício: Melhor performance que scroll listener tradicional, sem jank
 
-| Evento | Quando | Função Facebook |
-|--------|--------|-----------------|
-| Lead Form Submit | Formulário de contato submetido | `fbq('track', 'Lead')` |
-| Start Trial | Clique em "Começar Teste Grátis" | `fbq('track', 'StartTrial')` |
-| Pricing View | Scroll até seção de preços | `fbq('track', 'ViewContent')` |
-| WhatsApp Contact | Clique no WhatsApp flutuante | `fbq('track', 'Contact')` |
-| Demo Interaction | Clique no "Simular" da seção interativa | Custom event |
+### 2. Atualizar `PricingPreview.tsx`
+- Adicionar `useRef` para a seção `<section id="pricing">`
+- Usar o novo hook `useIntersectionObserver` com callback que chama `trackPixelEvent('ViewContent')`
+- Implementar flag de rastreamento único (evitar disparar múltiplas vezes)
+- Incluir parâmetros opcionais: `content_name: 'pricing_section'`, `content_type: 'pricing'`
 
-### 4. Adicionar ViewContent nos Componentes
-- **HeroSection.tsx**: Adicionar ao clique dos botões de CTA principal
-- **CTASection.tsx**: Adicionar ao clique "Começar Agora"
-- **ContactFormSection.tsx**: Adicionar evento `Lead` ao submit bem-sucedido
-- **InteractiveDemoSection.tsx**: Adicionar evento `Lead` ao testar demo
-- **FloatingWhatsApp.tsx**: Adicionar evento `Contact` ao clique
-
-### 5. Estrutura de Arquivos
+### 3. Estrutura do Fluxo
 ```
-src/hooks/usePixelTracking.ts (NOVO)
-  └─ Exporta função trackEvent() e hooks específicos
-     - useTrackPageView()
-     - useTrackLead()
-     - useTrackConversion()
+Usuário faz scroll down na landing page
+    ↓
+Seção de preços entra no viewport (50% visível)
+    ↓
+Intersection Observer dispara callback
+    ↓
+trackPixelEvent('ViewContent', { 
+    content_name: 'pricing_section',
+    content_type: 'pricing'
+})
+    ↓
+Meta Pixel registra evento e associa a sessão
 ```
 
-### 6. Benefícios
-- ✅ Rastreamento de leads capturados (formulário de contato)
-- ✅ Rastreamento de engajamento (cliques em CTAs)
-- ✅ Dados para otimizar campanhas no Facebook Ads
-- ✅ Remarketing mais eficiente
-- ✅ Medição de ROI de campanhas
+## Benefícios
+- **Rastreamento automático**: Sem necessidade de clique manual
+- **Dados de comportamento**: Saber quantos usuários visualizaram preços
+- **Otimização de anúncios**: Usar como evento de conversão no Facebook Ads
+- **Performance**: Intersection Observer é mais eficiente que scroll listeners
+- **Único disparo**: Evita múltiplos eventos para a mesma visualização
 
-### Sequência de Implementação
-1. Substituir ID real no `index.html`
-2. Criar hook `usePixelTracking.ts` com utilitários
-3. Instrumentar componentes de landing (ContactFormSection, CTASection, etc)
-4. Testar eventos no Facebook Pixel Debugger
+## Próximas Melhorias Sugeridas
+- Implementar mesmo tracking em outras seções chave (Features, Testimonials, FAQ)
+- Adicionar eventos com valor de "interest level" (quanto % da página foi visto)
+- Trackear cliques nos planos específicos (Starter, Pro, Enterprise) com metadata
 
