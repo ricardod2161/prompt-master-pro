@@ -28,6 +28,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 import { useSplitBill, type SplitMethod } from "@/hooks/useSplitBill";
+import { PixPaymentCard } from "./PixPaymentCard";
 
 type OrderWithItems = Tables<"orders"> & {
   order_items: Tables<"order_items">[];
@@ -42,6 +43,11 @@ interface SplitBillSheetProps {
   unitId: string | undefined;
   tableNumber: number;
   onBillFullyPaid: () => void;
+  pixConfig?: {
+    pix_key: string;
+    pix_merchant_name: string | null;
+    pix_merchant_city: string | null;
+  } | null;
 }
 
 // Split method button
@@ -178,6 +184,7 @@ export const SplitBillSheet = memo(function SplitBillSheet({
   unitId,
   tableNumber,
   onBillFullyPaid,
+  pixConfig,
 }: SplitBillSheetProps) {
   const [customerName, setCustomerName] = useState("");
   const [phone, setPhone] = useState("");
@@ -441,6 +448,16 @@ export const SplitBillSheet = memo(function SplitBillSheet({
                       Máximo: {formatCurrency(remainingBalance)}
                     </p>
                   </div>
+                )}
+
+                {/* Pix Payment for partial amount */}
+                {pixConfig?.pix_key && amountToPay > 0 && (
+                  <PixPaymentCard
+                    pixKey={pixConfig.pix_key}
+                    merchantName={pixConfig.pix_merchant_name || "RESTAURANTE"}
+                    merchantCity={pixConfig.pix_merchant_city || "BRASIL"}
+                    amount={amountToPay}
+                  />
                 )}
 
                 {/* Phone input */}

@@ -60,6 +60,24 @@ export function useCustomerOrder(tableId: string) {
 
   const unitId = tableQuery.data?.unit_id;
 
+  // Fetch unit settings (Pix config)
+  const unitSettingsQuery = useQuery({
+    queryKey: ["public-unit-settings", unitId],
+    queryFn: async () => {
+      if (!unitId) return null;
+      const { data, error } = await supabase
+        .from("unit_settings")
+        .select("pix_key, pix_merchant_name, pix_merchant_city")
+        .eq("unit_id", unitId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!unitId,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+  });
+
   // Fetch products for the unit - optimized with longer cache
   const productsQuery = useQuery({
     queryKey: ["public-products", unitId],
@@ -281,6 +299,9 @@ export function useCustomerOrder(tableId: string) {
     // Categories data
     categories: categoriesQuery.data || [],
     categoriesLoading: categoriesQuery.isLoading,
+
+    // Unit settings (Pix)
+    unitSettings: unitSettingsQuery.data,
 
     // Cart management
     cart,

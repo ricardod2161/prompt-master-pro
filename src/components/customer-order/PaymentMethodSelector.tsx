@@ -2,6 +2,7 @@ import { memo, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Banknote, QrCode, CreditCard } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PixPaymentCard } from "./PixPaymentCard";
 
 export type PaymentMethod = "cash" | "pix" | "credit" | null;
 
@@ -49,6 +50,11 @@ interface PaymentMethodSelectorProps {
   changeFor: string;
   onChangeForChange: (value: string) => void;
   cartTotal: number;
+  pixConfig?: {
+    pix_key: string;
+    pix_merchant_name: string | null;
+    pix_merchant_city: string | null;
+  } | null;
 }
 
 export const PaymentMethodSelector = memo(function PaymentMethodSelector({
@@ -57,6 +63,7 @@ export const PaymentMethodSelector = memo(function PaymentMethodSelector({
   changeFor,
   onChangeForChange,
   cartTotal,
+  pixConfig,
 }: PaymentMethodSelectorProps) {
   const changeAmount = useMemo(() => {
     const changeValue = parseFloat(changeFor) || 0;
@@ -151,6 +158,15 @@ export const PaymentMethodSelector = memo(function PaymentMethodSelector({
             </p>
           )}
         </div>
+      )}
+
+      {paymentMethod === "pix" && pixConfig?.pix_key && cartTotal > 0 && (
+        <PixPaymentCard
+          pixKey={pixConfig.pix_key}
+          merchantName={pixConfig.pix_merchant_name || "RESTAURANTE"}
+          merchantCity={pixConfig.pix_merchant_city || "BRASIL"}
+          amount={cartTotal}
+        />
       )}
     </div>
   );
