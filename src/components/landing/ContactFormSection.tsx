@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { trackPixelEvent } from "@/hooks/usePixelTracking";
 
 interface FormData {
   name: string;
@@ -68,6 +69,7 @@ export function ContactFormSection() {
         message: "",
       });
       
+      trackPixelEvent("Lead", { content_name: "contact_form", content_category: "landing_page" });
       toast.success("Mensagem enviada com sucesso! Entraremos em contato em breve.");
     } catch (error) {
       console.error("Error submitting lead:", error);

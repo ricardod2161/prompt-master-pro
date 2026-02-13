@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, CheckCircle2, Share2, Sparkles, Store } from "lucide-react";
+import { trackPixelEvent } from "@/hooks/usePixelTracking";
 
 const GUARANTEES = [
   "Sem cartão de crédito",
@@ -47,7 +48,7 @@ export function CTASection() {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
-            <Link to="/login">
+            <Link to="/login" onClick={() => trackPixelEvent("StartTrial", { content_name: "cta_section" })}>
               <Button size="lg" className="h-14 px-10 text-lg group">
                 Começar Gratuitamente
                 <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
