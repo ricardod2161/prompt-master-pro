@@ -1,8 +1,11 @@
+import { useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Check, Sparkles, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
+import { trackPixelEvent } from "@/hooks/usePixelTracking";
 
 const PLANS = [
   {
@@ -49,8 +52,21 @@ const PLANS = [
 ];
 
 export function PricingPreview() {
+  const handlePricingView = useCallback(() => {
+    trackPixelEvent("ViewContent", {
+      content_name: "pricing_section",
+      content_type: "pricing",
+    });
+  }, []);
+
+  const { ref: sectionRef } = useIntersectionObserver<HTMLElement>({
+    threshold: 0.3,
+    onIntersect: handlePricingView,
+    triggerOnce: true,
+  });
+
   return (
-    <section id="pricing" className="py-24 relative overflow-hidden">
+    <section ref={sectionRef} id="pricing" className="py-24 relative overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-gradient-to-b from-background via-primary/5 to-background" />
