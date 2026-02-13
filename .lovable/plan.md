@@ -1,56 +1,78 @@
 
+# Pix Integrado na Interface da Mesa e WhatsApp
 
-# Implementação de ViewContent Tracking ao Scroll para Seção de Preços
+## Contexto
+Atualmente o codigo Pix "copia e cola" ja e enviado via WhatsApp nas notificacoes (confirmacao de pedido, fechamento de conta, pagamento parcial). Porem, **na interface visual** do cardapio digital (mesa), o codigo Pix nao aparece em nenhum momento para o cliente.
 
-## Status Atual do Meta Pixel
-✅ **Meta Pixel está corretamente configurado:**
-- ID `1615900189547750` está implementado em `index.html` (linha 49 e 56)
-- Script do Facebook Pixel está carregando corretamente
-- Hook `usePixelTracking.ts` com funções `trackPixelEvent()` e `trackPixelCustomEvent()` está pronto
-- Eventos já implementados: Lead, Contact, StartTrial
+O objetivo e: quando o cliente escolher "Pix" como forma de pagamento, exibir o QR Code e o codigo copia-e-cola diretamente na tela, tanto no checkout quanto no sheet da conta da mesa.
 
-## Objetivo
-Adicionar tracking automático de evento `ViewContent` quando o usuário faz scroll e visualiza a seção de preços (`#pricing`).
+---
 
-## Implementação
+## O que sera feito
 
-### 1. Criar Hook de Scroll Detection (`useIntersectionObserver.ts`)
-Novo hook reutilizável que usa a **Intersection Observer API** para detectar quando um elemento entra no viewport:
-- Parâmetros: `ref`, `threshold` (padrão 0.1), `onIntersect` callback
-- Retorna: boolean indicando se o elemento é visível
-- Benefício: Melhor performance que scroll listener tradicional, sem jank
+### 1. Buscar configuracao Pix da unidade no CustomerOrder
+- Criar uma query no `useCustomerOrder.ts` que busca `pix_key`, `pix_merchant_name` e `pix_merchant_city` da tabela `unit_settings` usando o `unit_id` da mesa
+- Retornar esses dados para uso nos componentes
 
-### 2. Atualizar `PricingPreview.tsx`
-- Adicionar `useRef` para a seção `<section id="pricing">`
-- Usar o novo hook `useIntersectionObserver` com callback que chama `trackPixelEvent('ViewContent')`
-- Implementar flag de rastreamento único (evitar disparar múltiplas vezes)
-- Incluir parâmetros opcionais: `content_name: 'pricing_section'`, `content_type: 'pricing'`
+### 2. Mostrar Pix no PaymentMethodSelector quando "Pix" for selecionado
+- Quando o cliente selecionar "Pix", exibir abaixo das opcoes:
+  - QR Code do Pix (usando `qrcode.react` que ja esta instalado)
+  - Codigo copia-e-cola completo com botao "Copiar"
+  - Valor total do pedido formatado
+- Usar `generatePixCode()` do `src/lib/pix-generator.ts` para gerar o codigo EMV
+- Design em tons de esmeralda, consistente com a pagina de tracking
 
-### 3. Estrutura do Fluxo
+### 3. Mostrar Pix no TableBillSheet ao fechar conta
+- Adicionar secao de Pix no footer do TableBillSheet, visivel quando a unidade tem `pix_key` configurada
+- Exibir QR Code + codigo copia-e-cola para o valor total da conta
+- Botao "Copiar Pix" com feedback visual e haptico
+
+### 4. Mostrar Pix no SplitBillSheet (pagamento parcial)
+- Quando o cliente divide a conta e seleciona seu valor, gerar Pix para o valor parcial
+- Mesmo padrao visual do TableBillSheet
+
+---
+
+## Arquivos a modificar
+
+| Arquivo | Alteracao |
+|---|---|
+| `src/hooks/useCustomerOrder.ts` | Adicionar query de `unit_settings` para buscar dados Pix |
+| `src/components/customer-order/PaymentMethodSelector.tsx` | Exibir QR Code + codigo quando Pix selecionado |
+| `src/components/customer-order/TableBillSheet.tsx` | Secao de Pix com QR Code no footer |
+| `src/components/customer-order/SplitBillSheet.tsx` | Pix para valor parcial |
+
+### Nenhuma alteracao no backend
+O WhatsApp ja envia o codigo Pix corretamente. As mudancas sao puramente no frontend.
+
+---
+
+## Detalhes Tecnicos
+
+### Geracao do codigo Pix no frontend
+Reutilizar `generatePixCode()` de `src/lib/pix-generator.ts` que ja esta implementado e testado:
+
+```text
+import { generatePixCode } from "@/lib/pix-generator";
+import { QRCodeSVG } from "qrcode.react";
+
+const pixCode = generatePixCode({
+  pixKey: unitSettings.pix_key,
+  merchantName: unitSettings.pix_merchant_name || "RESTAURANTE",
+  merchantCity: unitSettings.pix_merchant_city || "BRASIL",
+  amount: totalValue,
+  transactionId: `PED${orderNumber}`,
+});
 ```
-Usuário faz scroll down na landing page
-    ↓
-Seção de preços entra no viewport (50% visível)
-    ↓
-Intersection Observer dispara callback
-    ↓
-trackPixelEvent('ViewContent', { 
-    content_name: 'pricing_section',
-    content_type: 'pricing'
-})
-    ↓
-Meta Pixel registra evento e associa a sessão
-```
 
-## Benefícios
-- **Rastreamento automático**: Sem necessidade de clique manual
-- **Dados de comportamento**: Saber quantos usuários visualizaram preços
-- **Otimização de anúncios**: Usar como evento de conversão no Facebook Ads
-- **Performance**: Intersection Observer é mais eficiente que scroll listeners
-- **Único disparo**: Evita múltiplos eventos para a mesma visualização
+### Componente de Pix reutilizavel
+Criar um componente `PixPaymentCard` que recebe `pixCode`, `amount` e renderiza:
+- QR Code SVG (200x200)
+- Codigo copia-e-cola em area clicavel
+- Botao "Copiar" com feedback
+- Valor formatado em destaque
 
-## Próximas Melhorias Sugeridas
-- Implementar mesmo tracking em outras seções chave (Features, Testimonials, FAQ)
-- Adicionar eventos com valor de "interest level" (quanto % da página foi visto)
-- Trackear cliques nos planos específicos (Starter, Pro, Enterprise) com metadata
-
+### Fluxo de dados
+- `useCustomerOrder` busca `unit_settings` ao carregar a mesa
+- Se `pix_key` existe, passa para `PaymentMethodSelector` e `TableBillSheet`
+- Cada componente gera o codigo Pix localmente com o valor correto (carrinho, conta total, ou valor parcial)
