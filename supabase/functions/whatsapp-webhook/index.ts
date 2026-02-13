@@ -2097,9 +2097,9 @@ CERTO (itens do pedido):
       // Decide: send as audio or text based on settings
       const ttsMode = settings.tts_mode || 'auto';
       const ttsVoiceId = settings.tts_voice_id || 'FGY2WhTYpPnrIDTdsKH5';
-      const lastUserMessageWasAudio = mediaType === "audio";
+      const userMessageText = messageText || "";
       
-      if (shouldSendAsAudio(assistantMessage, ttsMode, lastUserMessageWasAudio)) {
+      if (shouldSendAsAudio(assistantMessage, ttsMode, userMessageText)) {
         // Try to send as audio via ElevenLabs TTS
         try {
           console.log("[TTS] Converting response to audio via ElevenLabs...");
@@ -2466,13 +2466,33 @@ async function sendMultipleWhatsAppMessages(
   return lastMessageId;
 }
 
-// Determine if a message should be sent as audio based on tts_mode and message content
-function shouldSendAsAudio(message: string, ttsMode: string, lastUserMessageWasAudio: boolean): boolean {
+// Determine if a message should be sent as audio based on tts_mode and user's explicit request
+function shouldSendAsAudio(message: string, ttsMode: string, userMessageText: string): boolean {
   // Check mode first
   if (ttsMode === 'disabled') return false;
-  if (ttsMode === 'auto' && !lastUserMessageWasAudio) return false;
   
-  // Content checks (both 'always' and 'auto' when audio was sent)
+  if (ttsMode === 'auto') {
+    // Only send audio if user explicitly asked for it in their message
+    const normalizedText = userMessageText.toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // remove accents
+    
+    const audioRequestPatterns = [
+      "manda em audio", "envia em audio", "responde em audio",
+      "manda por voz", "envia por voz", "responde por voz",
+      "manda audio", "envia audio", "quero audio",
+      "quero ouvir", "fala pra mim", "pode falar",
+      "manda um audio", "envia um audio",
+      "por audio", "em audio", "por voz", "em voz",
+      "me fala", "fala ai"
+    ];
+    
+    const userRequestedAudio = audioRequestPatterns.some(pattern => normalizedText.includes(pattern));
+    if (!userRequestedAudio) return false;
+    
+    console.log("[TTS] User explicitly requested audio response");
+  }
+  
+  // Content checks (both 'always' and 'auto' when user requested)
   if (!message || message.length < 5) return false;
   if (message.length > 1500) return false;
   
