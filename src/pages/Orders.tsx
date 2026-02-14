@@ -203,6 +203,7 @@ function OrderKanbanView({
       ready: [],
       delivered: [],
       cancelled: [],
+      completed: [],
     };
     orders.forEach(order => {
       const status = order.status || "pending";
@@ -513,6 +514,7 @@ function OrderDetailsModal({
                     ready: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, className: "border-green-500/50 text-green-600 hover:bg-green-500/10 hover:border-green-500" },
                     delivered: { icon: <Truck className="h-3.5 w-3.5" />, className: "border-gray-500/50 text-gray-600 hover:bg-gray-500/10 hover:border-gray-500" },
                     cancelled: { icon: <XCircle className="h-3.5 w-3.5" />, className: "border-red-500/50 text-red-600 hover:bg-red-500/10 hover:border-red-500" },
+                    completed: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, className: "border-purple-500/50 text-purple-600 hover:bg-purple-500/10 hover:border-purple-500" },
                   };
                   const config = statusConfig[status];
                   const isActive = order.status === status;
