@@ -1,62 +1,60 @@
 
-## Verificar e Melhorar o Formulario de Contato
-
-### Status Atual
-O formulario de contato esta funcional (tabela `leads` existe no banco, campos correspondem, RLS permite insercao anonima). Porem, existem melhorias de responsividade e profissionalismo a aplicar.
+## Corrigir Footer da Landing Page
 
 ### Problemas Identificados
 
-1. **Mobile**: Os campos "Nome completo" e "Email" empilham em coluna unica no mobile, mas no desktop desktop (screenshots do usuario) ficam lado a lado -- isso ja funciona via `sm:grid-cols-2`. Porem, o espacamento e padding podem ser otimizados para mobile.
+1. **Links "Legal" nao funcionam**: Os links de "Privacidade", "Termos de Uso", "Cookies" e "LGPD" apontam para `#` (nao fazem nada). As paginas `/privacy` e `/terms` ja existem no sistema mas nao estao linkadas.
 
-2. **Botao WhatsApp flutuante**: Sobrepoe o botao "Enviar Mensagem" e o seletor de funcionarios no mobile, dificultando a interacao.
+2. **Links "Empresa" e "Suporte" nao funcionam**: Todos apontam para `#` sem acao. Como nao existem paginas para eles, devem rolar ate secoes existentes na landing ou ser removidos/desabilitados.
 
-3. **Mascara de telefone**: O campo WhatsApp nao tem mascara de input, permitindo entrada de dados inconsistentes.
+3. **Layout mobile**: A coluna de marca (logo + contato) ocupa `col-span-2` no mobile, empurrando as 4 colunas de links para baixo de forma desorganizada. O grid `grid-cols-2` no mobile faz "Legal" cair sozinho numa segunda linha.
 
-4. **Validacao**: Falta validacao de email no frontend (alem do `type="email"`) e limite de caracteres nos campos.
-
-5. **Animacao de loading**: O estado "Enviando..." e apenas texto, sem indicador visual de loading.
+4. **Scroll suave nao funciona para links `#`**: O `scrollToSection` tenta fazer `querySelector("#")` que retorna o proprio documento, nao uma secao.
 
 ### Solucao
 
-**Arquivo: `src/components/landing/ContactFormSection.tsx`**
-- Adicionar validacao com Zod para nome (max 100 chars), email (formato valido, max 255), telefone (formato brasileiro), mensagem (max 1000 chars)
-- Adicionar mascara de telefone brasileira `(00) 00000-0000` com formatacao automatica
-- Melhorar o botao de submit com icone de loading (spinner) durante envio
-- Ajustar padding mobile: `p-4 sm:p-6 md:p-8` no card do formulario
-- Reduzir `py-24` para `py-16 md:py-24` no mobile
-- Reduzir `mb-16` do header para `mb-10 md:mb-16`
+**Arquivo: `src/components/landing/LandingFooter.tsx`**
 
-**Arquivo: `src/components/landing/FloatingWhatsApp.tsx`**
-- Mover o botao flutuante para `bottom-20 sm:bottom-6` no mobile para nao sobrepor o conteudo do formulario
-- Ou adicionar `mb-20` ao formulario para dar espaco
+1. **Corrigir links legais** -- apontar Privacidade para `/privacy`, Termos de Uso para `/terms`. Cookies e LGPD podem apontar para `/privacy` (secao 7 e secao 5 respectivamente) ou ficar como `#` com cursor disabled.
 
-**Resultado**:
-- Formulario completamente funcional e validado
-- Layout responsivo otimizado para mobile
-- Mascara de telefone profissional
-- Loading visual durante envio
-- Sem sobreposicao do botao WhatsApp
+2. **Corrigir links de navegacao** -- mapear links de Suporte para secoes da landing:
+   - "Central de Ajuda" -> `#faq`
+   - "Contato" -> `#contact`
+   - "Documentacao" -> `#how-it-works`
+
+3. **Usar `<Link>` para rotas internas** -- substituir `<button>` por `<Link to="/privacy">` nos links que apontam para paginas reais.
+
+4. **Melhorar grid mobile** -- alterar para `grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6` e ajustar a coluna de marca para nao ocupar todo o espaco no mobile. Reduzir o `col-span` da coluna brand no mobile para `col-span-2` e garantir que as 4 colunas de links fiquem organizadas em grid 2x2 no mobile.
+
+5. **Proteger `scrollToSection`** -- ignorar `href="#"` puro (sem ID) para evitar comportamento inesperado.
 
 ### Detalhes Tecnicos
 
-Validacao Zod:
+**Links atualizados:**
 ```typescript
-const contactSchema = z.object({
-  name: z.string().trim().min(2).max(100),
-  email: z.string().trim().email().max(255),
-  phone: z.string().optional(),
-  restaurant_name: z.string().max(100).optional(),
-  employee_count: z.string().optional(),
-  message: z.string().max(1000).optional(),
-});
+legal: [
+  { label: "Privacidade", href: "/privacy", route: true },
+  { label: "Termos de Uso", href: "/terms", route: true },
+  { label: "Cookies", href: "/privacy", route: true },
+  { label: "LGPD", href: "/privacy", route: true },
+],
+suporte: [
+  { label: "Central de Ajuda", href: "#faq" },
+  { label: "Documentação", href: "#how-it-works" },
+  { label: "Status do Sistema", href: "#" },
+  { label: "Contato", href: "#contact" },
+],
 ```
 
-Mascara de telefone:
-```typescript
-const formatPhone = (value: string) => {
-  const digits = value.replace(/\D/g, "").slice(0, 11);
-  if (digits.length <= 2) return `(${digits}`;
-  if (digits.length <= 7) return `(${digits.slice(0,2)}) ${digits.slice(2)}`;
-  return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`;
-};
-```
+**Renderizacao condicional:** Links com `route: true` usam `<Link to={href}>`, links com `href.startsWith("#")` e `href !== "#"` usam `scrollToSection`, e links com `href === "#"` ficam com `cursor-default opacity-50` (desabilitados visualmente).
+
+**Grid responsivo melhorado:**
+- Mobile: coluna brand full-width, depois links em grid 2x2
+- Tablet: 3 colunas
+- Desktop: 6 colunas (2 brand + 4 links)
+
+### Resultado
+- Links de Privacidade e Termos navegam para paginas reais
+- Links de FAQ e Contato rolam suavemente ate as secoes
+- Links sem destino ficam visualmente desabilitados
+- Layout mobile organizado e profissional
