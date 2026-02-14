@@ -1,15 +1,28 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, UserCheck, Clock, UserX, Filter, Building2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Users, UserCheck, Clock, UserX, Filter, Building2, Trash2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
 
 interface CustomerProfile {
   id: string;
@@ -76,8 +89,27 @@ const statusConfig = {
 
 export function AdminCustomersList() {
   const { data: customers = [], isLoading } = useAdminCustomers();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  const deleteCustomerMutation = useMutation({
+    mutationFn: async ({ userId, profileId }: { userId: string; profileId: string }) => {
+      await supabase.from("user_roles").delete().eq("user_id", userId);
+      await supabase.from("user_units").delete().eq("user_id", userId);
+      await supabase.from("notifications").delete().eq("user_id", userId);
+      const { error } = await supabase.from("profiles").delete().eq("id", profileId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-customers"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      toast.success("Cliente excluído com sucesso!");
+    },
+    onError: (error: any) => {
+      toast.error(`Erro ao excluir cliente: ${error.message}`);
+    },
+  });
 
   // For now, subscription data is not fetched per-user (would require calling edge fn per user).
   // We show profiles + units. Subscription check would need a batch endpoint.
@@ -210,6 +242,32 @@ export function AdminCustomersList() {
                         Sem unidade
                       </Badge>
                     )}
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Excluir Cliente</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Tem certeza que deseja excluir <strong>{customer.full_name || "este cliente"}</strong>? 
+                            Todas as roles, unidades e notificações associadas serão removidas. Esta ação não pode ser desfeita.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => deleteCustomerMutation.mutate({ userId: customer.user_id, profileId: customer.id })}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            {deleteCustomerMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                            Excluir
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </div>
               </CardContent>
