@@ -4,7 +4,7 @@ import { ptBR } from "date-fns/locale";
 import { 
   Search, Filter, Eye, Clock, Package, User, MapPin, 
   CreditCard, LayoutGrid, List, ChefHat, CheckCircle2, 
-  Truck, XCircle, ShoppingBag, Banknote, Printer, Bell, Edit
+  Truck, XCircle, ShoppingBag, Banknote, Printer, Bell, Edit, Trash2
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,8 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useOrders, useUpdateOrderStatus, useUpdatePaymentMethod, type Order, type OrderStatus, type OrderChannel, type PaymentMethod } from "@/hooks/useOrders";
+import { useOrders, useUpdateOrderStatus, useUpdatePaymentMethod, useDeleteOrder, type Order, type OrderStatus, type OrderChannel, type PaymentMethod } from "@/hooks/useOrders";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useOrderNotification } from "@/hooks/useOrderNotification";
 import { StatusBadge, ChannelBadge } from "@/components/shared/StatusBadge";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
@@ -257,13 +258,17 @@ function OrderDetailsModal({
   onClose,
   onStatusChange,
   onPrint,
+  onDelete,
   isUpdating,
+  isDeleting,
 }: {
   order: Order | null;
   onClose: () => void;
   onStatusChange: (orderId: string, status: OrderStatus) => void;
   onPrint: (order: Order) => void;
+  onDelete: (order: Order) => void;
   isUpdating: boolean;
+  isDeleting: boolean;
 }) {
   const [editingPayment, setEditingPayment] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>("pix");
@@ -554,10 +559,21 @@ function OrderDetailsModal({
         </div>
         
         {/* Fixed Footer */}
-        <div className="flex-shrink-0 border-t bg-card px-4 py-3 sm:px-6 sm:py-4">
+        <div className="flex-shrink-0 border-t bg-card px-4 py-3 sm:px-6 sm:py-4 flex gap-2">
+          {(order.status === "delivered" || order.status === "completed" || order.status === "cancelled") && (
+            <Button
+              variant="destructive"
+              className="h-10 sm:h-11"
+              onClick={() => onDelete(order)}
+              disabled={isDeleting}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              {isDeleting ? "Excluindo..." : "Excluir"}
+            </Button>
+          )}
           <Button
             variant="outline"
-            className="w-full h-10 sm:h-11"
+            className="flex-1 h-10 sm:h-11"
             onClick={() => onPrint(order)}
           >
             <Printer className="h-4 w-4 mr-2" />
@@ -623,8 +639,10 @@ export default function Orders() {
   });
 
   const updateOrderStatus = useUpdateOrderStatus();
+  const deleteOrder = useDeleteOrder();
   const sendNotification = useOrderNotification();
   const { printKitchenTicket, printOnPreparing } = usePrintOrder();
+  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
 
   const filteredOrders = orders?.filter((order) => {
     if (!search) return true;
@@ -855,8 +873,43 @@ export default function Orders() {
         onClose={() => setSelectedOrder(null)}
         onStatusChange={handleStatusChange}
         onPrint={handleManualPrint}
+        onDelete={(order) => {
+          setOrderToDelete(order);
+        }}
         isUpdating={updateOrderStatus.isPending}
+        isDeleting={deleteOrder.isPending}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!orderToDelete} onOpenChange={(open) => !open && setOrderToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Pedido</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o pedido #{orderToDelete?.order_number}? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (orderToDelete) {
+                  deleteOrder.mutate(orderToDelete.id, {
+                    onSuccess: () => {
+                      setOrderToDelete(null);
+                      setSelectedOrder(null);
+                    },
+                  });
+                }
+              }}
+              disabled={deleteOrder.isPending}
+            >
+              {deleteOrder.isPending ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
