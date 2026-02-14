@@ -1,60 +1,58 @@
 
-## Corrigir Footer da Landing Page
 
-### Problemas Identificados
+## Melhorias no Footer e Exclusao de Pedidos Entregues
 
-1. **Links "Legal" nao funcionam**: Os links de "Privacidade", "Termos de Uso", "Cookies" e "LGPD" apontam para `#` (nao fazem nada). As paginas `/privacy` e `/terms` ja existem no sistema mas nao estao linkadas.
-
-2. **Links "Empresa" e "Suporte" nao funcionam**: Todos apontam para `#` sem acao. Como nao existem paginas para eles, devem rolar ate secoes existentes na landing ou ser removidos/desabilitados.
-
-3. **Layout mobile**: A coluna de marca (logo + contato) ocupa `col-span-2` no mobile, empurrando as 4 colunas de links para baixo de forma desorganizada. O grid `grid-cols-2` no mobile faz "Legal" cair sozinho numa segunda linha.
-
-4. **Scroll suave nao funciona para links `#`**: O `scrollToSection` tenta fazer `querySelector("#")` que retorna o proprio documento, nao uma secao.
-
-### Solucao
+### 1. Footer - Estado visual desabilitado para links inativos
 
 **Arquivo: `src/components/landing/LandingFooter.tsx`**
 
-1. **Corrigir links legais** -- apontar Privacidade para `/privacy`, Termos de Uso para `/terms`. Cookies e LGPD podem apontar para `/privacy` (secao 7 e secao 5 respectivamente) ou ficar como `#` com cursor disabled.
+Atualmente, links sem destino (`href="#"`) ja renderizam como `<span>` com `opacity-50 cursor-default`, mas falta:
+- Um indicador visual mais claro (ex: tag "Em breve" ou icone de cadeado)
+- Tambem aplicar aos links sociais (Facebook, Instagram, etc.) que apontam para `#`
 
-2. **Corrigir links de navegacao** -- mapear links de Suporte para secoes da landing:
-   - "Central de Ajuda" -> `#faq`
-   - "Contato" -> `#contact`
-   - "Documentacao" -> `#how-it-works`
+Solucao:
+- Adicionar um badge "Em breve" discreto ao lado dos links inativos
+- Aplicar `opacity-40` e `pointer-events-none` nos icones sociais que apontam para `#`
+- Adicionar `line-through` sutil ou tooltip nos links inativos
 
-3. **Usar `<Link>` para rotas internas** -- substituir `<button>` por `<Link to="/privacy">` nos links que apontam para paginas reais.
+### 2. Pedidos - Opcao de excluir pedidos entregues
 
-4. **Melhorar grid mobile** -- alterar para `grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6` e ajustar a coluna de marca para nao ocupar todo o espaco no mobile. Reduzir o `col-span` da coluna brand no mobile para `col-span-2` e garantir que as 4 colunas de links fiquem organizadas em grid 2x2 no mobile.
+**Arquivo: `src/hooks/useOrders.ts`**
+- Criar hook `useDeleteOrder` que deleta o pedido e seus registros relacionados (`order_items`, `order_payments`, `delivery_orders`) via cascade ou manualmente
 
-5. **Proteger `scrollToSection`** -- ignorar `href="#"` puro (sem ID) para evitar comportamento inesperado.
+**Arquivo: `src/pages/Orders.tsx`**
+- No modal `OrderDetailsModal`: adicionar botao "Excluir Pedido" (vermelho, com icone Trash2) visivel apenas quando `order.status === "delivered" || order.status === "completed" || order.status === "cancelled"`
+- Adicionar dialogo de confirmacao (AlertDialog) antes de excluir: "Tem certeza que deseja excluir o pedido #XXX? Esta acao nao pode ser desfeita."
+- Na table view: adicionar botao de excluir na coluna de acoes para pedidos entregues/cancelados
+- Nos cards mobile e kanban: adicionar botao de excluir para pedidos entregues
 
 ### Detalhes Tecnicos
 
-**Links atualizados:**
+**Hook `useDeleteOrder`:**
 ```typescript
-legal: [
-  { label: "Privacidade", href: "/privacy", route: true },
-  { label: "Termos de Uso", href: "/terms", route: true },
-  { label: "Cookies", href: "/privacy", route: true },
-  { label: "LGPD", href: "/privacy", route: true },
-],
-suporte: [
-  { label: "Central de Ajuda", href: "#faq" },
-  { label: "Documentação", href: "#how-it-works" },
-  { label: "Status do Sistema", href: "#" },
-  { label: "Contato", href: "#contact" },
-],
+export function useDeleteOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (orderId: string) => {
+      // Deletar order_items, order_payments, delivery_orders primeiro
+      await supabase.from("order_items").delete().eq("order_id", orderId);
+      await supabase.from("order_payments").delete().eq("order_id", orderId);
+      await supabase.from("delivery_orders").delete().eq("order_id", orderId);
+      const { error } = await supabase.from("orders").delete().eq("id", orderId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.refetchQueries({ queryKey: ["orders"] });
+      toast({ title: "Pedido excluido com sucesso!" });
+    },
+    onError: (error) => {
+      toast({ title: "Erro ao excluir pedido", description: error.message, variant: "destructive" });
+    },
+  });
+}
 ```
 
-**Renderizacao condicional:** Links com `route: true` usam `<Link to={href}>`, links com `href.startsWith("#")` e `href !== "#"` usam `scrollToSection`, e links com `href === "#"` ficam com `cursor-default opacity-50` (desabilitados visualmente).
+**Modal de confirmacao:** Usar `AlertDialog` do shadcn com titulo "Excluir Pedido", descricao com numero do pedido, botao "Cancelar" e botao "Excluir" vermelho com estado de loading.
 
-**Grid responsivo melhorado:**
-- Mobile: coluna brand full-width, depois links em grid 2x2
-- Tablet: 3 colunas
-- Desktop: 6 colunas (2 brand + 4 links)
+**Footer links inativos:** Renderizar badge "Em breve" inline com `text-[10px] bg-muted px-1.5 py-0.5 rounded-full` ao lado do texto do link desabilitado.
 
-### Resultado
-- Links de Privacidade e Termos navegam para paginas reais
-- Links de FAQ e Contato rolam suavemente ate as secoes
-- Links sem destino ficam visualmente desabilitados
-- Layout mobile organizado e profissional
