@@ -974,6 +974,24 @@ async function confirmarPedido(
         payload += '6304';
         payload += crc16Local(payload);
         pixPaymentCode = payload;
+
+        // Register in pix_transactions for reconciliation
+        try {
+          await supabase.from("pix_transactions").insert({
+            unit_id: unitId,
+            order_id: order.id,
+            transaction_id: txId,
+            pix_code: pixPaymentCode,
+            amount: totalPrice,
+            status: "pending",
+            customer_phone: customerPhone,
+            customer_name: cliente.nome,
+            expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          });
+          console.log(`[PIX] Registered transaction ${txId} for order #${order.order_number}`);
+        } catch (pixErr) {
+          console.error("[PIX] Error registering pix transaction:", pixErr);
+        }
       }
     } catch (e) {
       console.error("Error generating Pix code in confirmarPedido:", e);

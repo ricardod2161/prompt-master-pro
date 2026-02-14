@@ -290,6 +290,8 @@ export default function Settings() {
             onSettingsChange={setFinancialSettings}
             onSave={handleSaveFinancial}
             isSaving={isSaving}
+            unitName={selectedUnit?.name}
+            unitAddress={selectedUnit?.address}
           />
         </TabsContent>
 

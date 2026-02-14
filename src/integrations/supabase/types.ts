@@ -674,6 +674,79 @@ export type Database = {
           },
         ]
       }
+      pix_transactions: {
+        Row: {
+          amount: number
+          confirmed_at: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          expires_at: string
+          generated_at: string
+          id: string
+          metadata: Json
+          order_id: string | null
+          pix_code: string
+          status: string
+          table_id: string | null
+          transaction_id: string
+          unit_id: string
+        }
+        Insert: {
+          amount: number
+          confirmed_at?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          expires_at?: string
+          generated_at?: string
+          id?: string
+          metadata?: Json
+          order_id?: string | null
+          pix_code: string
+          status?: string
+          table_id?: string | null
+          transaction_id: string
+          unit_id: string
+        }
+        Update: {
+          amount?: number
+          confirmed_at?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          expires_at?: string
+          generated_at?: string
+          id?: string
+          metadata?: Json
+          order_id?: string | null
+          pix_code?: string
+          status?: string
+          table_id?: string | null
+          transaction_id?: string
+          unit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pix_transactions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pix_transactions_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "tables"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pix_transactions_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_addons: {
         Row: {
           available: boolean | null
@@ -1403,6 +1476,7 @@ export type Database = {
         }
         Returns: string
       }
+      expire_pending_pix_transactions: { Args: never; Returns: number }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

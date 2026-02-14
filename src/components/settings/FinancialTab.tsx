@@ -7,6 +7,7 @@ import { SettingCard } from "./SettingCard";
 import { cn } from "@/lib/utils";
 import { detectPixKeyType, formatPixKeyForDisplay, isValidPixKey } from "@/lib/pix-generator";
 import { useMemo } from "react";
+import { PixConfigValidator } from "./PixConfigValidator";
 
 interface PaymentMethods {
   cash: boolean;
@@ -31,7 +32,11 @@ interface FinancialTabProps {
   onSettingsChange: (settings: FinancialSettings) => void;
   onSave: () => void;
   isSaving: boolean;
+  unitName?: string;
+  unitAddress?: string | null;
 }
+
+// Removed - merged above
 
 const PAYMENT_METHODS = [
   { key: "cash" as const, label: "Dinheiro", icon: Banknote },
@@ -41,7 +46,7 @@ const PAYMENT_METHODS = [
   { key: "voucher" as const, label: "Voucher", icon: Receipt },
 ];
 
-export function FinancialTab({ settings, onSettingsChange, onSave, isSaving }: FinancialTabProps) {
+export function FinancialTab({ settings, onSettingsChange, onSave, isSaving, unitName, unitAddress }: FinancialTabProps) {
   const handlePaymentMethodChange = (key: keyof PaymentMethods, checked: boolean) => {
     onSettingsChange({
       ...settings,
@@ -325,6 +330,28 @@ export function FinancialTab({ settings, onSettingsChange, onSave, isSaving }: F
             </Button>
           </div>
         </div>
+      </SettingCard>
+
+      {/* Pix Config Validator */}
+      <SettingCard
+        icon={QrCode}
+        title="Saúde da Configuração Pix"
+        description="Verificação automática da configuração Pix para garantir funcionamento correto"
+        variant="elevated"
+      >
+        <PixConfigValidator
+          pixKey={settings.pix_key}
+          merchantName={settings.pix_merchant_name}
+          merchantCity={settings.pix_merchant_city}
+          unitName={unitName || ""}
+          unitAddress={unitAddress}
+          onAutoFix={(field, value) => {
+            onSettingsChange({
+              ...settings,
+              [field]: value,
+            });
+          }}
+        />
       </SettingCard>
     </div>
   );
