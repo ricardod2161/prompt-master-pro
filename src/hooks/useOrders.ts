@@ -278,3 +278,28 @@ export function useUpdatePaymentMethod() {
     },
   });
 }
+
+export function useDeleteOrder() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (orderId: string) => {
+      await supabase.from("order_items").delete().eq("order_id", orderId);
+      await supabase.from("order_payments").delete().eq("order_id", orderId);
+      await supabase.from("delivery_orders").delete().eq("order_id", orderId);
+      const { error } = await supabase.from("orders").delete().eq("id", orderId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.refetchQueries({ queryKey: ["orders"] });
+      toast({ title: "Pedido excluído com sucesso!" });
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro ao excluir pedido",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}

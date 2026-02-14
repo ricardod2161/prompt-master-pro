@@ -79,8 +79,11 @@ function FooterLinkItem({ link }: { link: FooterLink }) {
 
   if (link.href === "#") {
     return (
-      <span className="text-sm text-muted-foreground/50 cursor-default">
+      <span className="text-sm text-muted-foreground/40 cursor-default flex items-center gap-1.5">
         {link.label}
+        <span className="text-[10px] bg-muted text-muted-foreground/60 px-1.5 py-0.5 rounded-full leading-none">
+          Em breve
+        </span>
       </span>
     );
   }
@@ -151,16 +154,27 @@ export function LandingFooter() {
           </p>
 
           <div className="flex items-center gap-4">
-            {SOCIAL_LINKS.map((social) => (
-              <a
-                key={social.label}
-                href={social.href}
-                className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                aria-label={social.label}
-              >
-                <social.icon className="w-5 h-5" />
-              </a>
-            ))}
+            {SOCIAL_LINKS.map((social) => {
+              const isDisabled = social.href === "#";
+              return isDisabled ? (
+                <span
+                  key={social.label}
+                  className="p-2 rounded-lg text-muted-foreground/40 cursor-default"
+                  aria-label={social.label}
+                >
+                  <social.icon className="w-5 h-5" />
+                </span>
+              ) : (
+                <a
+                  key={social.label}
+                  href={social.href}
+                  className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  aria-label={social.label}
+                >
+                  <social.icon className="w-5 h-5" />
+                </a>
+              );
+            })}
           </div>
         </div>
       </div>
