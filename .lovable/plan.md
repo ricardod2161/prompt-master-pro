@@ -1,30 +1,51 @@
-
-## Corrigir Rastreamento de Pedido no Celular
+## Corrigir conta que nao limpa apos fechamento
 
 ### Problema
-O pedido aparece como "nao encontrado" porque:
 
-1. Apos fazer um pedido, o app redireciona para `/track/{order_id}` (UUID interno)
-2. Porem, as regras de seguranca do banco de dados so permitem acesso publico via `tracking_token`
-3. A consulta busca pelo campo `id`, mas o usuario anonimo nao tem permissao para ler por esse campo
-4. O botao "Voltar ao inicio" funciona corretamente no codigo (`navigate("/")`), mas como o pedido nao e encontrado, o botao mostrado e o da tela de erro
+A consulta de "Ver Conta" busca pedidos com status `["pending", "preparing", "ready", "delivered"]`. Quando a conta e fechada, os pedidos sao marcados como `"delivered"` -- que ainda esta no filtro. Resultado: os pedidos nunca somem, e o badge "5" fica permanente.
 
-### Solucao (3 arquivos)
+Na base de dados, existem 5 pedidos antigos (de 4 a 9 de fevereiro) com status "delivered" nessa mesa que aparecem eternamente.
 
-**1. `src/hooks/useCustomerOrder.ts`**
-- Apos criar o pedido, salvar o `tracking_token` retornado (em vez de so o `id`)
-- Redirecionar para `/track/{tracking_token}` em vez de `/track/{order_id}`
+### Solucao
 
-**2. `src/hooks/useOrderTracking.ts`**
-- Alterar a consulta principal para buscar por `tracking_token` em vez de `id`
-- `.eq("tracking_token", token)` no lugar de `.eq("id", orderId)`
+**Parte 1: Migracao de banco de dados**
 
-**3. `src/pages/OrderTracking.tsx`**
-- Renomear o parametro de rota de `orderId` para `token` para maior clareza
-- Manter o botao "Voltar" funcional (ja funciona, o problema era so o pedido nao ser encontrado)
+Adicionar o valor `"completed"` ao enum `order_status`. Este status representa "conta fechada/finalizada", diferente de "delivered" (comida entregue na mesa).
+
+```sql
+ALTER TYPE order_status ADD VALUE 'completed';
+```
+
+**Parte 2: Atualizar `useTableBill.ts**`
+
+No `closeBillMutation`, alterar o status dos pedidos de `"delivered"` para `"completed"`:
+
+- Linha 102: `.update({ status: "completed" })` em vez de `"delivered"`
+
+Isso faz com que os pedidos fechados saiam do filtro da consulta (`["pending", "preparing", "ready", "delivered"]`) e nao aparecam mais.
+
+**Parte 3: Limpar dados existentes**
+
+Executar uma consulta para marcar os 5 pedidos antigos como "completed", limpando a mesa imediatamente:
+
+```sql
+UPDATE orders SET status = 'completed' 
+WHERE table_id = '324160fb-52c7-4f88-be83-6b93035e50ab' 
+AND status = 'delivered';
+```
+
+**Parte 4: Atualizar referencias no sistema**
+
+Nos arquivos que filtram ou exibem pedidos, garantir que "completed" seja tratado corretamente:
+
+- `src/hooks/useDashboard.ts` - excluir "completed" dos calculos (similar a "cancelled")
+- `src/pages/Dashboard.tsx` - adicionar label/cor para "completed" 
+- `src/pages/Tables.tsx` - ja exclui "delivered", confirmar que "completed" tambem fica fora
+- `src/components/shared/StatusBadge.tsx` - adicionar estilo para "completed"
 
 ### Resultado
-- O link de rastreamento usara o token seguro em vez do UUID interno
-- O pedido sera encontrado corretamente no celular
-- A privacidade dos dados e mantida (sem expor IDs internos)
-- O botao "Voltar" voltara a funcionar pois o pedido sera carregado normalmente
+
+- Apos fechar a conta, pedidos viram "completed" e somem da consulta
+- O badge "Ver Conta" mostra 0 e o botao desaparece
+- Pedidos entregues na mesa ("delivered") continuam visiveis ate o fechamento da conta
+- Historico de pedidos "completed" fica disponivel para relatorios, e veja quais as melhorias que voce colocaria?
