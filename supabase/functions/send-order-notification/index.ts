@@ -251,11 +251,13 @@ serve(async (req) => {
       const authClient = createClient(supabaseUrl, supabaseAnon, {
         global: { headers: { Authorization: authHeader } },
       });
-      const { data: { user: authUser }, error: authError } = await authClient.auth.getUser();
+      const token = authHeader.replace("Bearer ", "");
+      const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
 
-      if (!authError && authUser?.id) {
+      if (!claimsError && claimsData?.claims?.sub) {
+        const userId = claimsData.claims.sub;
         const { data: hasAccess } = await supabase.rpc("has_unit_access", {
-          _user_id: authUser.id,
+          _user_id: userId,
           _unit_id: unitId,
         });
         if (!hasAccess) {
@@ -265,7 +267,7 @@ serve(async (req) => {
           );
         }
       }
-      // If auth check fails but token was provided, we still proceed
+      // If claims check fails but token was provided, we still proceed
       // because the order-unit validation below provides a safety net
     }
     // Anonymous callers (customers placing table orders) are allowed through
