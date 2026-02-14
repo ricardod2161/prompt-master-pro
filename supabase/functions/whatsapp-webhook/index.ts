@@ -758,6 +758,23 @@ async function confirmarPedido(
     return "❌ Para entrega, preciso do endereço completo (rua, número e bairro).";
   }
 
+  // Anti-duplicate: check if same customer has a pending order in last 2 minutes
+  const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  const { data: recentOrder } = await supabase
+    .from("orders")
+    .select("id, order_number")
+    .eq("unit_id", unitId)
+    .eq("customer_phone", customerPhone)
+    .eq("status", "pending")
+    .gte("created_at", twoMinutesAgo)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (recentOrder) {
+    return `⚠️ Você já tem um pedido recente em andamento! Pedido #${recentOrder.order_number}. Aguarde o preparo ou fale conosco se precisar de algo mais.`;
+  }
+
   // Map payment method to DB enum
   const paymentMap: Record<string, string> = {
     "dinheiro": "cash",
@@ -1036,11 +1053,17 @@ async function confirmarPedido(
   resultado += `\n⏱️ *Tempo estimado:* ${modalidade === "entrega" ? "30-45 minutos" : "15-25 minutos"}\n`;
 
   // Add Pix code if payment is pix
-  if (pixPaymentCode && pagamento.forma === "pix") {
-    resultado += `\n━━━━━━━━━━━━━━━━\n`;
-    resultado += `📱 *Pague via Pix:*\n`;
-    resultado += `Copie o código abaixo e cole no seu app de banco:\n\n`;
-    resultado += `\`\`\`${pixPaymentCode}\`\`\`\n`;
+  if (pagamento.forma === "pix") {
+    if (pixPaymentCode) {
+      resultado += `\n━━━━━━━━━━━━━━━━\n`;
+      resultado += `📱 *Pague via Pix:*\n`;
+      resultado += `Copie o código abaixo e cole no seu app de banco:\n\n`;
+      resultado += `\`\`\`${pixPaymentCode}\`\`\`\n`;
+    } else {
+      resultado += `\n━━━━━━━━━━━━━━━━\n`;
+      resultado += `⚠️ *Pix não configurado pelo estabelecimento.*\n`;
+      resultado += `Entre em contato com o restaurante para obter a chave Pix para pagamento.\n`;
+    }
   }
 
   // Add Stripe payment link
