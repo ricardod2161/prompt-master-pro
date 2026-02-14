@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { BarChart3, TrendingUp, DollarSign, ShoppingBag, Users, Calendar } from "lucide-react";
+import { BarChart3, TrendingUp, DollarSign, ShoppingBag, Users, Calendar, QrCode } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -11,12 +11,14 @@ import { useOrders } from "@/hooks/useOrders";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { cn } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { PixTransactionsDashboard } from "@/components/reports/PixTransactionsDashboard";
 
 const COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6"];
 
 type DateRange = "today" | "week" | "month" | "custom";
 
 export default function Reports() {
+  const [activeTab, setActiveTab] = useState("sales");
   const [dateRange, setDateRange] = useState<DateRange>("today");
   const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
   const { data: orders, isLoading } = useOrders();
@@ -121,8 +123,20 @@ export default function Reports() {
             Análise de vendas e desempenho
           </p>
         </div>
+      </div>
 
-        <div className="flex flex-wrap gap-2">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="sales">📊 Vendas</TabsTrigger>
+          <TabsTrigger value="pix" className="gap-1">
+            <QrCode className="h-3.5 w-3.5" />
+            Pix
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="sales" className="mt-4 space-y-6">
+          {/* Date filters */}
+          <div className="flex flex-wrap gap-2">
           <Button
             variant={dateRange === "today" ? "default" : "outline"}
             size="sm"
@@ -168,8 +182,7 @@ export default function Reports() {
               />
             </PopoverContent>
           </Popover>
-        </div>
-      </div>
+         </div>
 
       {/* Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -320,6 +333,12 @@ export default function Reports() {
           </CardContent>
         </Card>
       </div>
+        </TabsContent>
+
+        <TabsContent value="pix" className="mt-4">
+          <PixTransactionsDashboard />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

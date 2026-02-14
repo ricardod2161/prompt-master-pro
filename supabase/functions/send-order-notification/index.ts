@@ -400,6 +400,24 @@ serve(async (req) => {
         );
         
         console.log("PIX DEBUG - Código gerado:", pixCode);
+
+        // Register in pix_transactions for reconciliation
+        try {
+          await supabase.from("pix_transactions").insert({
+            unit_id: unitId,
+            order_id: order.id,
+            transaction_id: `PED${order.order_number}`,
+            pix_code: pixCode,
+            amount: order.total_price,
+            status: "pending",
+            customer_phone: order.customer_phone,
+            customer_name: order.customer_name,
+            expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          });
+          console.log(`[PIX] Registered transaction PED${order.order_number}`);
+        } catch (pixErr) {
+          console.error("[PIX] Error registering pix transaction:", pixErr);
+        }
       } catch (e) {
         console.error("Error generating Pix code:", e);
       }
