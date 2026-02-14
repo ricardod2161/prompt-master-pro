@@ -156,9 +156,24 @@ export function AIPromptGenerator({
     }
     setIsSaving(true);
     try {
-      const { error } = await supabase
+      // Check if settings already exist for this unit
+      const { data: existing } = await supabase
         .from("whatsapp_settings")
-        .upsert({ unit_id: unitId, system_prompt: prompt.trim() }, { onConflict: "unit_id" });
+        .select("id")
+        .eq("unit_id", unitId)
+        .maybeSingle();
+
+      let error;
+      if (existing?.id) {
+        ({ error } = await supabase
+          .from("whatsapp_settings")
+          .update({ system_prompt: prompt.trim() })
+          .eq("id", existing.id));
+      } else {
+        ({ error } = await supabase
+          .from("whatsapp_settings")
+          .insert({ unit_id: unitId, system_prompt: prompt.trim() }));
+      }
       if (error) throw error;
 
       // Save to history
