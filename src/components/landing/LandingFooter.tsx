@@ -2,7 +2,14 @@ import { Link } from "react-router-dom";
 import { Mail, Phone, MapPin, Facebook, Instagram, Linkedin, Twitter } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 
-const FOOTER_LINKS = {
+type FooterLink = {
+  label: string;
+  href: string;
+  external?: boolean;
+  route?: boolean;
+};
+
+const FOOTER_LINKS: Record<string, FooterLink[]> = {
   produto: [
     { label: "Recursos", href: "#features" },
     { label: "Preços", href: "#pricing" },
@@ -16,16 +23,16 @@ const FOOTER_LINKS = {
     { label: "Parceiros", href: "#" },
   ],
   suporte: [
-    { label: "Central de Ajuda", href: "#" },
-    { label: "Documentação", href: "#" },
+    { label: "Central de Ajuda", href: "#faq" },
+    { label: "Documentação", href: "#how-it-works" },
     { label: "Status do Sistema", href: "#" },
-    { label: "Contato", href: "#" },
+    { label: "Contato", href: "#contact" },
   ],
   legal: [
-    { label: "Privacidade", href: "#" },
-    { label: "Termos de Uso", href: "#" },
-    { label: "Cookies", href: "#" },
-    { label: "LGPD", href: "#" },
+    { label: "Privacidade", href: "/privacy", route: true },
+    { label: "Termos de Uso", href: "/terms", route: true },
+    { label: "Cookies", href: "/privacy", route: true },
+    { label: "LGPD", href: "/privacy", route: true },
   ],
 };
 
@@ -36,9 +43,9 @@ const SOCIAL_LINKS = [
   { icon: Twitter, href: "#", label: "Twitter" },
 ];
 
-export function LandingFooter() {
+function FooterLinkItem({ link }: { link: FooterLink }) {
   const scrollToSection = (href: string) => {
-    if (href.startsWith("#")) {
+    if (href.startsWith("#") && href.length > 1) {
       const element = document.querySelector(href);
       if (element) {
         element.scrollIntoView({ behavior: "smooth" });
@@ -46,13 +53,55 @@ export function LandingFooter() {
     }
   };
 
+  if (link.external) {
+    return (
+      <a
+        href={link.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {link.label}
+      </a>
+    );
+  }
+
+  if (link.route) {
+    return (
+      <Link
+        to={link.href}
+        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {link.label}
+      </Link>
+    );
+  }
+
+  if (link.href === "#") {
+    return (
+      <span className="text-sm text-muted-foreground/50 cursor-default">
+        {link.label}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => scrollToSection(link.href)}
+      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+    >
+      {link.label}
+    </button>
+  );
+}
+
+export function LandingFooter() {
   return (
     <footer className="border-t border-border/50 bg-card/30">
       <div className="container mx-auto px-4 py-16">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8 lg:gap-12">
           {/* Brand Column */}
-          <div className="col-span-2 md:col-span-3 lg:col-span-2">
-            {/* Logo */}
+          <div className="col-span-2 lg:col-span-2">
             <Link to="/" className="mb-4 inline-block">
               <Logo size="sm" />
             </Link>
@@ -62,7 +111,6 @@ export function LandingFooter() {
               e aumente seus lucros com tecnologia inteligente.
             </p>
 
-            {/* Contact Info */}
             <div className="space-y-2 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 <Mail className="w-4 h-4" />
@@ -80,80 +128,20 @@ export function LandingFooter() {
           </div>
 
           {/* Links Columns */}
-          <div>
-            <h4 className="font-semibold mb-4">Produto</h4>
-            <ul className="space-y-2">
-              {FOOTER_LINKS.produto.map((link) => (
-                <li key={link.label}>
-                  {(link as any).external ? (
-                    <a
-                      href={link.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {link.label}
-                    </a>
-                  ) : (
-                    <button
-                      onClick={() => scrollToSection(link.href)}
-                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {link.label}
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="font-semibold mb-4">Empresa</h4>
-            <ul className="space-y-2">
-              {FOOTER_LINKS.empresa.map((link) => (
-                <li key={link.label}>
-                  <button
-                    onClick={() => scrollToSection(link.href)}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {link.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="font-semibold mb-4">Suporte</h4>
-            <ul className="space-y-2">
-              {FOOTER_LINKS.suporte.map((link) => (
-                <li key={link.label}>
-                  <button
-                    onClick={() => scrollToSection(link.href)}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {link.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="font-semibold mb-4">Legal</h4>
-            <ul className="space-y-2">
-              {FOOTER_LINKS.legal.map((link) => (
-                <li key={link.label}>
-                  <button
-                    onClick={() => scrollToSection(link.href)}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {link.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {(["produto", "empresa", "suporte", "legal"] as const).map((section) => (
+            <div key={section}>
+              <h4 className="font-semibold mb-4 capitalize">
+                {section === "produto" ? "Produto" : section === "empresa" ? "Empresa" : section === "suporte" ? "Suporte" : "Legal"}
+              </h4>
+              <ul className="space-y-2">
+                {FOOTER_LINKS[section].map((link) => (
+                  <li key={link.label}>
+                    <FooterLinkItem link={link} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
 
         {/* Bottom Bar */}
@@ -162,7 +150,6 @@ export function LandingFooter() {
             © {new Date().getFullYear()} RestaurantOS. Todos os direitos reservados.
           </p>
 
-          {/* Social Links */}
           <div className="flex items-center gap-4">
             {SOCIAL_LINKS.map((social) => (
               <a
