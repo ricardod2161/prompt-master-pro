@@ -23,11 +23,11 @@ const TEMPLATES: Record<string, Partial<PromptFormData>> = {
     specialRules: "Ponto da carne: mal passado, ao ponto ou bem passado. Combos incluem batata frita e refrigerante. Adicionais cobrados à parte.",
   },
   churrascaria: {
-    businessDescription: "Churrascaria com carnes nobres selecionadas, cortes especiais e acompanhamentos tradicionais. Rodízio e pratos à la carte.",
+    businessDescription: "Churrascaria tradicional com cardápio do dia completo, incluindo acompanhamentos variados como feijoada, feijão mexido, arroz de leite, arroz refogado, baião, macarrão, farofa de farinha, maionese, vinagrete, batata doce, salada verde e fruta. Proteínas assadas na brasa: boi, porco, frango, linguiça e filé de peixe frito. Servimos marmitas e pratos feitos com foco em comida caseira de qualidade. Atendemos no salão, delivery e retirada no balcão.",
     botName: "ChurrasBot",
     voiceTone: "profissional",
     emojiLevel: "moderado",
-    specialRules: "Reservas recomendadas para grupos acima de 6 pessoas. Crianças até 5 anos não pagam. Estacionamento próprio.",
+    specialRules: "Cardápio do dia muda diariamente. Proteínas sujeitas à disponibilidade. Marmitas com acompanhamentos fixos do dia, cliente escolhe a proteína. Pedido mínimo para delivery sob consulta.",
   },
   restaurante: {
     businessDescription: "Restaurante com cardápio variado, pratos executivos no almoço e menu especial aos finais de semana. Cozinha brasileira com toque autoral.",
