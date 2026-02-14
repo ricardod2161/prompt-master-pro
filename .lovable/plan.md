@@ -1,17 +1,57 @@
 
 
-## Atualizar Template de Churrascaria com Descrição Real
+## Corrigir erro de RLS ao salvar prompt
 
-### Contexto
+### Problema
+O botao "Salvar Prompt" no gerador de prompt tenta fazer um `upsert` diretamente na tabela `whatsapp_settings`. Quando a linha ainda nao existe, o Supabase tenta um INSERT, que exige permissao de admin/manager. Se o usuario ja tem configuracoes salvas, o `upsert` deveria fazer UPDATE, mas a falta de constraint unica ou permissoes causa o erro de RLS.
 
-Com base no print do cardápio da "Churrascaria Dedé / Santo Antonio", o negócio é uma churrascaria tradicional que trabalha com cardápio do dia no estilo marmita/prato feito, com acompanhamentos variados e proteínas assadas na brasa.
+### Solucao
 
-### Mudança
+**Arquivo:** `src/components/settings/AIPromptGenerator.tsx`
 
-**Arquivo:** `src/components/settings/ai-prompt/BusinessTemplates.tsx`
+Modificar o `handleSave` (linhas 152-178) para:
 
-Atualizar o objeto `churrascaria` (linhas 25-31) com:
+1. Primeiro tentar buscar se ja existe uma linha em `whatsapp_settings` para o `unit_id`
+2. Se existir, fazer `UPDATE` usando o `id` da linha existente
+3. Se nao existir, fazer `INSERT` com o `unit_id`
 
-- **businessDescription**: "Churrascaria tradicional com cardápio do dia completo, incluindo acompanhamentos variados como feijoada, feijão mexido, arroz de leite, arroz refogado, baião, macarrão, farofa de farinha, maionese, vinagrete, batata doce, salada verde e fruta. Proteínas assadas na brasa: boi, porco, frango, linguiça e filé de peixe frito. Servimos marmitas e pratos feitos com foco em comida caseira de qualidade. Atendemos no salão, delivery e retirada no balcão."
-- **specialRules**: "Cardápio do dia muda diariamente. Proteínas sujeitas à disponibilidade. Marmitas com acompanhamentos fixos do dia, cliente escolhe a proteína. Pedido mínimo para delivery sob consulta."
+Isso evita o `upsert` que pode falhar por falta de constraint unica na coluna `unit_id`, e garante que a operacao correta (INSERT ou UPDATE) seja usada.
 
+### Detalhes Tecnicos
+
+Substituir no `handleSave`:
+
+```typescript
+// Antes (problemático):
+const { error } = await supabase
+  .from("whatsapp_settings")
+  .upsert({ unit_id: unitId, system_prompt: prompt.trim() }, { onConflict: "unit_id" });
+
+// Depois (corrigido):
+// Verificar se já existe configuração
+const { data: existing } = await supabase
+  .from("whatsapp_settings")
+  .select("id")
+  .eq("unit_id", unitId)
+  .maybeSingle();
+
+let error;
+if (existing?.id) {
+  // UPDATE na linha existente
+  ({ error } = await supabase
+    .from("whatsapp_settings")
+    .update({ system_prompt: prompt.trim() })
+    .eq("id", existing.id));
+} else {
+  // INSERT nova linha
+  ({ error } = await supabase
+    .from("whatsapp_settings")
+    .insert({ unit_id: unitId, system_prompt: prompt.trim() }));
+}
+```
+
+### Resultado esperado
+- "Salvar Prompt" funciona sem erro de RLS
+- Se a linha ja existe, faz UPDATE (sem conflito)
+- Se nao existe, faz INSERT normalmente
+- Historico de prompts continua sendo salvo apos o sucesso
