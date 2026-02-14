@@ -99,7 +99,7 @@ export function useTableBill(tableId: string, unitId: string | undefined) {
       if (orderIds.length > 0) {
         const { error: ordersError } = await supabase
           .from("orders")
-          .update({ status: "delivered" })
+          .update({ status: "completed" as any })
           .in("id", orderIds);
 
         if (ordersError) {

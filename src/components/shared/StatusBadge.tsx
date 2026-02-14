@@ -7,6 +7,7 @@ type StatusType =
   | "ready"
   | "delivered"
   | "cancelled"
+  | "completed"
   | "free"
   | "occupied"
   | "pending_order";
@@ -44,6 +45,11 @@ const statusConfig: Record<
     label: "Cancelado",
     variant: "destructive",
     className: "",
+  },
+  completed: {
+    label: "Finalizado",
+    variant: "outline",
+    className: "border-purple-500 text-purple-600 bg-purple-500/10",
   },
   free: {
     label: "Livre",

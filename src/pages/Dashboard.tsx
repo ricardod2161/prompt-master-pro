@@ -53,6 +53,7 @@ const statusLabels: Record<string, string> = {
   ready: "Pronto",
   delivered: "Entregue",
   cancelled: "Cancelado",
+  completed: "Finalizado",
 };
 
 const statusColors: Record<string, string> = {
@@ -61,6 +62,7 @@ const statusColors: Record<string, string> = {
   ready: "bg-status-success/20 text-status-success",
   delivered: "bg-muted text-muted-foreground",
   cancelled: "bg-status-error/20 text-status-error",
+  completed: "bg-purple-500/20 text-purple-600",
 };
 
 const formatCurrency = (value: number) => {
