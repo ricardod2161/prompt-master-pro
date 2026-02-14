@@ -62,7 +62,7 @@ const App = () => (
                 <Route path="/login" element={<Login />} />
                 <Route path="/select-unit" element={<SelectUnit />} />
                 <Route path="/order/:tableId" element={<CustomerOrder />} />
-                <Route path="/track/:orderId" element={<OrderTracking />} />
+                <Route path="/track/:token" element={<OrderTracking />} />
                 <Route path="/subscription-success" element={<SubscriptionSuccess />} />
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/terms" element={<Terms />} />

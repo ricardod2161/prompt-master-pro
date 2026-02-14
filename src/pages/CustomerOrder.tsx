@@ -528,6 +528,7 @@ export default function CustomerOrder() {
     orderSuccess,
     orderNumber,
     orderId,
+    trackingToken,
     resetOrder,
     unitSettings,
   } = useCustomerOrder(tableId || "");
@@ -567,14 +568,14 @@ export default function CustomerOrder() {
 
   // Redirect to tracking page when order is successful
   useEffect(() => {
-    if (orderSuccess && orderId) {
+    if (orderSuccess && trackingToken) {
       // Small delay for haptic feedback to complete
       const timer = setTimeout(() => {
-        navigate(`/track/${orderId}`, { replace: true });
+        navigate(`/track/${trackingToken}`, { replace: true });
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [orderSuccess, orderId, navigate]);
+  }, [orderSuccess, trackingToken, navigate]);
 
   // Show error toast when submission fails
   useEffect(() => {
