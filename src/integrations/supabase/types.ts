@@ -1445,6 +1445,7 @@ export type Database = {
         | "ready"
         | "delivered"
         | "cancelled"
+        | "completed"
       payment_method: "cash" | "credit" | "debit" | "pix" | "voucher"
       table_status: "free" | "occupied" | "pending_order"
     }
@@ -1598,7 +1599,14 @@ export const Constants = {
       ],
       kitchen_status: ["pending", "preparing", "ready"],
       order_channel: ["whatsapp", "table", "counter", "delivery"],
-      order_status: ["pending", "preparing", "ready", "delivered", "cancelled"],
+      order_status: [
+        "pending",
+        "preparing",
+        "ready",
+        "delivered",
+        "cancelled",
+        "completed",
+      ],
       payment_method: ["cash", "credit", "debit", "pix", "voucher"],
       table_status: ["free", "occupied", "pending_order"],
     },

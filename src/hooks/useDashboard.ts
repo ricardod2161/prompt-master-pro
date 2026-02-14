@@ -144,7 +144,7 @@ export function useDashboard() {
         .maybeSingle();
 
       // Process today's data
-      const validOrders = todayOrders?.filter((o) => o.status !== "cancelled") || [];
+      const validOrders = todayOrders?.filter((o) => o.status !== "cancelled" && o.status !== "completed") || [];
       const totalRevenue = validOrders.reduce((sum, o) => sum + Number(o.total_price), 0);
       const totalOrders = validOrders.length;
       const averageTicket = totalOrders > 0 ? totalRevenue / totalOrders : 0;

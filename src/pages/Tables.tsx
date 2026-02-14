@@ -655,7 +655,7 @@ export default function Tables() {
   const tableOrdersMap = useMemo(() => {
     const map = new Map<string, OrderWithItems[]>();
     orders
-      .filter(o => o.table_id && o.status !== "delivered" && o.status !== "cancelled")
+      .filter(o => o.table_id && o.status !== "delivered" && o.status !== "cancelled" && o.status !== "completed")
       .forEach(order => {
         if (order.table_id) {
           const existing = map.get(order.table_id) || [];
