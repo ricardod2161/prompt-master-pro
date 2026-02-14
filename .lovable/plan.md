@@ -1,57 +1,30 @@
 
-
-## Corrigir erro de RLS ao salvar prompt
+## Corrigir Rastreamento de Pedido no Celular
 
 ### Problema
-O botao "Salvar Prompt" no gerador de prompt tenta fazer um `upsert` diretamente na tabela `whatsapp_settings`. Quando a linha ainda nao existe, o Supabase tenta um INSERT, que exige permissao de admin/manager. Se o usuario ja tem configuracoes salvas, o `upsert` deveria fazer UPDATE, mas a falta de constraint unica ou permissoes causa o erro de RLS.
+O pedido aparece como "nao encontrado" porque:
 
-### Solucao
+1. Apos fazer um pedido, o app redireciona para `/track/{order_id}` (UUID interno)
+2. Porem, as regras de seguranca do banco de dados so permitem acesso publico via `tracking_token`
+3. A consulta busca pelo campo `id`, mas o usuario anonimo nao tem permissao para ler por esse campo
+4. O botao "Voltar ao inicio" funciona corretamente no codigo (`navigate("/")`), mas como o pedido nao e encontrado, o botao mostrado e o da tela de erro
 
-**Arquivo:** `src/components/settings/AIPromptGenerator.tsx`
+### Solucao (3 arquivos)
 
-Modificar o `handleSave` (linhas 152-178) para:
+**1. `src/hooks/useCustomerOrder.ts`**
+- Apos criar o pedido, salvar o `tracking_token` retornado (em vez de so o `id`)
+- Redirecionar para `/track/{tracking_token}` em vez de `/track/{order_id}`
 
-1. Primeiro tentar buscar se ja existe uma linha em `whatsapp_settings` para o `unit_id`
-2. Se existir, fazer `UPDATE` usando o `id` da linha existente
-3. Se nao existir, fazer `INSERT` com o `unit_id`
+**2. `src/hooks/useOrderTracking.ts`**
+- Alterar a consulta principal para buscar por `tracking_token` em vez de `id`
+- `.eq("tracking_token", token)` no lugar de `.eq("id", orderId)`
 
-Isso evita o `upsert` que pode falhar por falta de constraint unica na coluna `unit_id`, e garante que a operacao correta (INSERT ou UPDATE) seja usada.
+**3. `src/pages/OrderTracking.tsx`**
+- Renomear o parametro de rota de `orderId` para `token` para maior clareza
+- Manter o botao "Voltar" funcional (ja funciona, o problema era so o pedido nao ser encontrado)
 
-### Detalhes Tecnicos
-
-Substituir no `handleSave`:
-
-```typescript
-// Antes (problemático):
-const { error } = await supabase
-  .from("whatsapp_settings")
-  .upsert({ unit_id: unitId, system_prompt: prompt.trim() }, { onConflict: "unit_id" });
-
-// Depois (corrigido):
-// Verificar se já existe configuração
-const { data: existing } = await supabase
-  .from("whatsapp_settings")
-  .select("id")
-  .eq("unit_id", unitId)
-  .maybeSingle();
-
-let error;
-if (existing?.id) {
-  // UPDATE na linha existente
-  ({ error } = await supabase
-    .from("whatsapp_settings")
-    .update({ system_prompt: prompt.trim() })
-    .eq("id", existing.id));
-} else {
-  // INSERT nova linha
-  ({ error } = await supabase
-    .from("whatsapp_settings")
-    .insert({ unit_id: unitId, system_prompt: prompt.trim() }));
-}
-```
-
-### Resultado esperado
-- "Salvar Prompt" funciona sem erro de RLS
-- Se a linha ja existe, faz UPDATE (sem conflito)
-- Se nao existe, faz INSERT normalmente
-- Historico de prompts continua sendo salvo apos o sucesso
+### Resultado
+- O link de rastreamento usara o token seguro em vez do UUID interno
+- O pedido sera encontrado corretamente no celular
+- A privacidade dos dados e mantida (sem expor IDs internos)
+- O botao "Voltar" voltara a funcionar pois o pedido sera carregado normalmente
