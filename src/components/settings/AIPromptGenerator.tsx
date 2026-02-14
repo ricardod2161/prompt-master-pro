@@ -64,6 +64,22 @@ export function AIPromptGenerator({
     menu: false,
   });
 
+  // Fetch existing prompt when no externalPrompt is provided
+  useEffect(() => {
+    if (externalPrompt !== undefined) return;
+    const fetchExistingPrompt = async () => {
+      const { data } = await supabase
+        .from("whatsapp_settings")
+        .select("system_prompt")
+        .eq("unit_id", unitId)
+        .maybeSingle();
+      if (data?.system_prompt) {
+        setGeneratedPrompt(data.system_prompt);
+      }
+    };
+    fetchExistingPrompt();
+  }, [unitId, externalPrompt]);
+
   // Auto-prefill form with unit_settings data
   useEffect(() => {
     if (!dataLoaded && settings && !isLoadingSettings) {
