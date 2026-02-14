@@ -90,7 +90,15 @@ export default function Settings() {
   });
   
   // Financial settings state
-  const [financialSettings, setFinancialSettings] = useState({
+  const [financialSettings, setFinancialSettings] = useState<{
+    service_fee_percentage: number;
+    delivery_fee: number;
+    min_delivery_order: number;
+    payment_methods: PaymentMethods;
+    pix_key?: string | null;
+    pix_merchant_name?: string | null;
+    pix_merchant_city?: string | null;
+  }>({
     service_fee_percentage: settings?.service_fee_percentage ?? 0,
     delivery_fee: settings?.delivery_fee ?? 0,
     min_delivery_order: settings?.min_delivery_order ?? 0,
@@ -101,6 +109,9 @@ export default function Settings() {
       pix: true,
       voucher: false,
     },
+    pix_key: settings?.pix_key ?? null,
+    pix_merchant_name: settings?.pix_merchant_name ?? null,
+    pix_merchant_city: settings?.pix_merchant_city ?? null,
   });
   
   // Hours settings state
@@ -156,6 +167,9 @@ export default function Settings() {
         delivery_fee: settings.delivery_fee,
         min_delivery_order: settings.min_delivery_order,
         payment_methods: settings.payment_methods,
+        pix_key: settings.pix_key ?? null,
+        pix_merchant_name: settings.pix_merchant_name ?? null,
+        pix_merchant_city: settings.pix_merchant_city ?? null,
       });
       setHoursSettings({
         opening_hours: settings.opening_hours,
