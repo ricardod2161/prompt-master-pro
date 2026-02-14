@@ -135,6 +135,25 @@ export function useUserManagement() {
     },
   });
 
+  const deleteUserMutation = useMutation({
+    mutationFn: async ({ userId, profileId }: { userId: string; profileId: string }) => {
+      // Delete related data first
+      await supabase.from("user_roles").delete().eq("user_id", userId);
+      await supabase.from("user_units").delete().eq("user_id", userId);
+      await supabase.from("notifications").delete().eq("user_id", userId);
+      const { error } = await supabase.from("profiles").delete().eq("id", profileId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-customers"] });
+      toast.success("Usuário excluído com sucesso!");
+    },
+    onError: (error: any) => {
+      toast.error(`Erro ao excluir usuário: ${error.message}`);
+    },
+  });
+
   return {
     users: usersQuery.data || [],
     loading: usersQuery.isLoading,
@@ -143,6 +162,8 @@ export function useUserManagement() {
     removeRole: removeRoleMutation.mutate,
     assignUnit: assignUnitMutation.mutate,
     removeUnit: removeUnitMutation.mutate,
+    deleteUser: deleteUserMutation.mutate,
+    isDeletingUser: deleteUserMutation.isPending,
     refetch: usersQuery.refetch,
   };
 }

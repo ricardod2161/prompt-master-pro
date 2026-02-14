@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useUserManagement } from "@/hooks/useUserManagement";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Table,
@@ -21,6 +21,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -34,7 +45,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MoreHorizontal, Plus, X, Building2, Shield, Unlink } from "lucide-react";
+import { MoreHorizontal, Plus, X, Building2, Shield, Unlink, Trash2, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { format } from "date-fns";
@@ -64,7 +75,7 @@ const roleLabels: Record<AppRole, string> = {
 const availableRoles: AppRole[] = ["admin", "manager", "cashier", "kitchen", "waiter"];
 
 export function AdminUsersList() {
-  const { users, loading, addRole, removeRole, assignUnit, removeUnit } = useUserManagement();
+  const { users, loading, addRole, removeRole, assignUnit, removeUnit, deleteUser, isDeletingUser } = useUserManagement();
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [isAddRoleOpen, setIsAddRoleOpen] = useState(false);
   const [isAssignUnitOpen, setIsAssignUnitOpen] = useState(false);
@@ -292,8 +303,40 @@ export function AdminUsersList() {
                               </SelectContent>
                             </Select>
                           )}
-                        </DialogContent>
+                         </DialogContent>
                       </Dialog>
+                      <DropdownMenuSeparator />
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <DropdownMenuItem
+                            onSelect={(e) => e.preventDefault()}
+                            className="text-destructive focus:text-destructive"
+                            disabled={user.roles.includes("developer")}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Excluir Usuário
+                          </DropdownMenuItem>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir Usuário</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Tem certeza que deseja excluir <strong>{user.full_name || "este usuário"}</strong>? 
+                              Todas as roles, unidades associadas e notificações serão removidas. Esta ação não pode ser desfeita.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => deleteUser({ userId: user.user_id, profileId: user.id })}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              {isDeletingUser ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                              Excluir
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
