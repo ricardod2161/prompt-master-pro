@@ -108,7 +108,7 @@ function NotFoundState() {
 }
 
 export default function OrderTracking() {
-  const { orderId } = useParams<{ orderId: string }>();
+  const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
 
   const {
@@ -119,7 +119,7 @@ export default function OrderTracking() {
     statusLabel,
     unitSettings,
     unitInfo,
-  } = useOrderTracking(orderId || "");
+  } = useOrderTracking(token || "");
 
   // Generate Pix code
   const pixCode = useMemo(() => {

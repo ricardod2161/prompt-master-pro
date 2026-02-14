@@ -40,15 +40,15 @@ interface UnitInfo {
   address: string | null;
 }
 
-export function useOrderTracking(orderId: string) {
+export function useOrderTracking(token: string) {
   const queryClient = useQueryClient();
   const [realtimeStatus, setRealtimeStatus] = useState<OrderStatus | null>(null);
 
-  // Fetch order data
+  // Fetch order data by tracking_token
   const orderQuery = useQuery({
-    queryKey: ["order-tracking", orderId],
+    queryKey: ["order-tracking", token],
     queryFn: async () => {
-      if (!orderId) return null;
+      if (!token) return null;
 
       const { data: order, error } = await supabase
         .from("orders")
@@ -71,7 +71,7 @@ export function useOrderTracking(orderId: string) {
           ),
           tables (number)
         `)
-        .eq("id", orderId)
+        .eq("tracking_token", token)
         .maybeSingle();
 
       if (error) throw error;
@@ -91,7 +91,7 @@ export function useOrderTracking(orderId: string) {
         table_number: order.tables?.number || null,
       } as OrderData;
     },
-    enabled: !!orderId,
+    enabled: !!token,
     staleTime: 1000 * 60, // 1 minute
   });
 
@@ -133,10 +133,11 @@ export function useOrderTracking(orderId: string) {
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
-  // Subscribe to realtime updates
+  // Subscribe to realtime updates using order id from fetched data
   useEffect(() => {
-    if (!orderId) return;
+    if (!orderQuery.data?.id) return;
 
+    const orderId = orderQuery.data.id;
     const channel = supabase
       .channel(`order-${orderId}`)
       .on(
@@ -152,7 +153,7 @@ export function useOrderTracking(orderId: string) {
           setRealtimeStatus(newStatus);
           
           // Also invalidate the query to refresh full data
-          queryClient.invalidateQueries({ queryKey: ["order-tracking", orderId] });
+          queryClient.invalidateQueries({ queryKey: ["order-tracking", token] });
         }
       )
       .subscribe();
@@ -160,7 +161,7 @@ export function useOrderTracking(orderId: string) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [orderId, queryClient]);
+  }, [orderQuery.data?.id, token, queryClient]);
 
   // Get the most current status (prefer realtime, fallback to query)
   const currentStatus = realtimeStatus || orderQuery.data?.status || "pending";

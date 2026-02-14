@@ -27,6 +27,7 @@ export function useCustomerOrder(tableId: string) {
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderNumber, setOrderNumber] = useState<number | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [trackingToken, setTrackingToken] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(null);
   const [changeFor, setChangeFor] = useState<string>("");
 
@@ -252,6 +253,7 @@ export function useCustomerOrder(tableId: string) {
       setOrderSuccess(true);
       setOrderNumber(order.order_number);
       setOrderId(order.id);
+      setTrackingToken(order.tracking_token);
       
       // Enviar notificação WhatsApp com Pix automaticamente
       if (customerInfo.phone && unitId) {
@@ -284,6 +286,7 @@ export function useCustomerOrder(tableId: string) {
     setOrderSuccess(false);
     setOrderNumber(null);
     setOrderId(null);
+    setTrackingToken(null);
   }, []);
 
   return {
@@ -329,6 +332,7 @@ export function useCustomerOrder(tableId: string) {
     orderSuccess,
     orderNumber,
     orderId,
+    trackingToken,
     resetOrder,
   };
 }
