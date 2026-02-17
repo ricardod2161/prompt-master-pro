@@ -1877,7 +1877,8 @@ serve(async (req) => {
       const shouldReactivateBot = !conversation.is_bot_active && lastMessageAt < tenMinutesAgo;
 
       if (shouldReactivateBot) {
-        console.log(`[AUTO-REACTIVATE] Bot reactivated for conversation ${conversation.id} after 10min inactivity`);
+        const now = new Date().toISOString();
+        console.log(`[AUTO-REACTIVATE] Bot reactivated | conversation_id=${conversation.id} | phone=${phone} | last_message_at=${conversation.last_message_at} | reactivated_at=${now} | inactivity_minutes=${Math.round((Date.now() - lastMessageAt) / 60000)}`);
       }
 
       await supabase
