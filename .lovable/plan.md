@@ -1,68 +1,40 @@
-# Reativacao Automatica do Bot no WhatsApp
 
-## Problema Identificado
+# Log de Debug na Reativacao + Confirmacao do Isolamento por Cliente
 
-Quando o bot e desativado para uma conversa (seja por escalacao para atendente humano ou por toggle manual), ele **nunca mais e reativado automaticamente**. O trecho do webhook que atualiza conversas existentes (linha 1872-1879) apenas atualiza `customer_name`, `last_message` e `last_message_at`, mas nao reativa o `is_bot_active`.
+## Situacao Atual
 
-Isso significa que, apos qualquer desativacao, o cliente fica sem resposta ate que alguem va manualmente reativar o bot.
+O bot ja funciona de forma isolada por cliente -- cada conversa (numero de telefone) tem seu proprio campo `is_bot_active`. Se o cliente A pede atendimento humano, apenas a conversa do cliente A e desativada. O cliente B que mandar mensagem continua sendo atendido normalmente pelo bot.
 
-## Solucao Proposta
+O que precisa ser adicionado e um **log de debug mais detalhado** no momento da reativacao automatica, incluindo o ID da conversa e timestamp.
 
-Implementar **reativacao automatica por tempo de inatividade**. Se a ultima mensagem da conversa foi ha mais de **10 minutos**, o bot sera automaticamente reativado quando o cliente enviar uma nova mensagem. Isso garante que:
+## Alteracao Tecnica
 
-1. Conversas escaladas para humano continuam sob controle humano enquanto estao ativas
-2. Apos um periodo de inatividade, o bot volta a funcionar sem intervencao manual
-3. Novas conversas continuam sendo criadas com o bot ativo (ja funciona assim)
+### Arquivo: `supabase/functions/whatsapp-webhook/index.ts`
 
-## Alteracoes Tecnicas
-
-### 1. Edge Function `whatsapp-webhook/index.ts`
-
-No bloco de atualizacao de conversa existente (linha 1872-1879), adicionar logica de reativacao:
+No bloco de reativacao automatica (linhas 1879-1881), melhorar o log para incluir mais informacoes de debug:
 
 ```typescript
-// Quando conversa existente recebe nova mensagem
-} else {
-  // Auto-reactivate bot if conversation has been inactive for 30+ minutes
-  const lastMessageAt = conversation.last_message_at 
-    ? new Date(conversation.last_message_at).getTime() 
-    : 0;
-  const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000);
-  const shouldReactivateBot = !conversation.is_bot_active && lastMessageAt < thirtyMinutesAgo;
-
-  if (shouldReactivateBot) {
-    console.log(`[AUTO-REACTIVATE] Bot reactivated for conversation ${conversation.id} after inactivity`);
-  }
-
-  await supabase
-    .from("whatsapp_conversations")
-    .update({
-      customer_name: customerName,
-      last_message: messageText,
-      last_message_at: new Date().toISOString(),
-      ...(shouldReactivateBot ? { is_bot_active: true } : {}),
-    })
-    .eq("id", conversation.id);
-
-  // Update local reference if reactivated
-  if (shouldReactivateBot) {
-    conversation.is_bot_active = true;
-  }
+if (shouldReactivateBot) {
+  const now = new Date().toISOString();
+  console.log(`[AUTO-REACTIVATE] Bot reactivated | conversation_id=${conversation.id} | phone=${phone} | last_message_at=${conversation.last_message_at} | reactivated_at=${now} | inactivity_minutes=${Math.round((Date.now() - lastMessageAt) / 60000)}`);
 }
 ```
 
-### 2. Impacto
+Isso gera logs como:
+```
+[AUTO-REACTIVATE] Bot reactivated | conversation_id=db967645-... | phone=559882549505 | last_message_at=2026-02-17T10:00:00Z | reactivated_at=2026-02-17T10:15:00Z | inactivity_minutes=15
+```
 
-- **Sem risco de loop**: a protecao `fromMe: true` continua ativa
-- **Respeita o atendimento humano**: se o atendente esta respondendo (ultimos 30 min), o bot nao interfere
-- **Transparente**: um log e gerado cada vez que o bot e reativado automaticamente
-- **Sem mudanca no banco**: nenhuma migracao necessaria, apenas logica no webhook
+## Sobre o Isolamento por Cliente
 
-### Resumo do Fluxo
+Nenhuma alteracao de codigo e necessaria para isso -- o sistema ja funciona assim:
 
-1. Cliente envia mensagem
-2. Webhook verifica se conversa existe
-3. Se existe e bot esta desativado: verifica tempo desde ultima mensagem
-4. Se inativo ha mais de 30 minutos: reativa o bot automaticamente
-5. Bot processa e responde normalmente  
-quero que ative em 10 minutos nao 30, e que interrompa somente por cliente, se um outro estiver mandando mensagem responda.
+- Cada numero de telefone tem sua propria conversa (`whatsapp_conversations`) com seu proprio `is_bot_active`
+- Quando o cliente A pede atendimento humano, so a conversa dele e desativada (`is_bot_active = false`)
+- Se o cliente B manda mensagem, a conversa dele tem `is_bot_active = true` e o bot responde normalmente
+- A funcao `escalateToHuman` (linha 200) desativa o bot usando `.eq('id', conversationId)` -- apenas aquela conversa especifica
+
+## Resumo
+
+- 1 alteracao pequena no log de debug (mais detalhado com conversation_id, phone, timestamps e minutos de inatividade)
+- Zero alteracoes na logica de isolamento por cliente (ja funciona corretamente)
