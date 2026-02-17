@@ -1,109 +1,68 @@
+# Reativacao Automatica do Bot no WhatsApp
 
+## Problema Identificado
 
-## Pix Profissional: Reconciliacao, Validacao e Melhorias
+Quando o bot e desativado para uma conversa (seja por escalacao para atendente humano ou por toggle manual), ele **nunca mais e reativado automaticamente**. O trecho do webhook que atualiza conversas existentes (linha 1872-1879) apenas atualiza `customer_name`, `last_message` e `last_message_at`, mas nao reativa o `is_bot_active`.
 
-### Visao Geral
-Transformar o sistema Pix em uma solucao profissional e completa, com reconciliacao automatizada de pagamentos, validacao inteligente de configuracao, e melhorias de experiencia para o dono do restaurante e para o cliente.
+Isso significa que, apos qualquer desativacao, o cliente fica sem resposta ate que alguem va manualmente reativar o bot.
 
----
+## Solucao Proposta
 
-### 1. Tabela de Reconciliacao Pix (Nova)
+Implementar **reativacao automatica por tempo de inatividade**. Se a ultima mensagem da conversa foi ha mais de **30 minutos**, o bot sera automaticamente reativado quando o cliente enviar uma nova mensagem. Isso garante que:
 
-Criar tabela `pix_transactions` para rastrear pagamentos Pix gerados vs confirmados:
+1. Conversas escaladas para humano continuam sob controle humano enquanto estao ativas
+2. Apos um periodo de inatividade, o bot volta a funcionar sem intervencao manual
+3. Novas conversas continuam sendo criadas com o bot ativo (ja funciona assim)
 
-```text
-pix_transactions
-  id (uuid, PK)
-  unit_id (uuid, FK -> units)
-  order_id (uuid, FK -> orders, nullable)
-  table_id (uuid, FK -> tables, nullable)
-  transaction_id (text) -- ex: PED64, CONTA5
-  pix_code (text) -- codigo EMV gerado
-  amount (numeric)
-  status (text) -- 'pending', 'confirmed', 'expired', 'cancelled'
-  customer_phone (text, nullable)
-  customer_name (text, nullable)
-  generated_at (timestamptz, default now())
-  confirmed_at (timestamptz, nullable)
-  expires_at (timestamptz) -- 30min apos geracao
-  metadata (jsonb, default '{}')
+## Alteracoes Tecnicas
+
+### 1. Edge Function `whatsapp-webhook/index.ts`
+
+No bloco de atualizacao de conversa existente (linha 1872-1879), adicionar logica de reativacao:
+
+```typescript
+// Quando conversa existente recebe nova mensagem
+} else {
+  // Auto-reactivate bot if conversation has been inactive for 30+ minutes
+  const lastMessageAt = conversation.last_message_at 
+    ? new Date(conversation.last_message_at).getTime() 
+    : 0;
+  const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000);
+  const shouldReactivateBot = !conversation.is_bot_active && lastMessageAt < thirtyMinutesAgo;
+
+  if (shouldReactivateBot) {
+    console.log(`[AUTO-REACTIVATE] Bot reactivated for conversation ${conversation.id} after inactivity`);
+  }
+
+  await supabase
+    .from("whatsapp_conversations")
+    .update({
+      customer_name: customerName,
+      last_message: messageText,
+      last_message_at: new Date().toISOString(),
+      ...(shouldReactivateBot ? { is_bot_active: true } : {}),
+    })
+    .eq("id", conversation.id);
+
+  // Update local reference if reactivated
+  if (shouldReactivateBot) {
+    conversation.is_bot_active = true;
+  }
+}
 ```
 
-- RLS: staff da unidade pode ler/atualizar; sistema pode inserir
-- Publicacao realtime para dashboard ao vivo
+### 2. Impacto
 
-### 2. Validacao de Configuracao Pix com Auto-Fix
+- **Sem risco de loop**: a protecao `fromMe: true` continua ativa
+- **Respeita o atendimento humano**: se o atendente esta respondendo (ultimos 30 min), o bot nao interfere
+- **Transparente**: um log e gerado cada vez que o bot e reativado automaticamente
+- **Sem mudanca no banco**: nenhuma migracao necessaria, apenas logica no webhook
 
-**Novo componente: `PixConfigValidator`** (na aba Financeiro das configuracoes)
+### Resumo do Fluxo
 
-Exibir um painel de "saude" da configuracao Pix com verificacoes:
-- Chave Pix preenchida e valida (tipo detectado automaticamente)
-- Nome do beneficiario preenchido (nao generico)
-- Cidade do beneficiario preenchida
-- Chave Pix testada com geracao de codigo EMV de prova
-- Aviso se nome usa fallback generico ("RESTAURANTE")
-
-Cada item mostra status (ok/alerta/erro) e botao de "corrigir" que preenche automaticamente:
-- Nome do beneficiario: preenche com o nome da unidade se vazio
-- Cidade: sugere baseado no endereco cadastrado da unidade
-- Chave Pix: indica o formato correto baseado no tipo detectado
-
-### 3. Dashboard de Transacoes Pix (Novo)
-
-**Novo componente na pagina de Caixa/Reports:**
-
-- Lista de Pix gerados com status (pendente/confirmado/expirado)
-- Totalizadores: gerados hoje, confirmados, taxa de conversao
-- Botao para confirmar manualmente um Pix recebido
-- Filtros por periodo, status, pedido
-
-### 4. Melhorias no Webhook WhatsApp
-
-No `confirmarPedido`, ao gerar o codigo Pix:
-- Registrar na tabela `pix_transactions` com status 'pending'
-- Incluir `expires_at` (30 minutos)
-- Permitir que o bot responda a "ja paguei" verificando transacoes pendentes
-
-No `send-order-notification`, mesma logica: registrar Pix gerado.
-
-### 5. Melhorias de UX para o Cliente
-
-- Codigo Pix com instrucoes claras e nome do beneficiario visivel
-- No rastreamento do pedido, mostrar status do Pix (aguardando/confirmado)
-- Botao "Ja paguei" no tracking que notifica o restaurante
-
-### 6. Trigger de Expiracao Automatica
-
-Cron job (pg_cron) que a cada 5 minutos marca como 'expired' transacoes com `expires_at < now()` e status 'pending'.
-
----
-
-### Detalhes Tecnicos
-
-**Migracao SQL:**
-1. Criar tabela `pix_transactions` com colunas, indices e RLS
-2. Habilitar realtime na tabela
-3. Criar cron job de expiracao
-
-**Arquivos novos:**
-- `src/components/settings/PixConfigValidator.tsx` -- painel de validacao com auto-fix
-- `src/components/reports/PixTransactionsDashboard.tsx` -- dashboard de reconciliacao
-- `src/hooks/usePixTransactions.ts` -- hook para CRUD de transacoes Pix
-
-**Arquivos modificados:**
-- `src/components/settings/FinancialTab.tsx` -- integrar PixConfigValidator
-- `src/hooks/useUnitSettings.ts` -- adicionar helper de validacao Pix
-- `supabase/functions/whatsapp-webhook/index.ts` -- registrar Pix gerado em pix_transactions
-- `supabase/functions/send-order-notification/index.ts` -- registrar Pix gerado em pix_transactions
-- `src/pages/OrderTracking.tsx` -- mostrar status Pix e botao "Ja paguei"
-- `src/pages/Reports.tsx` -- adicionar aba/secao de reconciliacao Pix
-- `src/pages/Cashier.tsx` -- notificacao de Pix pendente para confirmar
-
-**Sequencia de implementacao:**
-1. Migracoes de banco (tabela + RLS + cron)
-2. Hook `usePixTransactions`
-3. `PixConfigValidator` no FinancialTab
-4. Registro de transacoes nos Edge Functions
-5. Dashboard de reconciliacao
-6. UX de tracking com status Pix
-
+1. Cliente envia mensagem
+2. Webhook verifica se conversa existe
+3. Se existe e bot esta desativado: verifica tempo desde ultima mensagem
+4. Se inativo ha mais de 30 minutos: reativa o bot automaticamente
+5. Bot processa e responde normalmente  
+quero que ative em 10 minutos nao 30, e que interrompa somente por cliente, se um outro estiver mandando mensagem responda.
