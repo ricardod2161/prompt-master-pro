@@ -8,7 +8,7 @@ Isso significa que, apos qualquer desativacao, o cliente fica sem resposta ate q
 
 ## Solucao Proposta
 
-Implementar **reativacao automatica por tempo de inatividade**. Se a ultima mensagem da conversa foi ha mais de **30 minutos**, o bot sera automaticamente reativado quando o cliente enviar uma nova mensagem. Isso garante que:
+Implementar **reativacao automatica por tempo de inatividade**. Se a ultima mensagem da conversa foi ha mais de **10 minutos**, o bot sera automaticamente reativado quando o cliente enviar uma nova mensagem. Isso garante que:
 
 1. Conversas escaladas para humano continuam sob controle humano enquanto estao ativas
 2. Apos um periodo de inatividade, o bot volta a funcionar sem intervencao manual

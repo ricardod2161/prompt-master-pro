@@ -1869,14 +1869,31 @@ serve(async (req) => {
     } else if (convError) {
       throw convError;
     } else {
+      // Auto-reactivate bot if conversation has been inactive for 10+ minutes
+      const lastMessageAt = conversation.last_message_at 
+        ? new Date(conversation.last_message_at).getTime() 
+        : 0;
+      const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
+      const shouldReactivateBot = !conversation.is_bot_active && lastMessageAt < tenMinutesAgo;
+
+      if (shouldReactivateBot) {
+        console.log(`[AUTO-REACTIVATE] Bot reactivated for conversation ${conversation.id} after 10min inactivity`);
+      }
+
       await supabase
         .from("whatsapp_conversations")
         .update({
           customer_name: customerName,
           last_message: messageText,
           last_message_at: new Date().toISOString(),
+          ...(shouldReactivateBot ? { is_bot_active: true } : {}),
         })
         .eq("id", conversation.id);
+
+      // Update local reference if reactivated
+      if (shouldReactivateBot) {
+        conversation.is_bot_active = true;
+      }
     }
 
     if (!conversation?.is_bot_active) {
