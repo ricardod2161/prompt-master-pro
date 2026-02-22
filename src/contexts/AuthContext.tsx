@@ -102,19 +102,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) {
       checkSubscription();
       
-      // Auto-refresh subscription every 60 seconds
+      // Auto-refresh subscription every 5 minutes
       subscriptionCheckInterval.current = setInterval(() => {
         checkSubscription();
-      }, 60000);
+      }, 300000);
+
+      // Also refresh when tab becomes visible
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          checkSubscription();
+        }
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      return () => {
+        if (subscriptionCheckInterval.current) {
+          clearInterval(subscriptionCheckInterval.current);
+        }
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
     } else {
       setSubscription(defaultSubscription);
+      return () => {
+        if (subscriptionCheckInterval.current) {
+          clearInterval(subscriptionCheckInterval.current);
+        }
+      };
     }
-
-    return () => {
-      if (subscriptionCheckInterval.current) {
-        clearInterval(subscriptionCheckInterval.current);
-      }
-    };
   }, [user, checkSubscription]);
 
   const signIn = async (email: string, password: string) => {

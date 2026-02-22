@@ -135,43 +135,15 @@ export function useAddInventoryMovement() {
       quantity: number;
       notes?: string;
     }) => {
-      // Get current stock
-      const { data: item } = await supabase
-        .from("inventory_items")
-        .select("current_stock")
-        .eq("id", itemId)
-        .single();
+      const { error } = await supabase.rpc("add_inventory_movement", {
+        _item_id: itemId,
+        _type: type,
+        _quantity: quantity,
+        _notes: notes || null,
+        _created_by: user?.id || null,
+      });
 
-      if (!item) throw new Error("Item not found");
-
-      const previousStock = item.current_stock;
-      const isSubtraction = ["sale", "waste", "transfer"].includes(type);
-      const newStock = isSubtraction
-        ? previousStock - quantity
-        : previousStock + quantity;
-
-      // Create movement
-      const { error: movementError } = await supabase
-        .from("inventory_movements")
-        .insert({
-          inventory_item_id: itemId,
-          type,
-          quantity,
-          previous_stock: previousStock,
-          new_stock: newStock,
-          notes,
-          created_by: user?.id,
-        });
-
-      if (movementError) throw movementError;
-
-      // Update stock
-      const { error: updateError } = await supabase
-        .from("inventory_items")
-        .update({ current_stock: newStock })
-        .eq("id", itemId);
-
-      if (updateError) throw updateError;
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory"] });

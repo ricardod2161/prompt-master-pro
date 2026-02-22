@@ -83,8 +83,10 @@ export default function Login() {
         description: translateError(error.message),
       });
     } else {
-      toast.success("Conta criada com sucesso!");
-      navigate("/select-unit");
+      toast.success("Conta criada! Verifique seu email para confirmar.", {
+        description: "Enviamos um link de confirmação para o seu email.",
+        duration: 8000,
+      });
     }
 
     setLoading(false);
