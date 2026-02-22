@@ -52,6 +52,13 @@ export function useSubscription() {
       }
       
       if (data?.error) {
+        if (data?.hasActiveSubscription) {
+          toast({
+            title: "Assinatura ativa",
+            description: "Você já possui uma assinatura ativa. Use 'Gerenciar Assinatura' para alterar seu plano.",
+          });
+          return null;
+        }
         throw new Error(data.error);
       }
       
