@@ -73,7 +73,13 @@ serve(async (req) => {
 
       if (subscriptions.data.length > 0) {
         logStep("User already has active subscription");
-        throw new Error("Você já possui uma assinatura ativa. Gerencie sua assinatura atual.");
+        return new Response(JSON.stringify({ 
+          error: "Você já possui uma assinatura ativa. Gerencie sua assinatura atual.",
+          hasActiveSubscription: true 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
       }
     }
 
