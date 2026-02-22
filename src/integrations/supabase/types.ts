@@ -1442,6 +1442,16 @@ export type Database = {
       }
     }
     Functions: {
+      add_inventory_movement: {
+        Args: {
+          _created_by?: string
+          _item_id: string
+          _notes?: string
+          _quantity: number
+          _type: Database["public"]["Enums"]["inventory_movement_type"]
+        }
+        Returns: undefined
+      }
       create_admin_log: {
         Args: {
           _action: string
@@ -1476,6 +1486,7 @@ export type Database = {
         }
         Returns: string
       }
+      delete_order_cascade: { Args: { _order_id: string }; Returns: undefined }
       expire_pending_pix_transactions: { Args: never; Returns: number }
       has_role: {
         Args: {

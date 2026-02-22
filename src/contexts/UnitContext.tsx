@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./AuthContext";
 
@@ -26,7 +26,7 @@ export function UnitProvider({ children }: { children: ReactNode }) {
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchUnits = async () => {
+  const fetchUnits = useCallback(async () => {
     if (!user) {
       setUnits([]);
       setSelectedUnit(null);
@@ -56,11 +56,11 @@ export function UnitProvider({ children }: { children: ReactNode }) {
       }
     }
     setLoading(false);
-  };
+  }, [user]);
 
   useEffect(() => {
     fetchUnits();
-  }, [user]);
+  }, [fetchUnits]);
 
   useEffect(() => {
     // Persist selected unit

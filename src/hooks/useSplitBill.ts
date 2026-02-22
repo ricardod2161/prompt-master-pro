@@ -51,21 +51,17 @@ export function useSplitBill(
     queryFn: async () => {
       if (!tableId) return [];
 
-      // Query bill_payments table via REST API (types not yet regenerated)
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/bill_payments?table_id=eq.${tableId}&order=created_at.asc`,
-        {
-          headers: {
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-        }
-      );
-      if (!response.ok) {
-        console.error("Failed to fetch payments:", await response.text());
+      const { data, error } = await supabase
+        .from("bill_payments" as any)
+        .select("*")
+        .eq("table_id", tableId)
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error("Failed to fetch payments:", error);
         return [];
       }
-      return (await response.json()) as BillPayment[];
+      return (data || []) as unknown as BillPayment[];
     },
     enabled: !!tableId,
     staleTime: 10 * 1000,
@@ -128,36 +124,27 @@ export function useSplitBill(
 
       setPayingPartial(true);
 
-      // 1. Register the payment in the database via REST API
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/bill_payments`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            Prefer: "return=representation",
-          },
-          body: JSON.stringify({
-            table_id: tableId,
-            unit_id: unitId,
-            amount: payment.amount,
-            customer_name: payment.customerName,
-            customer_phone: payment.customerPhone,
-            payment_method: payment.paymentMethod,
-            split_type: payment.splitType,
-            split_details: payment.splitDetails,
-          }),
-        }
-      );
+      // 1. Register the payment in the database
+      const { data: insertedData, error: insertError } = await supabase
+        .from("bill_payments" as any)
+        .insert({
+          table_id: tableId,
+          unit_id: unitId,
+          amount: payment.amount,
+          customer_name: payment.customerName,
+          customer_phone: payment.customerPhone,
+          payment_method: payment.paymentMethod,
+          split_type: payment.splitType,
+          split_details: payment.splitDetails,
+        })
+        .select()
+        .single();
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro ao registrar pagamento: ${errorText}`);
+      if (insertError) {
+        throw new Error(`Erro ao registrar pagamento: ${insertError.message}`);
       }
 
-      const paymentData = (await response.json())[0] as BillPayment;
+      const paymentData = insertedData as unknown as BillPayment;
 
       // 2. Send WhatsApp notification with partial payment receipt
       const newTotalPaid = totalPaid + payment.amount;

@@ -106,8 +106,7 @@ export function useWhatsAppChat(conversationId: string | null) {
           table: "whatsapp_messages",
           filter: `conversation_id=eq.${conversationId}`,
         },
-        (payload) => {
-          console.log("Message change:", payload);
+        () => {
           queryClient.invalidateQueries({
             queryKey: ["whatsapp-messages", conversationId],
           });
@@ -127,7 +126,6 @@ export function useWhatsAppChat(conversationId: string | null) {
           filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
-          console.log("Typing change:", payload);
           if (payload.new && typeof payload.new === "object") {
             const newData = payload.new as any;
             setTypingStatus({
@@ -205,20 +203,10 @@ export function useWhatsAppConversationsRealtime() {
   const { selectedUnit } = useUnit();
   const queryClient = useQueryClient();
 
-  // Debug: verificar qual unidade está selecionada
-  useEffect(() => {
-    console.log("WhatsApp Chat - Selected Unit:", selectedUnit?.id, selectedUnit?.name);
-  }, [selectedUnit]);
-
   const query = useQuery({
     queryKey: ["whatsapp-conversations-rt", selectedUnit?.id],
     queryFn: async () => {
-      if (!selectedUnit?.id) {
-        console.warn("WhatsApp Chat: No unit selected");
-        return [];
-      }
-
-      console.log("WhatsApp Chat: Fetching conversations for unit:", selectedUnit.id);
+      if (!selectedUnit?.id) return [];
 
       const { data, error } = await supabase
         .from("whatsapp_conversations")
@@ -226,12 +214,7 @@ export function useWhatsAppConversationsRealtime() {
         .eq("unit_id", selectedUnit.id)
         .order("last_message_at", { ascending: false });
 
-      if (error) {
-        console.error("WhatsApp Chat: Error fetching conversations:", error);
-        throw error;
-      }
-      
-      console.log("WhatsApp Chat: Found", data?.length || 0, "conversations");
+      if (error) throw error;
       return data as WhatsAppConversation[];
     },
     enabled: !!selectedUnit?.id,

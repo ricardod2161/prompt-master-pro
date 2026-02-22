@@ -37,7 +37,18 @@ import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Install from "./pages/Install";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error) => {
+        const status = (error as any)?.status;
+        if (status === 401 || status === 403) return false;
+        return failureCount < 2;
+      },
+      staleTime: 30 * 1000,
+    },
+  },
+});
 
 // Component to apply theme colors globally
 function ThemeColorApplier() {
