@@ -153,22 +153,14 @@ export function useWhatsAppChat(conversationId: string | null) {
     }
   }, [typingQuery.data]);
 
-  // Send message mutation (for manual messages from admin)
+  // Send message mutation via edge function (sends to WhatsApp via Evolution API)
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
       if (!conversationId) throw new Error("No conversation selected");
 
-      // This would need to integrate with Evolution API to actually send the message
-      // For now, just insert into database as assistant message
-      const { data, error } = await supabase
-        .from("whatsapp_messages")
-        .insert({
-          conversation_id: conversationId,
-          role: "assistant",
-          content,
-        })
-        .select()
-        .single();
+      const { data, error } = await supabase.functions.invoke("send-whatsapp-message", {
+        body: { conversationId, content },
+      });
 
       if (error) throw error;
       return data;
