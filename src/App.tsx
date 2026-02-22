@@ -36,6 +36,7 @@ import NotFound from "./pages/NotFound";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Install from "./pages/Install";
+import MarketingStudio from "./pages/MarketingStudio";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -94,6 +95,7 @@ const App = () => (
                   <Route path="/whatsapp/settings" element={<WhatsAppSettings />} />
                   <Route path="/whatsapp/chat" element={<WhatsAppChat />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route path="/marketing" element={<MarketingStudio />} />
                   <Route path="/pricing" element={<Pricing />} />
                   <Route path="/admin" element={<Admin />} />
                 </Route>

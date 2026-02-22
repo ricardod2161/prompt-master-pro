@@ -31,6 +31,7 @@ import {
   Building2,
   CreditCard,
   ShieldAlert,
+  Megaphone,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { cn } from "@/lib/utils";
@@ -106,6 +107,7 @@ const menuItems = [
     icon: BarChart3,
     items: [
       { title: "Relatórios", url: "/reports", icon: BarChart3 },
+      { title: "Marketing", url: "/marketing", icon: Megaphone },
       { title: "Configurações", url: "/settings", icon: Settings },
     ],
   },

@@ -463,6 +463,53 @@ export type Database = {
         }
         Relationships: []
       }
+      marketing_images: {
+        Row: {
+          campaign_type: string
+          created_at: string
+          format: string
+          id: string
+          image_url: string
+          prompt_used: string
+          style: string | null
+          title: string | null
+          unit_id: string
+          user_id: string
+        }
+        Insert: {
+          campaign_type: string
+          created_at?: string
+          format: string
+          id?: string
+          image_url: string
+          prompt_used: string
+          style?: string | null
+          title?: string | null
+          unit_id: string
+          user_id: string
+        }
+        Update: {
+          campaign_type?: string
+          created_at?: string
+          format?: string
+          id?: string
+          image_url?: string
+          prompt_used?: string
+          style?: string | null
+          title?: string | null
+          unit_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_images_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           action_url: string | null
