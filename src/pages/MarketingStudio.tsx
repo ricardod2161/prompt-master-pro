@@ -1,8 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useUnit } from "@/contexts/UnitContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -12,16 +13,19 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   Megaphone, Tag, UtensilsCrossed, PartyPopper, Truck, CalendarHeart, Star,
   Square, RectangleHorizontal, Smartphone,
   Palette, Leaf, Crown, Sparkles, Monitor,
-  Loader2, Download, Trash2, ImageIcon, Wand2
+  Loader2, Download, Trash2, ImageIcon, Wand2, Coins, ShoppingCart, Zap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { campaignTemplates, CampaignTemplate } from "@/components/marketing/campaignTemplates";
+import { campaignTemplates } from "@/components/marketing/campaignTemplates";
 import { PromptPreviewCard } from "@/components/marketing/PromptPreviewCard";
 import { ExampleChips } from "@/components/marketing/ExampleChips";
+import { useMarketingCredits } from "@/hooks/useMarketingCredits";
 
 const campaignTypes = [
   { id: "promotion", label: "Promoção", icon: Tag, color: "text-red-500" },
@@ -70,13 +74,8 @@ const formatMap: Record<string, string> = {
 };
 
 function buildPromptPreview(
-  campaignType: string,
-  title: string,
-  description: string,
-  format: string,
-  style: string,
-  restaurantName: string,
-  promptHint?: string
+  campaignType: string, title: string, description: string,
+  format: string, style: string, restaurantName: string, promptHint?: string
 ): string {
   const styleDesc = styleMap[style] || styleMap.modern;
   const campaignDesc = campaignMap[campaignType] || campaignType;
@@ -107,10 +106,18 @@ Do NOT include:
 - Generic clip art style graphics`;
 }
 
+const CREDIT_PACKAGES = [
+  { id: "credits_10", credits: 10, price: "R$ 14,90", priceNum: 14.90, perCredit: "R$ 1,49" },
+  { id: "credits_30", credits: 30, price: "R$ 34,90", priceNum: 34.90, perCredit: "R$ 1,16", popular: true },
+  { id: "credits_100", credits: 100, price: "R$ 89,90", priceNum: 89.90, perCredit: "R$ 0,90" },
+];
+
 export default function MarketingStudio() {
   const { selectedUnit } = useUnit();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { credits, isLoading: creditsLoading, invalidate: invalidateCredits } = useMarketingCredits();
 
   const [campaignType, setCampaignType] = useState("");
   const [format, setFormat] = useState("feed");
@@ -121,6 +128,30 @@ export default function MarketingStudio() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedTemplateIndex, setSelectedTemplateIndex] = useState<number | null>(null);
   const [customPrompt, setCustomPrompt] = useState("");
+  const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
+  const [purchasingPackage, setPurchasingPackage] = useState<string | null>(null);
+
+  // Handle credit purchase callback
+  useEffect(() => {
+    const creditsPurchased = searchParams.get("credits_purchased");
+    const unitId = searchParams.get("unit_id");
+    if (creditsPurchased && unitId && selectedUnit?.id === unitId) {
+      // Add credits via RPC
+      supabase.rpc("add_marketing_credits", {
+        _unit_id: unitId,
+        _user_id: user?.id || "",
+        _amount: parseInt(creditsPurchased),
+        _description: `Compra de ${creditsPurchased} créditos`,
+      }).then(() => {
+        invalidateCredits();
+        toast.success(`${creditsPurchased} créditos adicionados com sucesso!`);
+      });
+      // Clean URL
+      searchParams.delete("credits_purchased");
+      searchParams.delete("unit_id");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, selectedUnit?.id, user?.id]);
 
   const currentTemplates = campaignType ? (campaignTemplates[campaignType] || []) : [];
 
@@ -133,7 +164,6 @@ export default function MarketingStudio() {
   const handleCampaignSelect = (id: string) => {
     setCampaignType(id);
     setSelectedTemplateIndex(null);
-    // Auto-fill with first template
     const templates = campaignTemplates[id];
     if (templates?.length) {
       setTitle(templates[0].title);
@@ -178,6 +208,11 @@ export default function MarketingStudio() {
       return;
     }
 
+    if (credits.available <= 0) {
+      setPurchaseModalOpen(true);
+      return;
+    }
+
     setGenerating(true);
     setPreviewUrl(null);
 
@@ -185,11 +220,7 @@ export default function MarketingStudio() {
       const { data, error } = await supabase.functions.invoke("generate-marketing-image", {
         body: {
           unitId: selectedUnit.id,
-          campaignType,
-          title,
-          description,
-          format,
-          style,
+          campaignType, title, description, format, style,
           restaurantName: selectedUnit.name,
           customPrompt: customPrompt || undefined,
           promptHint: selectedTemplateIndex !== null ? currentTemplates[selectedTemplateIndex]?.promptHint : undefined,
@@ -197,9 +228,14 @@ export default function MarketingStudio() {
       });
 
       if (error) throw error;
+      if (data?.code === "NO_CREDITS") {
+        setPurchaseModalOpen(true);
+        return;
+      }
       if (data?.error) throw new Error(data.error);
 
       setPreviewUrl(data.imageUrl);
+      invalidateCredits();
       await queryClient.refetchQueries({ queryKey: ["marketing-images", selectedUnit?.id] });
       toast.success("Imagem gerada com sucesso!");
     } catch (e: any) {
@@ -220,12 +256,55 @@ export default function MarketingStudio() {
     }
   };
 
+  const handlePurchase = async (packageId: string) => {
+    if (!selectedUnit?.id) return;
+    setPurchasingPackage(packageId);
+    try {
+      const { data, error } = await supabase.functions.invoke("purchase-credits", {
+        body: { packageId, unitId: selectedUnit.id },
+      });
+      if (error) throw error;
+      if (data?.url) {
+        window.open(data.url, "_blank");
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao iniciar compra");
+    } finally {
+      setPurchasingPackage(null);
+    }
+  };
+
+  const creditPercent = credits.available > 0
+    ? Math.round((credits.available / (credits.total_credits + credits.bonus_credits || 3)) * 100)
+    : 0;
+
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Marketing Studio"
-        description="Gere imagens profissionais para suas campanhas no Facebook com IA"
-      />
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <PageHeader
+          title="Marketing Studio"
+          description="Gere imagens profissionais para suas campanhas no Facebook com IA"
+        />
+        {/* Credits Badge */}
+        <Card className="px-4 py-3 flex items-center gap-3 border-primary/20">
+          <Coins className="w-5 h-5 text-primary" />
+          <div className="min-w-[120px]">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-muted-foreground">Créditos</span>
+              <span className="text-sm font-bold">
+                {creditsLoading ? "..." : credits.available}
+              </span>
+            </div>
+            <Progress value={creditPercent} className="h-1.5" />
+          </div>
+          {credits.available <= 0 && (
+            <Button size="sm" variant="default" onClick={() => setPurchaseModalOpen(true)}>
+              <ShoppingCart className="w-3.5 h-3.5 mr-1" />
+              Comprar
+            </Button>
+          )}
+        </Card>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Form */}
@@ -366,10 +445,15 @@ export default function MarketingStudio() {
                 <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                 Gerando imagem...
               </>
+            ) : credits.available <= 0 ? (
+              <>
+                <ShoppingCart className="w-5 h-5 mr-2" />
+                Comprar Créditos para Gerar
+              </>
             ) : (
               <>
                 <Wand2 className="w-5 h-5 mr-2" />
-                Gerar Imagem
+                Gerar Imagem ({credits.available} crédito{credits.available !== 1 ? "s" : ""})
               </>
             )}
           </Button>
@@ -393,11 +477,7 @@ export default function MarketingStudio() {
                 </div>
               ) : previewUrl ? (
                 <div className="space-y-3">
-                  <img
-                    src={previewUrl}
-                    alt="Imagem de marketing gerada"
-                    className="w-full rounded-lg border shadow-sm"
-                  />
+                  <img src={previewUrl} alt="Imagem de marketing gerada" className="w-full rounded-lg border shadow-sm" />
                   <a href={previewUrl} download target="_blank" rel="noopener noreferrer">
                     <Button variant="outline" className="w-full">
                       <Download className="w-4 h-4 mr-2" />
@@ -408,9 +488,7 @@ export default function MarketingStudio() {
               ) : (
                 <div className="flex flex-col items-center justify-center gap-3 py-12 text-muted-foreground">
                   <ImageIcon className="w-12 h-12 opacity-30" />
-                  <p className="text-sm text-center">
-                    Configure sua campanha e clique em "Gerar Imagem"
-                  </p>
+                  <p className="text-sm text-center">Configure sua campanha e clique em "Gerar Imagem"</p>
                 </div>
               )}
             </CardContent>
@@ -462,6 +540,62 @@ export default function MarketingStudio() {
           </Card>
         </div>
       </div>
+
+      {/* Purchase Credits Modal */}
+      <Dialog open={purchaseModalOpen} onOpenChange={setPurchaseModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Coins className="w-5 h-5 text-primary" />
+              Comprar Créditos
+            </DialogTitle>
+            <DialogDescription>
+              Cada crédito gera 1 imagem profissional com IA. Escolha seu pacote:
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            {CREDIT_PACKAGES.map((pkg) => (
+              <button
+                key={pkg.id}
+                onClick={() => handlePurchase(pkg.id)}
+                disabled={purchasingPackage !== null}
+                className={cn(
+                  "w-full flex items-center justify-between p-4 rounded-lg border-2 transition-all text-left",
+                  pkg.popular
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/50"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "w-10 h-10 rounded-full flex items-center justify-center",
+                    pkg.popular ? "bg-primary/20" : "bg-muted"
+                  )}>
+                    <Zap className={cn("w-5 h-5", pkg.popular ? "text-primary" : "text-muted-foreground")} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{pkg.credits} créditos</span>
+                      {pkg.popular && <Badge variant="default" className="text-[10px]">Popular</Badge>}
+                    </div>
+                    <span className="text-xs text-muted-foreground">{pkg.perCredit}/crédito</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  {purchasingPackage === pkg.id ? (
+                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                  ) : (
+                    <span className="font-bold text-lg">{pkg.price}</span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground text-center pt-2">
+            Pagamento seguro via Stripe. Créditos adicionados imediatamente após confirmação.
+          </p>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
