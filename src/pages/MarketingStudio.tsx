@@ -97,7 +97,7 @@ export default function MarketingStudio() {
       if (data?.error) throw new Error(data.error);
 
       setPreviewUrl(data.imageUrl);
-      queryClient.invalidateQueries({ queryKey: ["marketing-images"] });
+      await queryClient.refetchQueries({ queryKey: ["marketing-images", selectedUnit?.id] });
       toast.success("Imagem gerada com sucesso!");
     } catch (e: any) {
       console.error(e);
