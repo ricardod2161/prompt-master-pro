@@ -108,7 +108,6 @@ const menuItems = [
     items: [
       { title: "Relatórios", url: "/reports", icon: BarChart3 },
       { title: "Marketing", url: "/marketing", icon: Megaphone },
-      { title: "Configurações", url: "/settings", icon: Settings },
     ],
   },
 ];
@@ -260,6 +259,15 @@ export function AppSidebar() {
               </SidebarMenuButton>
             </SidebarMenuItem>
           )}
+
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild className="hover:bg-sidebar-accent transition-colors">
+              <NavLink to="/settings" className="group/link flex items-center gap-2">
+                <Settings className="w-4 h-4 text-sidebar-foreground/70 group-hover/link:text-sidebar-foreground transition-colors" />
+                <span>Configurações</span>
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
 
           <SidebarMenuItem>
             <SidebarMenuButton asChild className="hover:bg-sidebar-accent transition-colors">
