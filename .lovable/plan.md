@@ -1,107 +1,135 @@
 
-# Marketing Studio - Correcoes e Sistema de Creditos de IA
+# Reset de Unidade + Botao de Compra de Creditos Visivel
 
-## Problema 1: Marketing nao aparece no header
+## 1. Botao de Reset do Restaurante (Configuracoes)
 
-O titulo da pagina "Marketing Studio" nao aparece no header porque o mapeamento `pageTitles` em `AppLayout.tsx` (linha 17-33) nao inclui a rota `/marketing`. Isso e uma correcao simples.
+### Problema
+Nao existe forma de limpar todos os dados de uma unidade para entregar "zerada" ao cliente. Hoje seria necessario deletar manualmente cada registro.
 
-## Problema 2: Sistema de Creditos para Geracao de Imagens
+### Solucao
+Adicionar uma nova aba "Avancado" nas Configuracoes (ou uma secao no final da aba "Unidade") com um botao "Resetar Unidade" que apaga todos os dados operacionais mantendo apenas a unidade e o usuario.
 
-### Custo Real por Imagem
+**O que sera apagado:**
+- Pedidos (orders, order_items, order_payments, delivery_orders)
+- Transacoes PIX (pix_transactions)
+- Mesas (tables)
+- Produtos e categorias (products, product_variations, product_addons, product_ingredients, categories)
+- Estoque (inventory_items, inventory_movements)
+- Conversas WhatsApp (whatsapp_messages, whatsapp_conversations)
+- Notificacoes (notifications)
+- Logs (admin_logs)
+- Imagens de marketing (marketing_images)
+- Creditos de marketing (marketing_credits, credit_transactions)
+- Configuracoes da unidade (unit_settings) -- sera recriado com defaults
+- Configuracoes WhatsApp (whatsapp_settings)
 
-Baseado na pesquisa de precos do Google Gemini 3 Pro Image Preview:
-- **Input**: ~500-800 tokens por prompt = ~$0.001-0.002
-- **Output (imagem)**: ~1290 tokens a $30/M output = ~$0.039 por imagem (1024x1024)
-- **Custo total por geracao**: ~$0.04-0.05 USD (~R$ 0.25 por imagem)
-
-Para imagens maiores (4K): ate $0.24 USD por imagem.
-
-### Estrategia de Creditos Proposta
-
-| Item | Valor |
-|------|-------|
-| Creditos gratuitos (todos os planos) | 3 creditos/mes |
-| Custo real por credito | ~R$ 0.25 |
-| Preco de venda por credito | R$ 1.50-2.00 |
-| Margem por credito | ~85% |
-
-**Pacotes de creditos sugeridos:**
-
-| Pacote | Creditos | Preco | Por credito |
-|--------|----------|-------|-------------|
-| Basico | 10 | R$ 14,90 | R$ 1,49 |
-| Profissional | 30 | R$ 34,90 | R$ 1,16 |
-| Ilimitado | 100 | R$ 89,90 | R$ 0,90 |
+**O que NAO sera apagado:**
+- A unidade em si (units)
+- Associacao usuario-unidade (user_units)
+- Roles do usuario (user_roles)
+- Perfil do usuario (profiles)
 
 ### Implementacao Tecnica
 
-#### 1. Nova tabela `marketing_credits`
+1. **Nova funcao SQL `reset_unit_data`** (SECURITY DEFINER) que recebe `_unit_id` e `_user_id`, valida acesso (apenas admin ou developer), e deleta todos os dados da unidade em cascata dentro de uma transacao.
+
+2. **Novo componente `src/components/settings/DangerZoneSection.tsx`** com:
+   - Card vermelho (variant "destructive") com icone de alerta
+   - Botao "Resetar Unidade"
+   - Dialog de confirmacao com campo de texto onde o usuario deve digitar o nome da unidade para confirmar
+   - Segundo dialog de confirmacao final ("Tem certeza absoluta?")
+
+3. **Adicionar ao Settings.tsx** uma nova aba "Avancado" com icone `AlertTriangle` contendo o componente DangerZone.
+
+## 2. Botao de Compra de Creditos Sempre Visivel
+
+### Problema
+O botao "Comprar" so aparece quando os creditos chegam a zero. O cliente nao tem como comprar creditos preventivamente.
+
+### Solucao
+Tornar o botao de compra sempre visivel no Marketing Studio, independente do saldo de creditos.
+
+### Mudancas no MarketingStudio.tsx (linhas 289-306)
+- Remover a condicao `credits.available <= 0` do botao "Comprar"
+- O botao "Comprar Creditos" ficara sempre visivel ao lado do badge de creditos
+- Manter o modal de compra existente (ja funciona)
+
+## Detalhes Tecnicos
+
+### Migracao SQL - Funcao `reset_unit_data`
 
 ```sql
-CREATE TABLE marketing_credits (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  unit_id UUID NOT NULL REFERENCES units(id),
-  total_credits INTEGER NOT NULL DEFAULT 3,
-  used_credits INTEGER NOT NULL DEFAULT 0,
-  bonus_credits INTEGER NOT NULL DEFAULT 0,
-  reset_at TIMESTAMPTZ, -- para reset mensal dos gratuitos
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
+CREATE OR REPLACE FUNCTION public.reset_unit_data(_unit_id uuid, _user_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+BEGIN
+  -- Validar acesso: apenas admin da unidade ou developer
+  IF NOT (has_unit_access(_user_id, _unit_id) AND 
+         (has_role(_user_id, 'admin') OR is_developer(_user_id))) THEN
+    RAISE EXCEPTION 'Sem permissao para resetar esta unidade';
+  END IF;
+
+  -- Deletar dados em ordem (respeitando foreign keys)
+  DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE unit_id = _unit_id);
+  DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE unit_id = _unit_id);
+  DELETE FROM delivery_orders WHERE order_id IN (SELECT id FROM orders WHERE unit_id = _unit_id);
+  DELETE FROM pix_transactions WHERE unit_id = _unit_id;
+  DELETE FROM orders WHERE unit_id = _unit_id;
+  DELETE FROM product_variations WHERE product_id IN (SELECT id FROM products WHERE unit_id = _unit_id);
+  DELETE FROM product_addons WHERE product_id IN (SELECT id FROM products WHERE unit_id = _unit_id);
+  DELETE FROM product_ingredients WHERE product_id IN (SELECT id FROM products WHERE unit_id = _unit_id);
+  DELETE FROM products WHERE unit_id = _unit_id;
+  DELETE FROM categories WHERE unit_id = _unit_id;
+  DELETE FROM inventory_movements WHERE inventory_item_id IN (SELECT id FROM inventory_items WHERE unit_id = _unit_id);
+  DELETE FROM inventory_items WHERE unit_id = _unit_id;
+  DELETE FROM tables WHERE unit_id = _unit_id;
+  DELETE FROM whatsapp_messages WHERE conversation_id IN (SELECT id FROM whatsapp_conversations WHERE unit_id = _unit_id);
+  DELETE FROM whatsapp_typing_status WHERE conversation_id IN (SELECT id FROM whatsapp_conversations WHERE unit_id = _unit_id);
+  DELETE FROM whatsapp_conversations WHERE unit_id = _unit_id;
+  DELETE FROM whatsapp_settings WHERE unit_id = _unit_id;
+  DELETE FROM notifications WHERE unit_id = _unit_id;
+  DELETE FROM admin_logs WHERE unit_id = _unit_id;
+  DELETE FROM marketing_images WHERE unit_id = _unit_id;
+  DELETE FROM credit_transactions WHERE unit_id = _unit_id;
+  DELETE FROM marketing_credits WHERE unit_id = _unit_id;
+  DELETE FROM cash_movements WHERE cash_register_id IN (SELECT id FROM cash_registers WHERE unit_id = _unit_id);
+  DELETE FROM cash_registers WHERE unit_id = _unit_id;
+  DELETE FROM unit_settings WHERE unit_id = _unit_id;
+
+  -- Registrar log do reset (em outra unidade ou sem unit_id)
+  INSERT INTO admin_logs (action, category, user_id, severity, description)
+  VALUES ('Reset completo de unidade', 'system', _user_id, 'warning', 
+          'Unidade ' || _unit_id || ' foi resetada');
+END;
+$$;
 ```
 
-#### 2. Tabela `credit_transactions` (historico)
+### Arquivos a criar/modificar
 
-```sql
-CREATE TABLE credit_transactions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  unit_id UUID NOT NULL REFERENCES units(id),
-  user_id UUID NOT NULL,
-  type TEXT NOT NULL, -- 'usage', 'purchase', 'bonus', 'monthly_reset'
-  amount INTEGER NOT NULL,
-  description TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-```
+| Arquivo | Acao |
+|---------|------|
+| `src/components/settings/DangerZoneSection.tsx` | Criar - Card com botao reset + dialogs de confirmacao |
+| `src/pages/Settings.tsx` | Modificar - Adicionar aba "Avancado" com DangerZone |
+| `src/pages/MarketingStudio.tsx` | Modificar - Remover condicao do botao Comprar (linha 300) |
+| Migracao SQL | Criar funcao `reset_unit_data` |
 
-#### 3. Logica no Edge Function `generate-marketing-image`
+### Fluxo de Reset
 
-Antes de gerar a imagem:
-1. Verificar saldo de creditos da unidade
-2. Se saldo > 0, debitar 1 credito e gerar
-3. Se saldo = 0, retornar erro com link para compra
+1. Usuario vai em Configuracoes > aba "Avancado"
+2. Ve card vermelho "Zona de Perigo" com aviso claro
+3. Clica "Resetar Unidade"
+4. Dialog pede para digitar o nome da unidade como confirmacao
+5. Segundo dialog: "Tem certeza absoluta? Esta acao e irreversivel"
+6. Executa `supabase.rpc('reset_unit_data', { _unit_id, _user_id })`
+7. Refaz queries, mostra toast de sucesso
+8. Redireciona para o Dashboard
 
-#### 4. Nova Edge Function `purchase-credits`
+### Fluxo de Compra de Creditos
 
-Cria sessao de checkout Stripe para compra avulsa de pacotes de creditos (modo `payment`, nao `subscription`).
-
-#### 5. UI no Marketing Studio
-
-- Badge no topo mostrando "3/3 creditos restantes"
-- Barra de progresso visual dos creditos
-- Quando creditos = 0, botao "Gerar" desabilitado com CTA "Comprar Creditos"
-- Modal de compra de creditos com os 3 pacotes
-
-#### 6. Adicionar titulo no header
-
-Atualizar `pageTitles` em `AppLayout.tsx` para incluir `/marketing`.
-
-### Arquivos que serao criados/modificados
-
-- `src/components/layout/AppLayout.tsx` - Adicionar titulo "Marketing Studio" no mapeamento
-- `supabase/functions/generate-marketing-image/index.ts` - Adicionar verificacao de creditos antes de gerar
-- `supabase/functions/purchase-credits/index.ts` - Nova edge function para compra de creditos via Stripe
-- `src/pages/MarketingStudio.tsx` - Adicionar badge de creditos, barra de progresso e modal de compra
-- `src/hooks/useMarketingCredits.ts` - Hook para gerenciar estado de creditos
-- Migracao SQL para criar tabelas `marketing_credits` e `credit_transactions`
-
-### Fluxo do Usuario
-
-1. Usuario acessa Marketing Studio e ve "3 creditos gratuitos"
-2. Gera imagem -- credito debitado, mostra "2 creditos restantes"
-3. Usa todos os 3 creditos gratuitos
-4. Tenta gerar -- ve modal "Creditos esgotados - Comprar mais"
-5. Escolhe pacote (10, 30 ou 100 creditos)
-6. Redireciona para checkout Stripe (pagamento unico)
-7. Apos pagamento, creditos adicionados automaticamente
-8. Todo mes, 3 creditos gratuitos sao restaurados
+1. No Marketing Studio, botao "Comprar Creditos" sempre visivel ao lado do saldo
+2. Ao clicar, abre modal com os 3 pacotes (10, 30, 100 creditos)
+3. Ao escolher pacote, redireciona para Stripe Checkout
+4. Apos pagamento, creditos adicionados via callback na URL
