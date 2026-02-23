@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, Trash2, Loader2 } from "lucide-react";
+import { AlertTriangle, Trash2, Loader2, RotateCcw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,8 @@ export function DangerZoneSection({ unitId, unitName, onResetComplete }: DangerZ
   const [showFinalConfirm, setShowFinalConfirm] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [isResetting, setIsResetting] = useState(false);
+  const [showCounterConfirm, setShowCounterConfirm] = useState(false);
+  const [isResettingCounter, setIsResettingCounter] = useState(false);
 
   const handleFirstConfirm = () => {
     if (confirmText.trim().toLowerCase() !== unitName.trim().toLowerCase()) {
@@ -64,6 +66,24 @@ export function DangerZoneSection({ unitId, unitName, onResetComplete }: DangerZ
     }
   };
 
+  const handleResetCounter = async () => {
+    if (!user) return;
+    setIsResettingCounter(true);
+    try {
+      const { error } = await supabase.rpc("reset_order_counter", {
+        _unit_id: unitId,
+        _user_id: user.id,
+      });
+      if (error) throw error;
+      toast({ title: "Contador resetado", description: "O próximo pedido começará do #1." });
+    } catch (err: any) {
+      toast({ title: "Erro ao resetar contador", description: err.message || "Erro desconhecido", variant: "destructive" });
+    } finally {
+      setIsResettingCounter(false);
+      setShowCounterConfirm(false);
+    }
+  };
+
   return (
     <>
       <Card className="border-destructive/50 bg-destructive/5">
@@ -88,6 +108,60 @@ export function DangerZoneSection({ unitId, unitName, onResetComplete }: DangerZ
           </Button>
         </CardContent>
       </Card>
+
+      <Card className="border-warning/50 bg-warning/5">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-warning">
+            <RotateCcw className="h-5 w-5" />
+            Resetar Contador de Pedidos
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Reseta a numeração dos pedidos para que o próximo pedido criado seja o <strong>#1</strong>.
+            Os pedidos existentes não serão apagados.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => setShowCounterConfirm(true)}
+            className="gap-2 border-warning text-warning hover:bg-warning/10"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Resetar Contador
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Counter reset confirmation */}
+      <AlertDialog open={showCounterConfirm} onOpenChange={setShowCounterConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5" />
+              Resetar Contador de Pedidos?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              O próximo pedido criado será o <strong>#1</strong>. Os pedidos existentes não serão afetados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isResettingCounter}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleResetCounter}
+              disabled={isResettingCounter}
+            >
+              {isResettingCounter ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Resetando...
+                </>
+              ) : (
+                "Sim, resetar contador"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Step 1: Type unit name */}
       <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
