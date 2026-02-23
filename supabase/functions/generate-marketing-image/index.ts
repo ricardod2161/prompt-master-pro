@@ -36,18 +36,25 @@ serve(async (req) => {
   }
 
   try {
+    // Validate JWT via getClaims
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("Não autorizado");
+    if (!authHeader?.startsWith("Bearer ")) {
+      throw new Error("Não autorizado");
+    }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Validate user
+    const authClient = createClient(supabaseUrl, supabaseAnon);
     const token = authHeader.replace("Bearer ", "");
-    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
-    const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
-    if (authError || !user) throw new Error("Não autorizado");
+    const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
+      throw new Error("Token inválido");
+    }
+
+    const userId = claimsData.claims.sub as string;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { unitId, campaignType, title, description, format, style, restaurantName, customPrompt, promptHint } = await req.json();
 
@@ -57,7 +64,7 @@ serve(async (req) => {
 
     // Verify unit access
     const { data: hasAccess } = await supabase.rpc("has_unit_access", {
-      _user_id: user.id,
+      _user_id: userId,
       _unit_id: unitId,
     });
     if (!hasAccess) throw new Error("Sem acesso a esta unidade");
@@ -65,7 +72,7 @@ serve(async (req) => {
     // Check and consume credit
     const { data: creditConsumed, error: creditError } = await supabase.rpc("consume_marketing_credit", {
       _unit_id: unitId,
-      _user_id: user.id,
+      _user_id: userId,
     });
 
     if (creditError) {
@@ -166,7 +173,7 @@ Do NOT include:
     const base64Data = base64Match[2];
     const imageBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
 
-    const fileName = `${user.id}/${Date.now()}-${campaignType}.${imageType}`;
+    const fileName = `${userId}/${Date.now()}-${campaignType}.${imageType}`;
     const { error: uploadError } = await supabase.storage
       .from("marketing-images")
       .upload(fileName, imageBytes, { contentType: `image/${imageType}`, upsert: false });
@@ -181,7 +188,7 @@ Do NOT include:
 
     await supabase.from("marketing_images").insert({
       unit_id: unitId,
-      user_id: user.id,
+      user_id: userId,
       image_url: imageUrl,
       prompt_used: prompt,
       campaign_type: campaignType,

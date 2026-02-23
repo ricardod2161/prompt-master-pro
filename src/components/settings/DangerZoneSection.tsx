@@ -121,6 +121,10 @@ export function DangerZoneSection({ unitId, unitName, onResetComplete }: DangerZ
             Reseta a numeração dos pedidos para que o próximo pedido criado seja o <strong>#1</strong>.
             Os pedidos existentes não serão apagados.
           </p>
+          <p className="text-xs text-destructive/80 font-medium">
+            ⚠️ Atenção: O contador é global e compartilhado entre todas as unidades do sistema.
+            Resetar afetará a numeração de todas as unidades.
+          </p>
           <Button
             variant="outline"
             onClick={() => setShowCounterConfirm(true)}

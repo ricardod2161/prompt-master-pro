@@ -37,6 +37,7 @@ import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Install from "./pages/Install";
 import MarketingStudio from "./pages/MarketingStudio";
+import ResetPassword from "./pages/ResetPassword";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -79,6 +80,7 @@ const App = () => (
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/terms" element={<Terms />} />
                 <Route path="/install" element={<Install />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
 
                 {/* Protected routes with layout */}
                 <Route element={<AppLayout />}>

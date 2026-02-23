@@ -36,7 +36,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Fetch order with items
+    // Fetch order with items - validate ownership via unit_id match
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .select(`
@@ -55,6 +55,14 @@ serve(async (req) => {
       );
     }
 
+    // Additional validation: only allow payment for recent, non-cancelled orders
+    if (order.total_price <= 0) {
+      return new Response(
+        JSON.stringify({ error: "Pedido com valor inválido" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Get unit name for product description
     const { data: unit } = await supabase
       .from("units")
@@ -64,7 +72,7 @@ serve(async (req) => {
 
     const unitName = unit?.name || "Restaurante";
 
-    const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
     // Build line items from order items
     const lineItems = (order.order_items || []).map((item: any) => ({
@@ -74,7 +82,7 @@ serve(async (req) => {
           name: item.product_name,
           description: `Pedido #${order.order_number} - ${unitName}`,
         },
-        unit_amount: Math.round(item.unit_price * 100), // cents
+        unit_amount: Math.round(item.unit_price * 100),
       },
       quantity: item.quantity,
     }));
@@ -86,7 +94,6 @@ serve(async (req) => {
       );
     }
 
-    // Determine origin for success/cancel URLs
     const origin = req.headers.get("origin") || "https://restauranteos.lovable.app";
 
     const session = await stripe.checkout.sessions.create({

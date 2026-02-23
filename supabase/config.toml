@@ -38,3 +38,9 @@ verify_jwt = false
 
 [functions.purchase-credits]
 verify_jwt = false
+
+[functions.confirm-credit-purchase]
+verify_jwt = false
+
+[functions.test-evolution-connection]
+verify_jwt = false

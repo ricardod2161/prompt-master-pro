@@ -131,27 +131,28 @@ export default function MarketingStudio() {
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
   const [purchasingPackage, setPurchasingPackage] = useState<string | null>(null);
 
-  // Handle credit purchase callback
+  // Handle credit purchase callback - validate via server-side Stripe session
   useEffect(() => {
-    const creditsPurchased = searchParams.get("credits_purchased");
-    const unitId = searchParams.get("unit_id");
-    if (creditsPurchased && unitId && selectedUnit?.id === unitId) {
-      // Add credits via RPC
-      supabase.rpc("add_marketing_credits", {
-        _unit_id: unitId,
-        _user_id: user?.id || "",
-        _amount: parseInt(creditsPurchased),
-        _description: `Compra de ${creditsPurchased} créditos`,
-      }).then(() => {
-        invalidateCredits();
-        toast.success(`${creditsPurchased} créditos adicionados com sucesso!`);
+    const sessionId = searchParams.get("session_id");
+    if (sessionId && selectedUnit?.id) {
+      supabase.functions.invoke("confirm-credit-purchase", {
+        body: { sessionId },
+      }).then(({ data, error }) => {
+        if (error) {
+          console.error("Credit confirmation error:", error);
+          toast.error("Erro ao confirmar compra de créditos");
+        } else if (data?.credits) {
+          invalidateCredits();
+          if (!data.alreadyProcessed) {
+            toast.success(`${data.credits} créditos adicionados com sucesso!`);
+          }
+        }
       });
       // Clean URL
-      searchParams.delete("credits_purchased");
-      searchParams.delete("unit_id");
+      searchParams.delete("session_id");
       setSearchParams(searchParams, { replace: true });
     }
-  }, [searchParams, selectedUnit?.id, user?.id]);
+  }, [searchParams, selectedUnit?.id]);
 
   const currentTemplates = campaignType ? (campaignTemplates[campaignType] || []) : [];
 
