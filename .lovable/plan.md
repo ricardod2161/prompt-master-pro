@@ -1,133 +1,107 @@
 
-# Marketing Studio Pro - Gerador de Prompts Inteligente com Templates Profissionais
+# Marketing Studio - Correcoes e Sistema de Creditos de IA
 
-## Objetivo
+## Problema 1: Marketing nao aparece no header
 
-Transformar o Marketing Studio atual em uma ferramenta profissional completa com:
-1. **Gerador de prompts automatico** - ao clicar em um tipo de campanha, o titulo e descricao sao preenchidos automaticamente com exemplos profissionais
-2. **Templates prontos** - biblioteca de exemplos profissionais por categoria (promocao, cardapio, delivery, etc.)
-3. **Prompt visivel e editavel** - o usuario pode ver e personalizar o prompt que sera usado para gerar a imagem
-4. **Imagens do sistema/landing page** - opcao para gerar imagens mostrando screenshots do sistema (dashboard, pedidos, cardapio) para campanhas institucionais no Facebook
+O titulo da pagina "Marketing Studio" nao aparece no header porque o mapeamento `pageTitles` em `AppLayout.tsx` (linha 17-33) nao inclui a rota `/marketing`. Isso e uma correcao simples.
 
-## Como Funciona
+## Problema 2: Sistema de Creditos para Geracao de Imagens
 
-1. O usuario seleciona um tipo de campanha (ex: "Promocao")
-2. Imediatamente, um template profissional preenche titulo, descricao e mostra o prompt que sera gerado
-3. O usuario pode escolher entre varios exemplos prontos dentro de cada categoria
-4. Pode editar/personalizar o prompt antes de gerar
-5. Nova categoria "Sistema/Institucional" permite gerar imagens mostrando as telas do sistema para campanhas B2B
+### Custo Real por Imagem
 
-## Implementacao
+Baseado na pesquisa de precos do Google Gemini 3 Pro Image Preview:
+- **Input**: ~500-800 tokens por prompt = ~$0.001-0.002
+- **Output (imagem)**: ~1290 tokens a $30/M output = ~$0.039 por imagem (1024x1024)
+- **Custo total por geracao**: ~$0.04-0.05 USD (~R$ 0.25 por imagem)
 
-### 1. Banco de Templates Profissionais (Frontend)
+Para imagens maiores (4K): ate $0.24 USD por imagem.
 
-Dicionario de templates organizados por tipo de campanha, cada um com:
-- Titulo pronto
-- Descricao profissional
-- Preview do prompt gerado
-- Variantes (3-4 exemplos por categoria)
+### Estrategia de Creditos Proposta
 
-Exemplos:
+| Item | Valor |
+|------|-------|
+| Creditos gratuitos (todos os planos) | 3 creditos/mes |
+| Custo real por credito | ~R$ 0.25 |
+| Preco de venda por credito | R$ 1.50-2.00 |
+| Margem por credito | ~85% |
 
-**Promocao:**
-- "Festival de Sabores - Ate 40% OFF"
-- "Combo Familia - R$89,90 para 4 pessoas"
-- "Happy Hour - 2 por 1 em drinks"
+**Pacotes de creditos sugeridos:**
 
-**Cardapio do Dia:**
-- "Prato do Chef - Risoto de Camarao"
-- "Almoco Executivo - A partir de R$24,90"
-- "Novidade no Cardapio - Experimente Hoje"
+| Pacote | Creditos | Preco | Por credito |
+|--------|----------|-------|-------------|
+| Basico | 10 | R$ 14,90 | R$ 1,49 |
+| Profissional | 30 | R$ 34,90 | R$ 1,16 |
+| Ilimitado | 100 | R$ 89,90 | R$ 0,90 |
 
-**Delivery:**
-- "Peça pelo App - Frete Gratis Hoje"
-- "Delivery Relampago - 30min ou Gratis"
+### Implementacao Tecnica
 
-**Inauguracao:**
-- "Grande Inauguracao - Venha Celebrar"
-- "Novo Endereco - Mesmo Sabor"
+#### 1. Nova tabela `marketing_credits`
 
-**Evento:**
-- "Noite Italiana - Sexta Especial"
-- "Live Music + Jantar - Sabado"
-
-**Feriado:**
-- "Dia das Maes - Menu Especial"
-- "Natal em Familia - Reserve Sua Mesa"
-
-**Sistema (NOVA CATEGORIA):**
-- "Dashboard Inteligente - Gerencie Tudo"
-- "Sistema de Pedidos - Moderno e Rapido"
-- "Gestao Completa - Cardapio Digital"
-
-### 2. Nova Categoria: "Sistema / Institucional"
-
-Adicionar tipo de campanha `system` que gera imagens profissionais mostrando:
-- Interface do dashboard com graficos
-- Tela de pedidos e gestao
-- Cardapio digital moderno
-- App de delivery
-- Conceito de tecnologia para restaurantes
-
-O prompt para esta categoria sera especifico para gerar mockups de interface/app, incluindo descricoes das telas do sistema (baseadas no layout real da landing page).
-
-### 3. Card de Prompt Gerado (Preview)
-
-Novo card entre o formulario e o botao de gerar que mostra:
-- O prompt completo que sera enviado a IA
-- Badge com o modelo usado (Gemini 3 Pro)
-- Botao para copiar o prompt
-- Textarea editavel para customizacao avancada
-
-### 4. Seletor de Exemplos
-
-Dentro do card "Conteudo", adicionar:
-- Botoes de exemplos rapidos (chips clicaveis)
-- Ao clicar, preenche titulo + descricao automaticamente
-- Indicacao visual de "exemplo selecionado"
-
-### 5. Atualizar Edge Function
-
-Adicionar ao `campaignMap` a nova categoria `system` com descricao especifica para imagens institucionais/de sistema.
-
-### 6. Arquivos Modificados
-
-- `src/pages/MarketingStudio.tsx` - Adicionar templates, seletor de exemplos, preview de prompt, nova categoria
-- `supabase/functions/generate-marketing-image/index.ts` - Adicionar categoria "system" ao campaignMap
-
-### 7. Experiencia do Usuario
-
-1. Usuario clica em "Promocao"
-2. Aparecem 3-4 chips de exemplo: "Festival de Sabores", "Combo Familia", "Happy Hour"
-3. Ao clicar em "Festival de Sabores", titulo e descricao sao preenchidos automaticamente
-4. O prompt gerado aparece em um card abaixo, editavel
-5. Usuario pode personalizar e clicar "Gerar Imagem"
-6. Resultado aparece no preview e na galeria
-
-## Detalhes Tecnicos
-
-### Estrutura dos Templates
-
-```typescript
-const campaignTemplates: Record<string, Template[]> = {
-  promotion: [
-    {
-      title: "Festival de Sabores - Ate 40% OFF",
-      description: "Pratos selecionados com desconto...",
-      promptHint: "emphasis on discount badges and food variety"
-    },
-    // ...mais exemplos
-  ],
-  system: [
-    {
-      title: "Dashboard Inteligente",
-      description: "Sistema completo de gestao...",
-      promptHint: "modern SaaS dashboard UI with charts, clean design, restaurant management app screenshot"
-    }
-  ]
-};
+```sql
+CREATE TABLE marketing_credits (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  unit_id UUID NOT NULL REFERENCES units(id),
+  total_credits INTEGER NOT NULL DEFAULT 3,
+  used_credits INTEGER NOT NULL DEFAULT 0,
+  bonus_credits INTEGER NOT NULL DEFAULT 0,
+  reset_at TIMESTAMPTZ, -- para reset mensal dos gratuitos
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
 ```
 
-### Preview do Prompt
+#### 2. Tabela `credit_transactions` (historico)
 
-Componente que reconstroi o prompt no frontend (espelhando a logica do backend) para mostrar ao usuario o que sera enviado a IA, permitindo ajustes antes de gerar.
+```sql
+CREATE TABLE credit_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  unit_id UUID NOT NULL REFERENCES units(id),
+  user_id UUID NOT NULL,
+  type TEXT NOT NULL, -- 'usage', 'purchase', 'bonus', 'monthly_reset'
+  amount INTEGER NOT NULL,
+  description TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+#### 3. Logica no Edge Function `generate-marketing-image`
+
+Antes de gerar a imagem:
+1. Verificar saldo de creditos da unidade
+2. Se saldo > 0, debitar 1 credito e gerar
+3. Se saldo = 0, retornar erro com link para compra
+
+#### 4. Nova Edge Function `purchase-credits`
+
+Cria sessao de checkout Stripe para compra avulsa de pacotes de creditos (modo `payment`, nao `subscription`).
+
+#### 5. UI no Marketing Studio
+
+- Badge no topo mostrando "3/3 creditos restantes"
+- Barra de progresso visual dos creditos
+- Quando creditos = 0, botao "Gerar" desabilitado com CTA "Comprar Creditos"
+- Modal de compra de creditos com os 3 pacotes
+
+#### 6. Adicionar titulo no header
+
+Atualizar `pageTitles` em `AppLayout.tsx` para incluir `/marketing`.
+
+### Arquivos que serao criados/modificados
+
+- `src/components/layout/AppLayout.tsx` - Adicionar titulo "Marketing Studio" no mapeamento
+- `supabase/functions/generate-marketing-image/index.ts` - Adicionar verificacao de creditos antes de gerar
+- `supabase/functions/purchase-credits/index.ts` - Nova edge function para compra de creditos via Stripe
+- `src/pages/MarketingStudio.tsx` - Adicionar badge de creditos, barra de progresso e modal de compra
+- `src/hooks/useMarketingCredits.ts` - Hook para gerenciar estado de creditos
+- Migracao SQL para criar tabelas `marketing_credits` e `credit_transactions`
+
+### Fluxo do Usuario
+
+1. Usuario acessa Marketing Studio e ve "3 creditos gratuitos"
+2. Gera imagem -- credito debitado, mostra "2 creditos restantes"
+3. Usa todos os 3 creditos gratuitos
+4. Tenta gerar -- ve modal "Creditos esgotados - Comprar mais"
+5. Escolhe pacote (10, 30 ou 100 creditos)
+6. Redireciona para checkout Stripe (pagamento unico)
+7. Apos pagamento, creditos adicionados automaticamente
+8. Todo mes, 3 creditos gratuitos sao restaurados
