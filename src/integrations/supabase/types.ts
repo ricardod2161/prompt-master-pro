@@ -238,6 +238,44 @@ export type Database = {
           },
         ]
       }
+      credit_transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string | null
+          id: string
+          type: string
+          unit_id: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          type: string
+          unit_id: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          type?: string
+          unit_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_transactions_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       delivery_drivers: {
         Row: {
           active: boolean | null
@@ -462,6 +500,47 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      marketing_credits: {
+        Row: {
+          bonus_credits: number
+          created_at: string
+          id: string
+          reset_at: string | null
+          total_credits: number
+          unit_id: string
+          updated_at: string
+          used_credits: number
+        }
+        Insert: {
+          bonus_credits?: number
+          created_at?: string
+          id?: string
+          reset_at?: string | null
+          total_credits?: number
+          unit_id: string
+          updated_at?: string
+          used_credits?: number
+        }
+        Update: {
+          bonus_credits?: number
+          created_at?: string
+          id?: string
+          reset_at?: string | null
+          total_credits?: number
+          unit_id?: string
+          updated_at?: string
+          used_credits?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_credits_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: true
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       marketing_images: {
         Row: {
@@ -1498,6 +1577,19 @@ export type Database = {
           _type: Database["public"]["Enums"]["inventory_movement_type"]
         }
         Returns: undefined
+      }
+      add_marketing_credits: {
+        Args: {
+          _amount: number
+          _description?: string
+          _unit_id: string
+          _user_id: string
+        }
+        Returns: undefined
+      }
+      consume_marketing_credit: {
+        Args: { _unit_id: string; _user_id: string }
+        Returns: boolean
       }
       create_admin_log: {
         Args: {

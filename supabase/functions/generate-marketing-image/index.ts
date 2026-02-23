@@ -62,16 +62,35 @@ serve(async (req) => {
     });
     if (!hasAccess) throw new Error("Sem acesso a esta unidade");
 
+    // Check and consume credit
+    const { data: creditConsumed, error: creditError } = await supabase.rpc("consume_marketing_credit", {
+      _unit_id: unitId,
+      _user_id: user.id,
+    });
+
+    if (creditError) {
+      console.error("Credit check error:", creditError);
+      throw new Error("Erro ao verificar créditos");
+    }
+
+    if (!creditConsumed) {
+      return new Response(JSON.stringify({ 
+        error: "Créditos esgotados. Compre mais créditos para continuar gerando imagens.",
+        code: "NO_CREDITS"
+      }), {
+        status: 402, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY não configurada");
 
     let prompt: string;
 
     if (customPrompt) {
-      // User provided a fully custom prompt
       prompt = customPrompt;
     } else {
-      // Build prompt from parameters
       const styleDesc = styleMap[style] || styleMap.modern;
       const campaignDesc = campaignMap[campaignType] || campaignType;
       const formatDesc = formatMap[format] || formatMap.feed;
@@ -140,7 +159,6 @@ Do NOT include:
       throw new Error("Nenhuma imagem foi gerada. Tente novamente.");
     }
 
-    // Extract base64 data
     const base64Match = imageData.match(/^data:image\/(png|jpeg|jpg|webp);base64,(.+)$/);
     if (!base64Match) throw new Error("Formato de imagem inválido");
 
@@ -148,7 +166,6 @@ Do NOT include:
     const base64Data = base64Match[2];
     const imageBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
 
-    // Upload to storage
     const fileName = `${user.id}/${Date.now()}-${campaignType}.${imageType}`;
     const { error: uploadError } = await supabase.storage
       .from("marketing-images")
@@ -162,7 +179,6 @@ Do NOT include:
     const { data: urlData } = supabase.storage.from("marketing-images").getPublicUrl(fileName);
     const imageUrl = urlData.publicUrl;
 
-    // Save record
     await supabase.from("marketing_images").insert({
       unit_id: unitId,
       user_id: user.id,

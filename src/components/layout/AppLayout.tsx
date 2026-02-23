@@ -30,6 +30,7 @@ const pageTitles: Record<string, string> = {
   "/settings": "Configurações",
   "/pricing": "Planos",
   "/admin": "Painel Admin",
+  "/marketing": "Marketing Studio",
 };
 
 export function AppLayout() {
