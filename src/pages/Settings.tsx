@@ -9,6 +9,7 @@ import {
   Palette,
   BookOpen,
   Sparkles,
+  AlertTriangle,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,6 +31,7 @@ import { ProfileTab } from "@/components/settings/ProfileTab";
 import { AppearanceTab } from "@/components/settings/AppearanceTab";
 import { DocumentationTab } from "@/components/settings/DocumentationTab";
 import { AIPromptGenerator } from "@/components/settings/AIPromptGenerator";
+import { DangerZoneSection } from "@/components/settings/DangerZoneSection";
 import { cn } from "@/lib/utils";
 
 function SettingsLoadingSkeleton() {
@@ -53,6 +55,7 @@ const TAB_ITEMS = [
   { value: "profile", label: "Perfil", icon: User },
   { value: "appearance", label: "Aparência", icon: Palette },
   { value: "whatsapp-ai", label: "WhatsApp IA", icon: Sparkles },
+  { value: "advanced", label: "Avançado", icon: AlertTriangle },
   { value: "docs", label: "Ajuda", icon: BookOpen },
 ];
 
@@ -342,6 +345,15 @@ export default function Settings() {
           <AIPromptGenerator
             unitName={selectedUnit.name}
             unitId={selectedUnit.id}
+          />
+        </TabsContent>
+
+        {/* Advanced Tab */}
+        <TabsContent value="advanced" className="mt-0">
+          <DangerZoneSection
+            unitId={selectedUnit.id}
+            unitName={selectedUnit.name}
+            onResetComplete={refetchUnits}
           />
         </TabsContent>
 

@@ -1640,6 +1640,10 @@ export type Database = {
       }
       is_developer: { Args: { _user_id: string }; Returns: boolean }
       is_valid_order_access: { Args: { order_id: string }; Returns: boolean }
+      reset_unit_data: {
+        Args: { _unit_id: string; _user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role:

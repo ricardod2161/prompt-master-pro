@@ -297,12 +297,10 @@ export default function MarketingStudio() {
             </div>
             <Progress value={creditPercent} className="h-1.5" />
           </div>
-          {credits.available <= 0 && (
-            <Button size="sm" variant="default" onClick={() => setPurchaseModalOpen(true)}>
-              <ShoppingCart className="w-3.5 h-3.5 mr-1" />
-              Comprar
-            </Button>
-          )}
+          <Button size="sm" variant="default" onClick={() => setPurchaseModalOpen(true)}>
+            <ShoppingCart className="w-3.5 h-3.5 mr-1" />
+            Comprar
+          </Button>
         </Card>
       </div>
 
