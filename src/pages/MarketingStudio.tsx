@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useUnit } from "@/contexts/UnitContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,10 +15,13 @@ import { Badge } from "@/components/ui/badge";
 import {
   Megaphone, Tag, UtensilsCrossed, PartyPopper, Truck, CalendarHeart, Star,
   Square, RectangleHorizontal, Smartphone,
-  Palette, Leaf, Crown, Sparkles,
+  Palette, Leaf, Crown, Sparkles, Monitor,
   Loader2, Download, Trash2, ImageIcon, Wand2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { campaignTemplates, CampaignTemplate } from "@/components/marketing/campaignTemplates";
+import { PromptPreviewCard } from "@/components/marketing/PromptPreviewCard";
+import { ExampleChips } from "@/components/marketing/ExampleChips";
 
 const campaignTypes = [
   { id: "promotion", label: "Promoção", icon: Tag, color: "text-red-500" },
@@ -27,6 +30,7 @@ const campaignTypes = [
   { id: "delivery", label: "Delivery", icon: Truck, color: "text-blue-500" },
   { id: "event", label: "Evento Especial", icon: CalendarHeart, color: "text-purple-500" },
   { id: "holiday", label: "Feriado", icon: Star, color: "text-green-500" },
+  { id: "system", label: "Sistema", icon: Monitor, color: "text-cyan-500" },
 ];
 
 const formats = [
@@ -42,6 +46,67 @@ const styles = [
   { id: "vibrant", label: "Vibrante", icon: Palette, desc: "Colorido e dinâmico" },
 ];
 
+const styleMap: Record<string, string> = {
+  modern: "Clean, modern, minimalist design with sleek typography, soft gradients, and contemporary layout",
+  rustic: "Warm rustic artisanal style with wooden textures, handwritten fonts, earthy tones, and cozy atmosphere",
+  premium: "Luxurious premium elegant style with gold accents, dark background, serif typography, and sophisticated lighting",
+  vibrant: "Bold colorful vibrant style with bright saturated colors, dynamic composition, playful typography, and energetic mood",
+};
+
+const campaignMap: Record<string, string> = {
+  promotion: "special promotional offer with discount emphasis",
+  daily_menu: "daily menu or chef's special highlight",
+  inauguration: "grand opening or inauguration celebration",
+  delivery: "food delivery service advertisement",
+  event: "special event or themed night",
+  holiday: "seasonal holiday celebration",
+  system: "restaurant management system or SaaS platform screenshot mockup, showing a modern tech interface with dashboard, charts, and clean UI elements",
+};
+
+const formatMap: Record<string, string> = {
+  feed: "square 1:1 aspect ratio optimized for social media feed",
+  cover: "wide 1200x630 landscape format for Facebook cover or link preview",
+  story: "tall 9:16 portrait format for Instagram/Facebook stories",
+};
+
+function buildPromptPreview(
+  campaignType: string,
+  title: string,
+  description: string,
+  format: string,
+  style: string,
+  restaurantName: string,
+  promptHint?: string
+): string {
+  const styleDesc = styleMap[style] || styleMap.modern;
+  const campaignDesc = campaignMap[campaignType] || campaignType;
+  const formatDesc = formatMap[format] || formatMap.feed;
+
+  return `Create a professional, high-quality restaurant marketing image for a Facebook campaign.
+
+Visual Style: ${styleDesc}
+Campaign Type: ${campaignDesc}
+Restaurant Name: "${restaurantName || 'Restaurante'}"
+Headline: "${title}"
+${description ? `Details: "${description}"` : ""}
+Format: ${formatDesc}
+${promptHint ? `\nCreative Direction: ${promptHint}` : ""}
+
+Requirements:
+- Professional food photography style with appetizing presentation
+- Warm, inviting lighting that makes food look delicious
+- Clean professional typography overlay with the headline text
+- Cohesive color palette matching the chosen style
+- High contrast and vibrant colors optimized for social media
+- Modern layout with clear visual hierarchy
+
+Do NOT include:
+- Misspelled text or garbled characters
+- Watermarks or logos
+- Low quality or blurry elements
+- Generic clip art style graphics`;
+}
+
 export default function MarketingStudio() {
   const { selectedUnit } = useUnit();
   const { user } = useAuth();
@@ -54,6 +119,42 @@ export default function MarketingStudio() {
   const [description, setDescription] = useState("");
   const [generating, setGenerating] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [selectedTemplateIndex, setSelectedTemplateIndex] = useState<number | null>(null);
+  const [customPrompt, setCustomPrompt] = useState("");
+
+  const currentTemplates = campaignType ? (campaignTemplates[campaignType] || []) : [];
+
+  const promptPreview = useMemo(() => {
+    if (!campaignType || !title) return "";
+    const hint = selectedTemplateIndex !== null ? currentTemplates[selectedTemplateIndex]?.promptHint : undefined;
+    return buildPromptPreview(campaignType, title, description, format, style, selectedUnit?.name || "", hint);
+  }, [campaignType, title, description, format, style, selectedUnit?.name, selectedTemplateIndex, currentTemplates]);
+
+  const handleCampaignSelect = (id: string) => {
+    setCampaignType(id);
+    setSelectedTemplateIndex(null);
+    // Auto-fill with first template
+    const templates = campaignTemplates[id];
+    if (templates?.length) {
+      setTitle(templates[0].title);
+      setDescription(templates[0].description);
+      setSelectedTemplateIndex(0);
+    } else {
+      setTitle("");
+      setDescription("");
+    }
+    setCustomPrompt("");
+  };
+
+  const handleTemplateSelect = (index: number) => {
+    const t = currentTemplates[index];
+    if (t) {
+      setTitle(t.title);
+      setDescription(t.description);
+      setSelectedTemplateIndex(index);
+      setCustomPrompt("");
+    }
+  };
 
   const { data: gallery, isLoading: galleryLoading } = useQuery({
     queryKey: ["marketing-images", selectedUnit?.id],
@@ -90,6 +191,8 @@ export default function MarketingStudio() {
           format,
           style,
           restaurantName: selectedUnit.name,
+          customPrompt: customPrompt || undefined,
+          promptHint: selectedTemplateIndex !== null ? currentTemplates[selectedTemplateIndex]?.promptHint : undefined,
         },
       });
 
@@ -121,7 +224,7 @@ export default function MarketingStudio() {
     <div className="space-y-6">
       <PageHeader
         title="Marketing Studio"
-        description="Gere imagens profissionais para suas campanhas no Facebook"
+        description="Gere imagens profissionais para suas campanhas no Facebook com IA"
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -133,11 +236,11 @@ export default function MarketingStudio() {
               <CardTitle className="text-base">Tipo de Campanha</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {campaignTypes.map((ct) => (
                   <button
                     key={ct.id}
-                    onClick={() => setCampaignType(ct.id)}
+                    onClick={() => handleCampaignSelect(ct.id)}
                     className={cn(
                       "flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all",
                       campaignType === ct.id
@@ -153,26 +256,34 @@ export default function MarketingStudio() {
             </CardContent>
           </Card>
 
-          {/* Title & Description */}
+          {/* Title & Description with Examples */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Conteúdo</CardTitle>
+              {campaignType && <CardDescription>Escolha um exemplo ou personalize</CardDescription>}
             </CardHeader>
             <CardContent className="space-y-4">
+              {currentTemplates.length > 0 && (
+                <ExampleChips
+                  templates={currentTemplates}
+                  selectedIndex={selectedTemplateIndex}
+                  onSelect={handleTemplateSelect}
+                />
+              )}
               <div>
                 <Label>Título da Campanha *</Label>
                 <Input
                   placeholder='Ex: "Feijoada Completa - R$29,90"'
                   value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  onChange={(e) => { setTitle(e.target.value); setSelectedTemplateIndex(null); }}
                 />
               </div>
               <div>
                 <Label>Descrição / Detalhes</Label>
                 <Textarea
-                  placeholder='Ex: "Todos os sábados, das 11h às 15h. Acompanha farofa, couve e laranja."'
+                  placeholder='Ex: "Todos os sábados, das 11h às 15h."'
                   value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  onChange={(e) => { setDescription(e.target.value); setSelectedTemplateIndex(null); }}
                   rows={3}
                 />
               </div>
@@ -234,6 +345,15 @@ export default function MarketingStudio() {
             </Card>
           </div>
 
+          {/* Prompt Preview */}
+          {promptPreview && (
+            <PromptPreviewCard
+              prompt={promptPreview}
+              customPrompt={customPrompt}
+              onCustomPromptChange={setCustomPrompt}
+            />
+          )}
+
           {/* Generate Button */}
           <Button
             size="lg"
@@ -255,7 +375,7 @@ export default function MarketingStudio() {
           </Button>
         </div>
 
-        {/* Right: Preview */}
+        {/* Right: Preview & Gallery */}
         <div className="space-y-6">
           <Card>
             <CardHeader className="pb-3">

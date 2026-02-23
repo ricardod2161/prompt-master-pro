@@ -21,6 +21,7 @@ const campaignMap: Record<string, string> = {
   delivery: "food delivery service advertisement",
   event: "special event or themed night",
   holiday: "seasonal holiday celebration",
+  system: "restaurant management system or SaaS platform screenshot mockup, showing a modern tech interface with dashboard, charts, and clean UI elements for a B2B Facebook campaign",
 };
 
 const formatMap: Record<string, string> = {
@@ -48,7 +49,7 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
     if (authError || !user) throw new Error("Não autorizado");
 
-    const { unitId, campaignType, title, description, format, style, restaurantName } = await req.json();
+    const { unitId, campaignType, title, description, format, style, restaurantName, customPrompt, promptHint } = await req.json();
 
     if (!unitId || !campaignType || !title || !format || !style) {
       throw new Error("Campos obrigatórios faltando");
@@ -64,12 +65,18 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY não configurada");
 
-    // Build prompt
-    const styleDesc = styleMap[style] || styleMap.modern;
-    const campaignDesc = campaignMap[campaignType] || campaignType;
-    const formatDesc = formatMap[format] || formatMap.feed;
+    let prompt: string;
 
-    const prompt = `Create a professional, high-quality restaurant marketing image for a Facebook campaign.
+    if (customPrompt) {
+      // User provided a fully custom prompt
+      prompt = customPrompt;
+    } else {
+      // Build prompt from parameters
+      const styleDesc = styleMap[style] || styleMap.modern;
+      const campaignDesc = campaignMap[campaignType] || campaignType;
+      const formatDesc = formatMap[format] || formatMap.feed;
+
+      prompt = `Create a professional, high-quality restaurant marketing image for a Facebook campaign.
 
 Visual Style: ${styleDesc}
 Campaign Type: ${campaignDesc}
@@ -77,6 +84,7 @@ Restaurant Name: "${restaurantName || 'Restaurante'}"
 Headline: "${title}"
 ${description ? `Details: "${description}"` : ""}
 Format: ${formatDesc}
+${promptHint ? `\nCreative Direction: ${promptHint}` : ""}
 
 Requirements:
 - Professional food photography style with appetizing presentation
@@ -91,6 +99,7 @@ Do NOT include:
 - Watermarks or logos
 - Low quality or blurry elements
 - Generic clip art style graphics`;
+    }
 
     console.log("Generating marketing image with prompt:", prompt.substring(0, 200));
 
