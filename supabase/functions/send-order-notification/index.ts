@@ -381,7 +381,7 @@ serve(async (req) => {
       : null;
     
     // Generate tracking URL using FRONTEND_URL or fallback
-    const frontendUrl = Deno.env.get("FRONTEND_URL") || `${Deno.env.get("SUPABASE_URL")?.replace('.supabase.co', '.lovable.app').replace('https://', 'https://id-preview--') || ''}`;
+    const frontendUrl = Deno.env.get("FRONTEND_URL") || "https://restauranteos.lovable.app";
     const trackingUrl = `${frontendUrl}/track/${order.id}`;
     
     // Generate Pix code if available

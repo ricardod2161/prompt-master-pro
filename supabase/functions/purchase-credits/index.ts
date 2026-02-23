@@ -21,13 +21,28 @@ serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabaseClient = createClient(supabaseUrl, supabaseKey);
+    const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const authClient = createClient(supabaseUrl, supabaseAnon);
 
-    const authHeader = req.headers.get("Authorization")!;
+    // Validate JWT via getClaims
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Não autorizado" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
-    if (authError || !user?.email) throw new Error("Não autorizado");
+    const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
+      return new Response(JSON.stringify({ error: "Token inválido" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const userId = claimsData.claims.sub as string;
+    const userEmail = claimsData.claims.email as string;
+    if (!userEmail) throw new Error("Email não disponível");
 
     const { packageId, unitId } = await req.json();
 
@@ -38,7 +53,7 @@ serve(async (req) => {
     // Verify unit access
     const serviceClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: hasAccess } = await serviceClient.rpc("has_unit_access", {
-      _user_id: user.id,
+      _user_id: userId,
       _unit_id: unitId,
     });
     if (!hasAccess) throw new Error("Sem acesso a esta unidade");
@@ -48,7 +63,7 @@ serve(async (req) => {
     });
 
     // Find or create customer
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+    const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
     let customerId: string | undefined;
     if (customers.data.length > 0) {
       customerId = customers.data[0].id;
@@ -56,7 +71,7 @@ serve(async (req) => {
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
-      customer_email: customerId ? undefined : user.email,
+      customer_email: customerId ? undefined : userEmail,
       line_items: [
         {
           price_data: {
@@ -68,12 +83,12 @@ serve(async (req) => {
         },
       ],
       mode: "payment",
-      success_url: `${req.headers.get("origin")}/marketing?credits_purchased=${pkg.credits}&unit_id=${unitId}`,
+      success_url: `${req.headers.get("origin")}/marketing?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${req.headers.get("origin")}/marketing`,
       metadata: {
         type: "marketing_credits",
         unit_id: unitId,
-        user_id: user.id,
+        user_id: userId,
         credits: pkg.credits.toString(),
         package_id: pkg.id,
       },

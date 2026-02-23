@@ -192,6 +192,14 @@ export function useCustomerOrder(tableId: string) {
         throw new Error("Valor insuficiente para pagamento");
       }
 
+      // Sanitize customer inputs
+      const sanitizedName = customerInfo.name
+        ? customerInfo.name.trim().substring(0, 100).replace(/[<>]/g, "")
+        : null;
+      const sanitizedPhone = customerInfo.phone
+        ? customerInfo.phone.trim().substring(0, 20).replace(/[^0-9()+\- ]/g, "")
+        : null;
+
       // Create order
       const { data: order, error: orderError } = await supabase
         .from("orders")
@@ -201,8 +209,8 @@ export function useCustomerOrder(tableId: string) {
           channel: "table" as const,
           status: "pending",
           total_price: cartTotal,
-          customer_name: customerInfo.name || null,
-          customer_phone: customerInfo.phone || null,
+          customer_name: sanitizedName,
+          customer_phone: sanitizedPhone,
           payment_method: paymentMethod,
           change_for: paymentMethod === "cash" ? changeForValue : null,
         })
