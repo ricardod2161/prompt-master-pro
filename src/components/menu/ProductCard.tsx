@@ -78,7 +78,7 @@ export function ProductCard({
     >
       {/* Product Image */}
       <div className="relative">
-        <AspectRatio ratio={16 / 10}>
+        <AspectRatio ratio={16 / 9}>
           {product.image_url ? (
             <img
               src={product.image_url}
@@ -129,7 +129,7 @@ export function ProductCard({
       </div>
 
       {/* Content */}
-      <div className="p-4 space-y-3">
+      <div className="p-3 space-y-2">
         {/* Header: Name + Toggle */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
@@ -164,7 +164,7 @@ export function ProductCard({
 
         {/* Price */}
         <div className="flex items-baseline gap-2">
-          <span className="text-lg font-bold text-primary">
+          <span className="text-base font-bold text-primary">
             {hasVariations ? `A partir de ${formatCurrency(minPrice)}` : formatCurrency(product.price)}
           </span>
           {!hasVariations && product.delivery_price && (
