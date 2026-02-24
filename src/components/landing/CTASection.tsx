@@ -48,7 +48,13 @@ export function CTASection() {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
-            <Link to="/login" onClick={() => trackPixelEvent("StartTrial", { content_name: "cta_section" })}>
+           <Link
+  to="/login"
+  onClick={() => {
+    trackPixelEvent("StartTrial", { content_name: "cta_section" });
+    trackPixelEvent("Lead", { content_name: "cta_section" });
+  }}
+>
               <Button size="lg" className="h-14 px-10 text-lg group">
                 Começar Gratuitamente
                 <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
