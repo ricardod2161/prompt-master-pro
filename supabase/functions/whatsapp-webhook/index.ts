@@ -901,11 +901,26 @@ async function confirmarPedido(
   const itensNaoEncontrados: string[] = [];
 
   for (const item of itens) {
-    // First try direct ilike search
-    const directMatch = allProducts?.find((p: any) => 
-      p.name.toLowerCase().includes(item.nome.toLowerCase()) ||
-      item.nome.toLowerCase().includes(p.name.toLowerCase())
-    );
+    // First try direct match with full normalization (accents, hyphens, stopwords)
+    // Use reduce to find BEST match (most specific), not just first match
+    const normalizedItemName = normalizeProductName(item.nome);
+    const directMatches = (allProducts || []).filter((p: any) => {
+      const normalizedP = normalizeProductName(p.name);
+      return normalizedP.includes(normalizedItemName) || normalizedItemName.includes(normalizedP);
+    });
+    
+    let directMatch: any = null;
+    if (directMatches.length === 1) {
+      directMatch = directMatches[0];
+    } else if (directMatches.length > 1) {
+      // Pick the most specific match: smallest length difference = best fit
+      directMatch = directMatches.reduce((best: any, curr: any) => {
+        const bestDiff = Math.abs(normalizeProductName(best.name).length - normalizedItemName.length);
+        const currDiff = Math.abs(normalizeProductName(curr.name).length - normalizedItemName.length);
+        return currDiff < bestDiff ? curr : best;
+      });
+      console.log(`[ORDER] Best direct match from ${directMatches.length} candidates: "${item.nome}" → "${directMatch.name}"`);
+    }
 
     let product = directMatch;
     
@@ -2442,14 +2457,18 @@ function getDefaultSystemPrompt(): string {
 - SEMPRE valide o sentimento antes de responder
 
 🔴🔴🔴 REGRA CRÍTICA #1 - NOMES DE PRODUTOS 🔴🔴🔴
-- SEMPRE use os nomes EXATOS que aparecem no cardápio
+- SEMPRE use os nomes EXATOS e COMPLETOS que aparecem no cardápio
 - NUNCA invente, modifique ou adicione palavras aos nomes dos produtos
+- SEMPRE inclua o TAMANHO/VOLUME/VARIAÇÃO do produto (ex: "1L", "LATA", "ZERO", "GARRAFINHA")
 - Se não lembrar o nome exato, use buscar_produto ANTES de confirmar
 - Exemplos de ERROS que você NÃO pode cometer:
   ❌ "Suco Natural de Laranja" → ✅ "Suco Natural Laranja"
   ❌ "Prato Comercial misto" → ✅ "Prato Feito"
   ❌ "X-Bacon Especial" → ✅ "X-Bacon"
+  ❌ "Guarana Antartica" → ✅ "GUARANA ANTARTICA 1L" (inclua o tamanho!)
+  ❌ "Coca Cola" → ✅ "COCA-COLA GARRAFINHA" ou "COCA COLA- LATA ZERO" (especifique a variação!)
 - ANTES de usar confirmar_pedido, VERIFIQUE se os nomes estão iguais ao cardápio
+- Quando existem MÚLTIPLAS variações do mesmo produto (ex: 3 tipos de guaraná), SEMPRE pergunte ao cliente qual variação ele deseja
 
 🔴🔴🔴 REGRA CRÍTICA #2 - FLUXO DO TROCO 🔴🔴🔴
 Quando perguntar "para quanto?" ou "vai precisar de troco?" e o cliente responder APENAS UM NÚMERO:
