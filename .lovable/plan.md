@@ -1,63 +1,44 @@
 
-# Correcao: Pedido WhatsApp nao registra Marmita corretamente
+# Correcao: Bot travado em "aguarde" + Sprite nao encontrada
 
-## Diagnostico Detalhado
+## Diagnostico
 
-Investiguei os pedidos #80 e #81 do cliente "Restaurante Santo Antonio" no banco de dados e confirmei o erro:
+Investiguei o pedido #82 do cliente "Junho" e os logs do webhook. Encontrei dois problemas distintos:
 
-### O que aconteceu:
+### Problema 1: Rate Limit sem retry (CRITICO)
+O bot usa a API de IA para processar cada mensagem. Quando a API retorna erro 429 (rate limit), o sistema simplesmente envia "No momento estamos com muitas solicitacoes..." e NAO tenta novamente. Isso faz o cliente ficar preso em loop - toda mensagem subsequente tambem pode ser rate-limited, tornando o bot inutilizavel.
 
-1. No WhatsApp, o bot montou o pedido correto: **1x Marmita com Carne de Boi e Frango (R$18) + 1x Guarana Kuat Lata (R$6) = R$24**
-2. Ao chamar a funcao `confirmar_pedido`, o bot enviou o nome do item como **"Marmita com Carne de Boi e Frango"**
-3. O produto no banco se chama **"MARMITA 2 OPCAO DE CARNE"** (R$18)
-4. O algoritmo de matching falhou porque:
-   - Match direto: "marmita 2 opcao de carne" nao contem "marmita com carne de boi e frango" → FALHOU
-   - Match normalizado: "marmita 2 opcao carn" vs "marmita carn boi frango" → FALHOU
-   - Match por palavras (60%): apenas "marmita" e "carn" coincidem = 2/4 = 50% < 60% → FALHOU
-5. A marmita foi **silenciosamente descartada** e apenas o Guarana foi registrado
-6. Pedido criado com 1 item e R$6.00 em vez de 2 itens e R$24.00
+### Problema 2: "Sprite" nao encontrada no cardapio
+O produto no banco de dados esta cadastrado como **"SPRINT"** (com erro de digitacao - falta o "e"). O matching falha porque:
+- "sprite" vs "sprint" - nao sao iguais
+- Nenhuma estrategia de fuzzy matching consegue resolver diferenca de 1 caractere
 
-### Problemas adicionais encontrados:
+Resultado: Pedido #82 criado com apenas 1 item (Prato Feito R$20) em vez de 2 itens (Prato Feito + Sprite).
 
-- **Dois pedidos criados** (#80 e #81) ambos apenas com Guarana - a janela anti-duplicidade de 2 minutos e muito curta
-- **Itens nao encontrados sao silenciosos** - o sistema cria o pedido parcial sem avisar claramente o operador
+### Problema 3: "Coca Cola" precisa de melhor matching
+O cliente pediu "Adicionar uma coca cola" mas o bot ja estava travado no rate limit. Alem disso, existem duas opcoes:
+- COCA COLA- LATA ZERO (R$6)
+- COCA-COLA GARRAFINHA (R$5)
 
 ---
 
 ## Correcoes
 
-### 1. Melhorar algoritmo de matching de produtos (PRINCIPAL)
+### 1. Adicionar retry com backoff para rate limit
 
-No `findBestProductMatch`, adicionar novas estrategias:
+Quando a API retornar 429, tentar novamente ate 3 vezes com espera crescente (2s, 4s, 8s) antes de desistir. Isso resolve o problema principal do bot travado.
 
-- **Strategy 2.5 - Match por palavra-chave do produto**: Se a primeira palavra significativa do produto (ex: "marmita") esta no texto de busca, considerar como candidato forte
-- **Strategy 4 melhorada**: Reduzir threshold de 60% para 40% quando a primeira palavra-chave do produto for encontrada
-- **Strategy 5 - Match por categoria/tipo**: Se o texto de busca contem a palavra principal do produto (como "marmita"), e o produto so tem 1 resultado desse tipo, retornar
+### 2. Adicionar Levenshtein distance no matching de produtos
 
-### 2. Melhorar matching direto (linha 812-814)
+Implementar uma funcao de distancia de edicao simples para capturar erros de digitacao como "SPRINT" vs "SPRITE" (distancia = 1). Adicionar como Strategy 5 no `findBestProductMatch`: se a distancia de edicao for menor que 2 caracteres, considerar como match.
 
-Alem do `includes` simples, adicionar matching por primeira palavra significativa:
+### 3. Adicionar matching por substrings curtas
 
-```text
-Antes: "MARMITA 2 OPCAO DE CARNE".includes("Marmita com Carne de Boi e Frango") → false
-Depois: Primeira palavra "marmita" == "marmita" → candidato forte
-```
+Para "coca cola" encontrar "COCA-COLA GARRAFINHA", melhorar o tratamento de hifens e caracteres especiais na normalizacao, removendo hifens antes de comparar.
 
-### 3. Corrigir anti-duplicidade
+### 4. Corrigir o produto "SPRINT" no banco
 
-Aumentar janela de 2 minutos para 5 minutos para evitar pedidos duplicados acidentais.
-
-### 4. Adicionar aviso explicito no pedido sobre itens nao encontrados
-
-Quando `itensNaoEncontrados.length > 0`, incluir essa informacao nas `notes` do pedido para que o operador veja no sistema.
-
-### 5. Reforcar instrucao no system prompt
-
-Adicionar instrucao mais forte para o bot usar nomes EXATOS do cardapio e listar os nomes disponiveis antes de confirmar.
-
-### 6. Corrigir os pedidos #80 e #81 no banco
-
-Executar SQL para atualizar os pedidos existentes com os dados corretos.
+Atualizar o nome do produto para "SPRITE" no banco de dados (correcao de typo).
 
 ---
 
@@ -65,17 +46,17 @@ Executar SQL para atualizar os pedidos existentes com os dados corretos.
 
 | Arquivo | Acao |
 |---------|------|
-| `supabase/functions/whatsapp-webhook/index.ts` | Melhorar `findBestProductMatch`, matching direto, janela anti-dup, notas de itens nao encontrados |
+| `supabase/functions/whatsapp-webhook/index.ts` | Retry com backoff no rate limit, Levenshtein matching, melhor normalizacao de hifens |
 
 ## Correcao de dados
 
 | Acao | Detalhe |
 |------|---------|
-| Deletar pedido #80 | Duplicado incorreto |
-| Atualizar pedido #81 | Adicionar item Marmita, corrigir total para R$24 |
+| Renomear produto "SPRINT" para "SPRITE" | Correcao de erro de digitacao no cadastro |
 
 ## Resultado esperado
 
-- Marmitas e produtos com nomes genericos serao corretamente identificados mesmo quando o cliente descreve diferente
-- Pedidos duplicados serao evitados com janela de 5 minutos
-- Operador vera aviso no pedido quando algum item nao foi encontrado
+- Bot nunca mais fica travado em "aguarde" - tenta ate 3x antes de desistir
+- "Sprite" encontra "SPRITE" mesmo com typos no cadastro
+- "Coca Cola" encontra "COCA-COLA GARRAFINHA" ou "COCA COLA- LATA ZERO"
+- Operador recebe produto corretamente no pedido
