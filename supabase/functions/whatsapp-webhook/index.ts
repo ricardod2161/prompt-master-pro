@@ -543,10 +543,29 @@ function normalizeProductName(nome: string): string {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '') // remove accents
+    .replace(/[-–—]/g, ' ') // replace hyphens with spaces for better matching
     .replace(/\b(de|do|da|dos|das|com|e|o|a|os|as|um|uma|uns|umas)\b/g, '') // remove prepositions/articles
     .replace(/s\b/g, '') // remove trailing 's' (plural) from words
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+// Levenshtein distance for typo tolerance
+function levenshteinDistance(a: string, b: string): number {
+  const matrix: number[][] = [];
+  for (let i = 0; i <= a.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return matrix[a.length][b.length];
 }
 
 // Get the first significant keyword from a product name (skip common words)
@@ -643,9 +662,37 @@ function findBestProductMatch(
   
   if (bestMatch) {
     console.log(`[MATCH] Fuzzy match: "${searchName}" → "${bestMatch.name}" (score: ${bestScore.toFixed(2)})`);
+    return bestMatch;
   }
   
-  return bestMatch;
+  // Strategy 5: Levenshtein distance for typo tolerance (e.g. "sprite" vs "sprint")
+  let bestLevenshtein: typeof products[0] | null = null;
+  let bestDist = Infinity;
+  
+  for (const product of products) {
+    const normalizedName = normalizeProductName(product.name);
+    // Compare each word of the search against each word of the product
+    const nameWords = normalizedName.split(' ').filter(w => w.length > 2);
+    for (const sw of searchWords) {
+      for (const nw of nameWords) {
+        // Only compare words of similar length
+        if (Math.abs(sw.length - nw.length) <= 2) {
+          const dist = levenshteinDistance(sw, nw);
+          if (dist <= 2 && dist < bestDist) {
+            bestDist = dist;
+            bestLevenshtein = product;
+          }
+        }
+      }
+    }
+  }
+  
+  if (bestLevenshtein) {
+    console.log(`[MATCH] Levenshtein match: "${searchName}" → "${bestLevenshtein.name}" (distance: ${bestDist})`);
+    return bestLevenshtein;
+  }
+  
+  return null;
 }
 
 async function buscarProduto(supabase: any, unitId: string, nome: string): Promise<string> {
@@ -1563,27 +1610,50 @@ async function processWithAI(
   const currentMessages: any[] = [...messages];
   let pendingMenuMessages: string[] | undefined;
 
+  // Helper to call AI with retry on rate limit
+  async function callAIWithRetry(msgs: any[]): Promise<Response> {
+    const MAX_RETRIES = 3;
+    const BACKOFF_MS = [2000, 4000, 8000];
+    
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const resp = await fetch(
+        "https://ai.gateway.lovable.dev/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            messages: msgs,
+            tools,
+            tool_choice: "auto",
+            max_tokens: 2000,
+          }),
+        }
+      );
+
+      if (resp.status === 429 && attempt < MAX_RETRIES) {
+        const waitMs = BACKOFF_MS[attempt];
+        console.log(`[RATE_LIMIT] Attempt ${attempt + 1}/${MAX_RETRIES} got 429, retrying in ${waitMs}ms...`);
+        await resp.text(); // consume body
+        await new Promise(r => setTimeout(r, waitMs));
+        continue;
+      }
+      
+      return resp;
+    }
+    
+    // Should never reach here, but TypeScript needs it
+    throw new Error("RATE_LIMIT");
+  }
+
   while (iterations < MAX_ITERATIONS) {
     iterations++;
     console.log(`AI iteration ${iterations}/${MAX_ITERATIONS}`);
 
-    const aiResponse = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: currentMessages,
-          tools,
-          tool_choice: "auto",
-          max_tokens: 2000,
-        }),
-      }
-    );
+    const aiResponse = await callAIWithRetry(currentMessages);
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
