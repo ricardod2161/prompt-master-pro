@@ -1892,6 +1892,8 @@ serve(async (req) => {
     }
 
     // Find or create conversation
+    let shouldResetConversation = false;
+    
     let { data: conversation, error: convError } = await supabase
       .from("whatsapp_conversations")
       .select("*")
@@ -1931,16 +1933,24 @@ serve(async (req) => {
     } else if (convError) {
       throw convError;
     } else {
-      // Auto-reactivate bot if conversation has been inactive for 10+ minutes
+      // Check if conversation has been inactive for 10+ minutes
       const lastMessageAt = conversation.last_message_at 
         ? new Date(conversation.last_message_at).getTime() 
         : 0;
       const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
-      const shouldReactivateBot = !conversation.is_bot_active && lastMessageAt < tenMinutesAgo;
+      const isInactiveFor10Min = lastMessageAt < tenMinutesAgo;
+      const shouldReactivateBot = !conversation.is_bot_active && isInactiveFor10Min;
+      
+      // Reset conversation context if inactive for 10+ minutes (treat as new conversation)
+      shouldResetConversation = (isInactiveFor10Min && conversation.is_bot_active) || shouldReactivateBot;
 
       if (shouldReactivateBot) {
         const now = new Date().toISOString();
         console.log(`[AUTO-REACTIVATE] Bot reactivated | conversation_id=${conversation.id} | phone=${phone} | last_message_at=${conversation.last_message_at} | reactivated_at=${now} | inactivity_minutes=${Math.round((Date.now() - lastMessageAt) / 60000)}`);
+      }
+      
+      if (shouldResetConversation) {
+        console.log(`[CONVERSATION-RESET] Resetting context after 10+ min inactivity | conversation_id=${conversation.id} | phone=${phone} | inactivity_minutes=${Math.round((Date.now() - lastMessageAt) / 60000)}`);
       }
 
       await supabase
@@ -1956,6 +1966,23 @@ serve(async (req) => {
       // Update local reference if reactivated
       if (shouldReactivateBot) {
         conversation.is_bot_active = true;
+      }
+      
+      // Send welcome message again if conversation was reset
+      if (shouldResetConversation && settings.welcome_message) {
+        await sendWhatsAppMessage(
+          settings.api_url,
+          settings.api_token,
+          instanceName,
+          phone,
+          settings.welcome_message
+        );
+        // Store welcome message in history
+        await supabase.from("whatsapp_messages").insert({
+          conversation_id: conversation.id,
+          role: "assistant",
+          content: settings.welcome_message,
+        });
       }
     }
 
@@ -2043,13 +2070,13 @@ serve(async (req) => {
       await sendPresence(settings.api_url, settings.api_token, instanceName, phone, "composing");
     }, 8000); // Refresh every 8 seconds
 
-    // Get recent conversation history for context
+    // Get recent conversation history for context (skip old messages if conversation was reset)
     const { data: recentMessages } = await supabase
       .from("whatsapp_messages")
       .select("role, content")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(shouldResetConversation ? 2 : 20);
 
     // Build messages array for AI with professional system prompt
     const basePrompt = settings.system_prompt || getDefaultSystemPrompt();
