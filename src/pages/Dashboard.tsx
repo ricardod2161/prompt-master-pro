@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import { trackPixelEvent } from "@/hooks/usePixelTracking";
 import { useDashboard } from "@/hooks/useDashboard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
@@ -161,6 +163,14 @@ function CashRegisterCard({
 }
 
 export default function Dashboard() {
+
+  useEffect(() => {
+    if (!localStorage.getItem("ff_completed_registration")) {
+      trackPixelEvent("CompleteRegistration", { source: "dashboard_first_access" });
+      localStorage.setItem("ff_completed_registration", "1");
+    }
+  }, []);
+
   const {
     stats,
     recentOrders,
