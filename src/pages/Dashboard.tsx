@@ -165,6 +165,8 @@ function CashRegisterCard({
 export default function Dashboard() {
 
   useEffect(() => {
+    console.log("USE EFFECT DISPAROU");
+    
     if (!localStorage.getItem("ff_completed_registration")) {
       trackPixelEvent("CompleteRegistration", { source: "dashboard_first_access" });
       localStorage.setItem("ff_completed_registration", "1");
