@@ -2,9 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Card3D } from "@/components/ui/card-3d";
-import { AspectRatio } from "@/components/ui/aspect-ratio";
-import { Pencil, Trash2, Clock, Truck, ImageOff, Copy, ShoppingBag, Layers } from "lucide-react";
+import { Pencil, Trash2, Clock, Truck, Copy, ShoppingBag, Layers } from "lucide-react";
 
 interface Category {
   id: string;
@@ -71,147 +69,90 @@ export function ProductCard({
     : product.price;
 
   return (
-    <Card3D
-      variant="subtle"
-      className={`group overflow-hidden transition-all duration-300 ${!product.available ? "opacity-60 grayscale-[30%]" : ""} ${selected ? "ring-2 ring-primary" : ""}`}
-      style={{ animationDelay: `${index * 50}ms` }}
+    <div
+      className={`group rounded-lg border border-border/50 bg-card/80 backdrop-blur-sm p-2 transition-all duration-200 hover:border-border ${!product.available ? "opacity-50 grayscale-[30%]" : ""} ${selected ? "ring-2 ring-primary" : ""}`}
+      style={{ animationDelay: `${index * 30}ms` }}
     >
-      {/* Product Image */}
-      <div className="relative">
-        <AspectRatio ratio={16 / 9}>
-          {product.image_url ? (
-            <img
-              src={product.image_url}
-              alt={product.name}
-              className="w-full h-full object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <div className="w-full h-full bg-muted/50 flex items-center justify-center">
-              <ImageOff className="w-8 h-8 text-muted-foreground/30" />
-            </div>
-          )}
-        </AspectRatio>
-
-        {/* Selection checkbox */}
+      {/* Header: Checkbox + Name + Toggle */}
+      <div className="flex items-center gap-1.5">
         {selectionMode && (
-          <div
-            className="absolute top-2 left-2 z-10"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div onClick={(e) => e.stopPropagation()}>
             <Checkbox
               checked={selected}
               onCheckedChange={(checked) => onSelect?.(product.id, !!checked)}
-              className="h-5 w-5 bg-background/80 backdrop-blur-sm"
+              className="h-4 w-4"
             />
           </div>
         )}
-
-        {/* Order count badge */}
+        <div className="flex-1 min-w-0">
+          <h3 className="font-medium text-xs leading-tight truncate">{product.name}</h3>
+        </div>
         {orderCount !== undefined && orderCount > 0 && (
-          <Badge
-            variant="secondary"
-            className="absolute top-2 right-2 text-[10px] bg-background/80 backdrop-blur-sm"
-          >
-            <ShoppingBag className="w-3 h-3 mr-0.5" />
+          <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 shrink-0">
+            <ShoppingBag className="w-2.5 h-2.5 mr-0.5" />
             {orderCount}
           </Badge>
         )}
+        <Switch
+          checked={product.available}
+          onCheckedChange={() => onToggleAvailability(product)}
+          className="shrink-0 scale-75 origin-right"
+        />
+      </div>
 
-        {/* Unavailable overlay */}
+      {/* Category + Variations badges */}
+      <div className="flex items-center gap-1 mt-1 flex-wrap">
+        {product.categories?.name && (
+          <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5">
+            {product.categories.name}
+          </Badge>
+        )}
+        {hasVariations && (
+          <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">
+            <Layers className="w-2 h-2 mr-0.5" />
+            {variations.length}
+          </Badge>
+        )}
         {!product.available && (
-          <div className="absolute inset-0 bg-background/60 flex items-center justify-center">
-            <Badge variant="destructive" className="text-xs font-semibold">
-              Indisponível
-            </Badge>
-          </div>
+          <Badge variant="destructive" className="text-[9px] px-1 py-0 h-3.5">
+            Off
+          </Badge>
         )}
       </div>
 
-      {/* Content */}
-      <div className="p-3 space-y-2">
-        {/* Header: Name + Toggle */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-sm leading-tight truncate">{product.name}</h3>
-            <div className="flex items-center gap-1 mt-1 flex-wrap">
-              {product.categories?.name && (
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                  {product.categories.name}
-                </Badge>
-              )}
-              {hasVariations && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                  <Layers className="w-2.5 h-2.5 mr-0.5" />
-                  {variations.length} opções
-                </Badge>
-              )}
-            </div>
-          </div>
-          <Switch
-            checked={product.available}
-            onCheckedChange={() => onToggleAvailability(product)}
-            className="shrink-0"
-          />
-        </div>
-
-        {/* Description */}
-        {product.description && (
-          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-            {product.description}
-          </p>
-        )}
-
-        {/* Price */}
-        <div className="flex items-baseline gap-2">
-          <span className="text-base font-bold text-primary">
-            {hasVariations ? `A partir de ${formatCurrency(minPrice)}` : formatCurrency(product.price)}
+      {/* Price + Prep time */}
+      <div className="flex items-center justify-between mt-1.5">
+        <div className="flex items-baseline gap-1">
+          <span className="text-xs font-bold text-primary">
+            {hasVariations ? `${formatCurrency(minPrice)}+` : formatCurrency(product.price)}
           </span>
           {!hasVariations && product.delivery_price && (
-            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-              <Truck className="w-3 h-3" />
+            <span className="text-[9px] text-muted-foreground flex items-center">
+              <Truck className="w-2.5 h-2.5 mr-0.5" />
               {formatCurrency(product.delivery_price)}
             </span>
           )}
         </div>
-
-        {/* Footer: Prep time + Actions */}
-        <div className="flex items-center justify-between pt-1 border-t border-border/50">
-          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            {product.preparation_time} min
-          </span>
-          <div className="flex gap-1">
-            {onDuplicate && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => onDuplicate(product)}
-                title="Duplicar produto"
-              >
-                <Copy className="w-3.5 h-3.5" />
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => onEdit(product)}
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => onDelete(product.id)}
-            >
-              <Trash2 className="w-3.5 h-3.5 text-destructive" />
-            </Button>
-          </div>
-        </div>
+        <span className="text-[9px] text-muted-foreground flex items-center gap-0.5">
+          <Clock className="w-2.5 h-2.5" />
+          {product.preparation_time}m
+        </span>
       </div>
-    </Card3D>
+
+      {/* Actions */}
+      <div className="flex justify-end gap-0.5 mt-1 border-t border-border/30 pt-1">
+        {onDuplicate && (
+          <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => onDuplicate(product)} title="Duplicar">
+            <Copy className="w-3 h-3" />
+          </Button>
+        )}
+        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => onEdit(product)}>
+          <Pencil className="w-3 h-3" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => onDelete(product.id)}>
+          <Trash2 className="w-3 h-3 text-destructive" />
+        </Button>
+      </div>
+    </div>
   );
 }
