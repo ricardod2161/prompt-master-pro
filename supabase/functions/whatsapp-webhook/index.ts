@@ -549,6 +549,17 @@ function normalizeProductName(nome: string): string {
     .trim();
 }
 
+// Get the first significant keyword from a product name (skip common words)
+function getProductKeyword(name: string): string {
+  const normalized = name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  const stopWords = new Set(['de', 'do', 'da', 'dos', 'das', 'com', 'e', 'o', 'a', 'os', 'as', 'um', 'uma', 'uns', 'umas', 'no', 'na', 'em', 'para', 'por', '2', '1', '3']);
+  const words = normalized.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w));
+  return words[0] || '';
+}
+
 // Find best matching product using flexible search
 function findBestProductMatch(
   products: Array<{ id?: string; name: string; price: number; delivery_price: number | null; description?: string | null; category?: { name: string } | null }>,
@@ -568,6 +579,20 @@ function findBestProductMatch(
   });
   if (match) return match;
   
+  // Strategy 2.5: Keyword-based match - if the primary keyword of a product matches the search
+  const searchKeyword = getProductKeyword(searchName);
+  if (searchKeyword) {
+    const keywordCandidates = products.filter(p => {
+      const productKeyword = getProductKeyword(p.name);
+      return productKeyword === searchKeyword;
+    });
+    // If only one product matches the primary keyword, return it directly
+    if (keywordCandidates.length === 1) {
+      console.log(`[MATCH] Keyword single-match: "${searchName}" → "${keywordCandidates[0].name}" (keyword: "${searchKeyword}")`);
+      return keywordCandidates[0];
+    }
+  }
+  
   // Strategy 3: All significant words match
   if (searchWords.length > 0) {
     match = products.find(p => {
@@ -577,26 +602,47 @@ function findBestProductMatch(
     if (match) return match;
   }
   
-  // Strategy 4: Most words match (at least 60%)
+  // Strategy 4: Most words match - with adaptive threshold
   let bestMatch: typeof products[0] | null = null;
   let bestScore = 0;
   
   for (const product of products) {
     const normalizedName = normalizeProductName(product.name);
     const nameWords = normalizedName.split(' ').filter(w => w.length > 2);
+    const productKeyword = getProductKeyword(product.name);
     
-    let matchedWords = 0;
+    // Check both directions: search words in product name AND product words in search
+    let matchedFromSearch = 0;
     for (const searchWord of searchWords) {
       if (nameWords.some(nameWord => nameWord.includes(searchWord) || searchWord.includes(nameWord))) {
-        matchedWords++;
+        matchedFromSearch++;
       }
     }
     
-    const score = searchWords.length > 0 ? matchedWords / searchWords.length : 0;
-    if (score > bestScore && score >= 0.6) {
+    let matchedFromProduct = 0;
+    for (const nameWord of nameWords) {
+      if (searchWords.some(searchWord => searchWord.includes(nameWord) || nameWord.includes(searchWord))) {
+        matchedFromProduct++;
+      }
+    }
+    
+    // Use the best score from either direction
+    const scoreFromSearch = searchWords.length > 0 ? matchedFromSearch / searchWords.length : 0;
+    const scoreFromProduct = nameWords.length > 0 ? matchedFromProduct / nameWords.length : 0;
+    const score = Math.max(scoreFromSearch, scoreFromProduct);
+    
+    // Lower threshold to 40% when primary keyword matches
+    const hasKeywordMatch = searchKeyword && productKeyword === searchKeyword;
+    const threshold = hasKeywordMatch ? 0.4 : 0.6;
+    
+    if (score > bestScore && score >= threshold) {
       bestScore = score;
       bestMatch = product;
     }
+  }
+  
+  if (bestMatch) {
+    console.log(`[MATCH] Fuzzy match: "${searchName}" → "${bestMatch.name}" (score: ${bestScore.toFixed(2)})`);
   }
   
   return bestMatch;
@@ -758,8 +804,8 @@ async function confirmarPedido(
     return "❌ Para entrega, preciso do endereço completo (rua, número e bairro).";
   }
 
-  // Anti-duplicate: check if same customer has a pending order in last 2 minutes
-  const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  // Anti-duplicate: check if same customer has a pending order in last 5 minutes
+  const twoMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   const { data: recentOrder } = await supabase
     .from("orders")
     .select("id, order_number")
@@ -816,7 +862,19 @@ async function confirmarPedido(
 
     let product = directMatch;
     
-    // If no direct match, use flexible matching
+    // If no direct match, try keyword-based single match
+    if (!product && allProducts) {
+      const itemKeyword = getProductKeyword(item.nome);
+      if (itemKeyword) {
+        const keywordMatches = allProducts.filter((p: any) => getProductKeyword(p.name) === itemKeyword);
+        if (keywordMatches.length === 1) {
+          product = keywordMatches[0];
+          console.log(`[ORDER] Keyword single-match: "${item.nome}" → "${(product as any).name}" (keyword: "${itemKeyword}")`);
+        }
+      }
+    }
+
+    // If still no match, use flexible matching
     if (!product && allProducts) {
       product = findBestProductMatch(
         allProducts as Array<{ id: string; name: string; price: number; delivery_price: number | null }>,
@@ -866,6 +924,10 @@ async function confirmarPedido(
   if (observacoes) notesArray.push(observacoes);
   if (pagamento.forma === "dinheiro" && pagamento.troco_para) {
     notesArray.push(`💵 Troco para: R$ ${pagamento.troco_para.toFixed(2).replace(".", ",")}`);
+  }
+  // Add explicit warning about items not found so operator sees it
+  if (itensNaoEncontrados.length > 0) {
+    notesArray.push(`⚠️ ITENS NÃO ENCONTRADOS: ${itensNaoEncontrados.join(", ")}`);
   }
 
   // Create order
