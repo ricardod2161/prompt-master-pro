@@ -351,7 +351,7 @@ export default function Menu() {
         unit_id: selectedUnit.id,
         name: productForm.name,
         description: productForm.description || null,
-        price: parseFloat(productForm.price),
+        price: productForm.price ? parseFloat(productForm.price) : 0,
         delivery_price: productForm.delivery_price ? parseFloat(productForm.delivery_price) : null,
         category_id: productForm.category_id || null,
         preparation_time: parseInt(productForm.preparation_time) || 15,
@@ -835,7 +835,7 @@ export default function Menu() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Preço Base *</Label>
+                      <Label>Preço Base</Label>
                       <Input
                         type="number"
                         step="0.01"
@@ -843,7 +843,6 @@ export default function Menu() {
                         value={productForm.price}
                         onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
                         placeholder="0,00"
-                        required
                       />
                     </div>
                     <div className="space-y-2">
