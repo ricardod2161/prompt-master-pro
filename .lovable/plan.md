@@ -1,127 +1,88 @@
+## Diagnóstico Completo
 
-## Análise Completa do Webhook
+### Problema 1: Transcrição falhando e gerando respostas duplicadas
 
-Após revisar as 3011 linhas do webhook, identifiquei os seguintes problemas:
+O cliente enviou 3 áudios seguidos em sequência rápida. Como a transcrição falha (todos os 3 modelos retornam vazio para `ogg/opus`), o bot responde com a mesma mensagem para cada áudio individualmente — gerando 3 mensagens idênticas: "Recebi seu áudio! Para garantir que seu pedido seja registrado corretamente, poderia me escrever o que deseja? 🙏"
 
-### Instruções Vagas Encontradas (que podem causar alucinações)
+### Problema 2: Prompt de transcrição inadequado
 
-**1. ETAPA 6 - Endereço coletado em múltiplas perguntas (linhas 2706-2712)**
-A instrução atual lista 4 sub-itens de coleta de endereço (rua, número, bairro, referência) em bullets. O LLM pode interpretar isso como "fazer tudo de uma vez", violando a REGRA CRÍTICA #4 (uma pergunta por vez).
+O prompt da transcrição diz apenas "Transcreva este áudio de voz em português brasileiro. Retorne APENAS o texto transcrito". Não há contexto de que é um bot de restaurante recebendo pedidos com números como quantidades ("quero 20 reais de  porções de carne"). O modelo pode confundir "20 reais" com troco.
 
-Correção: Especificar explicitamente que o endereço deve ser coletado pergunta por pergunta.
+### Problema 3: Instrução do bot ao receber áudio não transcrito é vaga
 
-**2. ETAPA 3 - "Ajude o cliente a escolher" (linha 2683)**
-A instrução "Ajude o cliente a escolher, responda dúvidas sobre produtos" é vaga demais — o LLM pode inventar produtos sem usar as ferramentas.
-
-Correção: Tornar obrigatório o uso de `buscar_produto` para responder dúvidas específicas e `listar_cardapio` para mostrar o cardápio.
-
-**3. "Respostas que NÃO são confirmação: números sozinhos (50, 100), 'ok', 'tá'" (linha 2604)**
-O "ok" e "tá" são listados como NÃO confirmação, mas na prática clientes usam essas expressões para confirmar. Isso causa confusão — o bot pode ficar preso pedindo confirmação quando o cliente já confirmou.
-
-Correção: Remover "ok" e "tá" da lista de não-confirmação e deixar apenas "números sozinhos".
-
-**4. ETAPA 5 - Modalidade sem default claro (linhas 2699-2704)**
-A instrução sobre modalidade não especifica o que fazer se o cliente não responder uma das 3 opções (por ex: "manda aqui" = entrega).
-
-Correção: Adicionar instrução de mapeamento de respostas informais para modalidades.
-
-**5. Log de diagnóstico ausente para o estado "fechado + quer pedir"**
-Atualmente o único log de horário é genérico: `[TIME] ${currentTimeStr}...`. Não há log específico quando o bot detecta que o restaurante está fechado E o cliente confirmou que quer deixar o pedido anotado.
-
-Correção: Adicionar log estruturado `[CLOSED-ORDER-INTENT]` quando `statusText === "FECHADO"`.
-
-**6. REGRA CRÍTICA #3 — "ok" e "tá" como não-confirmação (linha 2604)**
-Já mencionado acima — contradição entre as regras.
-
-**7. Instrução vaga de ETAPA 9 — Resumo (linha 2730)**
-"OBRIGATÓRIO mostrar o resumo COMPLETO" não define quando exatamente isso deve acontecer. O LLM pode mostrar o resumo antes de ter todos os dados.
-
-Correção: Adicionar pré-condição explícita: "SÓ mostre o resumo após ter TODOS: nome + itens + modalidade + (endereço se entrega) + pagamento".
+A instrução diz "Poderia me escrever o que deseja?" — o bot usa isso como template literal e repete para cada áudio, sem perceber que o cliente enviou múltiplos áudios e já pediu o texto uma vez.
 
 ---
 
-## Plano de Implementação
+## Plano de Correção
 
-### Mudanças no `getDefaultSystemPrompt()` (linhas 2541–2770)
+### Correção 1 — Melhorar prompt de transcrição (linha 1333)
 
-**1. ETAPA 3** — Tornar uso de ferramentas explícito e obrigatório:
-```
-ETAPA 3 - ESCOLHA DOS ITENS:
-OBRIGATÓRIO: Use listar_cardapio para mostrar o cardápio.
-OBRIGATÓRIO: Use buscar_produto para responder dúvidas sobre produtos específicos.
-NUNCA invente preços, descrições ou disponibilidade sem consultar a ferramenta.
-```
+Adicionar contexto de restaurante ao prompt para que o modelo entenda que números são quantidades de itens:
 
-**2. ETAPA 5** — Adicionar mapeamento informal de modalidade:
 ```
-Se o cliente usar termos informais, interprete:
-- "manda aqui", "entrega", "deliver" → entrega
-- "vou buscar", "retirar", "pegar lá" → retirada  
-- "aqui mesmo", "comer aí", "mesa" → local
+"Transcreva este áudio de voz em português brasileiro. 
+Contexto: É um cliente fazendo pedido em restaurante via WhatsApp. 
+Preste atenção especial a: nomes de produtos, quantidades (ex: 20 reais, 30 reais, 50 rais, porções), 
+formas de pagamento e endereços.
+Retorne APENAS o texto transcrito, sem explicações ou formatação."
 ```
 
-**3. ETAPA 6** — Endereço uma informação por vez:
-```
-ETAPA 6 - ENDEREÇO (apenas se ENTREGA):
-Colete UMA informação por vez (REGRA UMA PERGUNTA):
-Primeiro: "Qual a rua e número?" → espere
-Segundo: "Qual o bairro?" → espere
-Terceiro: "Tem algum ponto de referência?" → espere (opcional)
-```
+### Correção 2 — Deduplicação de respostas para múltiplos áudios (linhas 1944-1958)
 
-**4. ETAPA 9** — Adicionar pré-condição:
-```
-ETAPA 9 - RESUMO E CONFIRMAÇÃO:
-⚠️ SÓ chegue nesta etapa após ter TODOS os dados:
-✓ Nome do cliente
-✓ Itens do pedido  
-✓ Modalidade definida
-✓ Endereço (se entrega)
-✓ Forma de pagamento confirmada
-✓ Troco (se dinheiro)
-Se faltar QUALQUER dado, volte para coletá-lo ANTES de mostrar o resumo.
-```
+Adicionar verificação de rate limiting por conversa: se já enviamos uma mensagem de "não entendi o áudio" nos últimos 30 segundos, NÃO enviar novamente — apenas salvar a mensagem no histórico sem responder.
 
-**5. REGRA CRÍTICA #3** — Corrigir lista de não-confirmação:
-```
-Respostas que NÃO são confirmação: números sozinhos (50, 100, 200)
-Respostas que SÃO confirmação: "sim", "confirmo", "pode fazer", "isso", "confirma", "ok", "tá", "pode", "vai"
-```
-
-### Mudanças no `timeContextBlock` (linhas 2247–2269)
-
-**6. Log diagnóstico "fechado + quer pedir"** — Adicionar log específico após construir o bloco de horário:
 ```typescript
-if (statusText === "FECHADO") {
-  console.log(`[CLOSED-ORDER-INTENT] Restaurant is CLOSED | unit_id=${settings.unit_id} | phone=${phone} | time=${currentTimeStr} ${currentDayPt} | detail=${statusDetail}`);
+// Antes de processar áudio, verificar se já respondemos recentemente
+if (mediaType === "audio" && transcription === "") {
+  const recentResponse = await checkRecentAudioResponse(conversationId, 30);
+  if (recentResponse) {
+    // Já pedimos para escrever recentemente, não repetir
+    return new Response(JSON.stringify({ status: "audio_deduplicated" }), ...);
+  }
 }
 ```
 
-**7. Instrução de pré-pedido fechado** — Complementar a instrução já existente nas linhas 2262–2268 com detecção de padrão de linguagem do cliente:
+### Correção 3 — Melhorar instrução ao bot para áudio com falha (linha 2670-2671)
+
+Atualizar a instrução para que o bot seja mais inteligente ao detectar múltiplos áudios:
+
 ```
-- Padrões de resposta afirmativa que ATIVAM o fluxo de pré-pedido:
-  "sim", "quero", "pode", "pode anotar", "claro", "com certeza", "ok", "tá bom", "tudo bem", "manda", "vai"
-- Se o cliente responder com qualquer um desses padrões após a pergunta sobre anotar o pedido:
-  → IMEDIATAMENTE use listar_cardapio
-  → NÃO faça perguntas intermediárias antes de mostrar o cardápio
+- Se receber "[O cliente enviou um áudio que não pôde ser transcrito]":
+  → Se for o PRIMEIRO áudio não transcrito na conversa atual: 
+     "Recebi seu áudio! 🎤 Não consegui transcrever. Poderia me escrever seu pedido?"
+  → Se já pediu antes e o cliente enviou MAIS áudios: 
+     NÃO repita a mensagem. Aguarde o cliente digitar.
+  → NUNCA envie a mesma mensagem mais de uma vez seguida
 ```
 
-### Mudanças nas `formattingRules` (linhas 2295–2346)
+### Correção 4 — Instrução para entender pedidos numéricos em áudio (linha 2669)
 
-**8. Reforçar REGRA 1** — Adicionar contexto de quando é OK avançar sem esperar:
+Adicionar instrução explícita para que quando o áudio for transcrito com números, o bot entenda o contexto:
+
 ```
-- Se o cliente JÁ forneceu dados espontaneamente na mesma mensagem, avance diretamente.
-  Exemplo: "Quero 2x pizza, entregar na Rua X, n.5, pago no pix" → já tem tudo, vá direto para ETAPA 9
+- Se receber "[Áudio transcrito]: quero 20 reais de porções de carne" → é um PEDIDO
+- Números em áudio são SEMPRE quantidades de produtos, NUNCA troco
+- Troco só é informado DEPOIS que o bot perguntou explicitamente sobre troco
+- Exemplos de pedidos em áudio: "quero 2 X-bacon", "me manda 3 sucos", e  "20 reais de porções de frango"
+```
+
+### Correção 5 — Adicionar log de diagnóstico para falhas de transcrição
+
+Adicionar log `[AUDIO-TRANSCRIPTION-FAIL]` para monitorar quantas vezes a transcrição falha por unidade:
+
+```typescript
+console.log(`[AUDIO-TRANSCRIPTION-FAIL] unit_id=${settings.unit_id} | phone=${phone} | mimetype=${media.mimetype} | size=${media.base64.length}`);
 ```
 
 ---
 
-## Arquivo Modificado
+## Arquivos Modificados
 
-| Arquivo | Seção | Tipo de mudança |
-|---------|-------|----------------|
-| `supabase/functions/whatsapp-webhook/index.ts` | `getDefaultSystemPrompt()` | Clarificar ETAPAs 3, 5, 6, 9 e REGRA #3 |
-| `supabase/functions/whatsapp-webhook/index.ts` | `timeContextBlock` | Adicionar log `[CLOSED-ORDER-INTENT]` e reforçar padrões afirmativos |
-| `supabase/functions/whatsapp-webhook/index.ts` | `formattingRules` | Reforçar REGRA 1 com contexto de avanço automático |
 
-Nenhuma migration de banco de dados necessária — todas as mudanças são no prompt e nos logs do webhook.
+| Arquivo                                        | Seção                                   | Mudança                                                                 |
+| ---------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------- |
+| `supabase/functions/whatsapp-webhook/index.ts` | `transcribeAudio()` linha ~1333         | Prompt com contexto de restaurante e quantidades                        |
+| `supabase/functions/whatsapp-webhook/index.ts` | processamento de áudio linha ~1944-1958 | Deduplicação: verificar se já pediu texto recentemente para não repetir |
+| `supabase/functions/whatsapp-webhook/index.ts` | instrução do bot linha ~2669-2673       | Regras mais claras: não repetir pedido de texto, números = quantidades  |
+| `supabase/functions/whatsapp-webhook/index.ts` | log diagnóstico                         | Adicionar `[AUDIO-TRANSCRIPTION-FAIL]`                                  |
