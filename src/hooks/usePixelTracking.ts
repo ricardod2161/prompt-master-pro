@@ -6,20 +6,23 @@ declare global {
 
 export function trackPixelEvent(eventName: string, params?: Record<string, unknown>) {
   if (typeof window !== "undefined" && window.fbq) {
-    if (params) {
-      window.fbq("track", eventName, params);
-    } else {
-      window.fbq("track", eventName);
-    }
-  }
-}
+    const standardEvents = new Set([
+      "PageView",
+      "ViewContent",
+      "Lead",
+      "CompleteRegistration",
+      "InitiateCheckout",
+      "AddToCart",
+      "Purchase",
+    ]);
 
-export function trackPixelCustomEvent(eventName: string, params?: Record<string, unknown>) {
-  if (typeof window !== "undefined" && window.fbq) {
-    if (params) {
-      window.fbq("trackCustom", eventName, params);
+    if (standardEvents.has(eventName)) {
+      // Evento padrão
+      if (params) window.fbq("track", eventName, params);
+      else window.fbq("track", eventName);
     } else {
-      window.fbq("trackCustom", eventName);
+      // Evento custom
+      window.fbq("trackCustom", eventName, params || {});
     }
   }
 }
