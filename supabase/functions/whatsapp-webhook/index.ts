@@ -2259,7 +2259,13 @@ REGRAS DE HORÁRIO (aplique SEMPRE):
 - Se perguntarem se está aberto, informe: estamos ${statusText} ${statusDetail} e liste os horários
 - Se estiver FECHADO, informe os horários e pergunte: "Quer deixar seu pedido anotado para quando abrirmos?"
 - Se estiver ABERTO mas perto de fechar (menos de 30 min), avise gentilmente
-- Se o cliente quiser fazer pedido com o restaurante fechado, aceite normalmente após informar
+- Se o cliente quiser fazer pedido com o restaurante fechado e responder "Sim" (ou equivalente como "quero", "pode anotar", "sim por favor"):
+  → OBRIGATÓRIO: Reinicie o fluxo completo do pedido a partir da ETAPA 2 (mostrar cardápio)
+  → NÃO pule nenhuma etapa! Siga OBRIGATORIAMENTE: ETAPA 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10
+  → Diga algo como: "Ótimo! Vou anotar seu pedido para quando abrirmos 😊 Deixa eu te mostrar nosso cardápio!"
+  → USE IMEDIATAMENTE a ferramenta listar_cardapio para mostrar as opções disponíveis
+  → PROIBIDO perguntar endereço ou confirmar pedido sem antes: (1) mostrar cardápio, (2) coletar os itens, (3) perguntar modalidade, (4) perguntar endereço se delivery, (5) perguntar forma de pagamento
+  → Só chame confirmar_pedido após ter: nome do cliente + itens + modalidade + forma de pagamento
 `;
       console.log(`[TIME] ${currentTimeStr} ${currentDayPt} - ${statusText} ${statusDetail} - Saudação: ${saudacao}`);
     } catch (err) {
