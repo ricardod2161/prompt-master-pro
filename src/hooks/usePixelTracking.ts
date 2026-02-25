@@ -40,6 +40,8 @@ export function trackPixelEvent(eventName: string, params?: Record<string, unkno
       "InitiateCheckout",
       "AddToCart",
       "Purchase",
+      "Contact",
+      "StartTrial",
     ]);
 
     if (standardEvents.has(eventName)) {
