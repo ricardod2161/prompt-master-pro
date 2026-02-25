@@ -1,133 +1,98 @@
 
-## Diagnóstico dos 4 Prints
 
-### Problema Central: "PORÇÃO DE CARNE" com preço R$ 0,00 no cardápio
+## Diagnóstico Definitivo
 
-Os prints mostram claramente que o produto "PORÇÃO DE CARNE" está cadastrado com preço R$ 0,00. Isso cria uma cascata de comportamentos ruins:
+O print mostra exatamente o problema: o bot diz **"Por isso, eu não consigo registrar um pedido dela no valor de R$ 20,00"** — isso acontece porque o LLM, ao usar `buscar_produto` e receber `price: 0`, entra em modo de "não posso fazer isso" que **sobrepõe o prompt**. A REGRA #7 está no final do prompt (linha 2683) e o modelo a ignora em favor do seu raciocínio interno de "preço inválido".
 
-1. **Print 3**: Bot mostra o cardápio com "PORÇÃO DE CARNE - R$ 0,00" → correto até aqui
-2. **Cliente**: "Quero uma porção de carne de 20 reais" → bot entra em colapso lógico porque o produto existe mas tem preço R$ 0,00
-3. **Print 4**: Bot questiona se o cliente quer pedir mesmo com R$ 0,00 em vez de simplesmente anotar
-4. **Print 5**: Bot falha na geração de resposta ("Desculpe, não consegui gerar uma resposta")
-5. **Print 5-6**: Depois de "marque aí no pedido" e "mesmo assim adicione quero 20 reais", bot adiciona mas fica confuso sobre o valor
-6. **Bot pergunta "me confirme o valor exato"** — completamente desnecessário, o valor "20 reais" foi dito pelo cliente
+### 3 Causas Raiz Identificadas
 
-### Causa Raiz 1: Produto com preço R$ 0,00 — bot trava
-No `confirmarPedido()` linha ~951-967, quando o preço é 0 o `subtotal = 0 * quantidade = 0`, mas a lógica continua. O PROBLEMA está no `processWithAI()` que usa `gemini-2.5-flash` — ao receber o resultado de `buscar_produto` com R$ 0,00, o LLM entra em loop de raciocínio questionando o preço em vez de simplesmente anotar.
+**Causa 1 — Posição da REGRA #7 no prompt**
+A regra está no final do prompt, onde o modelo tem menos atenção. LLMs tendem a priorizar instruções do início. Quando o `buscar_produto` retorna `price: 0`, o raciocínio natural do modelo ("preço inválido = não posso confirmar") domina.
 
-### Causa Raiz 2: "20 reais" como valor ≠ quantidade
-O cliente diz "quero uma porção de carne de 20 reais". O bot precisa entender:
-- Produto: "PORÇÃO DE CARNE"  
-- Valor informado pelo cliente: R$ 20,00
-- Ação: Anotar como 1x PORÇÃO DE CARNE com observação "R$ 20,00 em carne"
+**Causa 2 — O retorno de `buscar_produto` não instrui o modelo**
+Quando `buscar_produto` retorna um produto com `price: 0`, a resposta da ferramenta não contém nenhuma instrução. O modelo interpreta o resultado livremente e conclui: "não posso criar pedido de R$20 para produto de R$0". Precisamos que o próprio retorno da ferramenta diga o que fazer.
 
-Mas a instrução atual diz:
-```
-→ Números como "20", "30", "50" em áudio = QUANTIDADE de produtos ou VALOR do pedido
-```
-Isso é ambíguo — "valor do pedido" não explica O QUE FAZER quando o preço no cardápio é R$ 0,00.
-
-### Causa Raiz 3: Bot não mostra as opções de carne
-O print 4 mostra que depois que o cliente pediu "uma porção de carne", o bot listou "CARNES DISPONIVEL" (porco, frango, boi, linguiça). Isso significa que o bot não identificou a categoria de carnes ANTES de pedir confirmação. A instrução para listar o cardápio está correta, mas o bot não está usando `listar_cardapio` proativamente quando o cliente menciona carnes.
-
-### Causa Raiz 4: Modelo `gemini-2.5-flash` gerando "não consegui gerar resposta"
-O print 5 às 12:37 mostra "Desculpe, não consegui gerar uma resposta." — isso ocorre quando o `MAX_ITERATIONS = 6` é atingido ou quando o modelo falha. O Gemini 2.5 Flash pode travar em raciocínio circular com produtos de preço zero.
+**Causa 3 — Falta de extração de valor monetário do texto**
+Quando o cliente diz "quero uma porção de carne de 20 reais", o `preco_informado` deveria ser enviado automaticamente pelo LLM (20.00), mas o LLM, ao travar no raciocínio, não envia esse campo.
 
 ---
 
-## Solução Completa
+## Plano de Correção em 3 Camadas
 
-### Correção 1 — Upgrade do modelo principal para Gemini 2.5 Pro (linha 1647)
-Trocar `gemini-2.5-flash` por `google/gemini-2.5-pro` para o processamento principal de conversas. O Pro é muito mais inteligente para entender contexto ambíguo como "20 reais de porção de carne" com produto de preço zero.
+### Camada 1 — Modificar retorno de `buscarProduto` quando price=0
+Quando o produto tem `price=0`, o retorno da ferramenta deve incluir uma instrução DIRETA ao LLM:
 
 ```typescript
-model: "google/gemini-2.5-pro",  // antes: "google/gemini-2.5-flash"
-```
+// ANTES (linha ~395):
+return `✅ Produto encontrado: ${product.name}\n💰 Preço: R$ ${product.price.toFixed(2)}`;
 
-### Correção 2 — Lógica para produtos com preço R$ 0,00 (linha ~951)
-No `confirmarPedido()` e `listarCardapio()`, quando o produto tem preço 0.00, o bot deve:
-- Exibir no cardápio como "PORÇÃO DE CARNE - Consulte o preço"
-- Na confirmação do pedido, usar o valor informado pelo cliente como `unit_price`
-
-No `confirmarPedido()`, adicionar lógica especial:
-```typescript
-// Se produto tem preço 0 mas cliente informou valor, usar valor do cliente
-let preco = typedProduct.price;
-if (preco === 0) {
-  // Tentar extrair preço da observação ou das notas do item
-  preco = item.preco_informado || 0;
+// DEPOIS — se price === 0:
+if (price === 0) {
+  return `✅ Produto encontrado: ${product.name}
+⚠️ PRODUTO DE PREÇO VARIÁVEL (o cliente define o valor)
+🔴 INSTRUÇÃO OBRIGATÓRIA: Se o cliente já informou um valor monetário (ex: "20 reais", "30 reais"), você DEVE chamar IMEDIATAMENTE confirmar_pedido com preco_informado = valor declarado pelo cliente. NÃO questione o preço. NÃO diga "não consigo registrar". APENAS confirme o pedido.`;
 }
 ```
 
-Modificar a interface `ConfirmarPedidoArgs` para suportar `preco_informado` opcional por item:
+### Camada 2 — Mover REGRA #7 para o INÍCIO do system prompt
+Antes de qualquer instrução de personalidade, colocar uma seção de "LEIS ABSOLUTAS":
+
+```
+🚨🚨🚨 LEIS ABSOLUTAS — NUNCA VIOLÁVEIS 🚨🚨🚨
+
+LEI #1 — PRODUTO COM PREÇO VARIÁVEL (price=0):
+Se o resultado de buscar_produto mostrar "PRODUTO DE PREÇO VARIÁVEL":
+→ Se o cliente JÁ disse um valor (ex: "20 reais", "30 de carne", "50 de boi"):
+  CHAME IMEDIATAMENTE confirmar_pedido com preco_informado = [valor dito pelo cliente]
+  NÃO diga "não consigo registrar"
+  NÃO diga "o produto está com R$ 0,00"
+  NÃO peça confirmação de preço
+→ Se o cliente NÃO disse um valor: pergunte "Qual o valor que deseja gastar?"
+
+EXEMPLOS OBRIGATÓRIOS (memorize):
+  Cliente: "quero 20 reais de porção de carne"
+  → confirmar_pedido(nome="PORÇÃO DE CARNE", quantidade=1, preco_informado=20.00) ✅
+  
+  Cliente: "me manda 50 de boi"  
+  → confirmar_pedido(nome=produto_boi, quantidade=1, preco_informado=50.00) ✅
+  
+  PROIBIDO: "não consigo registrar pois o preço é R$ 0,00" ❌
+  PROIBIDO: "o item aparece com R$ 0,00 no sistema" ❌
+```
+
+### Camada 3 — Extração automática de valor no confirmarPedido (backend)
+No backend (`confirmarPedido`), adicionar uma extração de regex para capturar valores monetários do nome do item quando `preco_informado` não for enviado:
+
 ```typescript
-itens: Array<{ nome: string; quantidade: number; preco_informado?: number }>;
+// Se preco é 0 e não veio preco_informado, tentar extrair do nome do item
+// Ex: item.nome = "PORÇÃO DE CARNE 20 REAIS" → extrair 20
+if (preco === 0 && !(item as any).preco_informado) {
+  const valorMatch = item.nome.match(/(\d+(?:[.,]\d{1,2})?)\s*(?:reais?|r\$)?/i);
+  if (valorMatch) {
+    preco = parseFloat(valorMatch[1].replace(",", "."));
+    console.log(`[ORDER] Extraindo preço do nome do item: "${item.nome}" → R$ ${preco}`);
+  }
+}
 ```
 
-### Correção 3 — Instrução no prompt para produtos com preço zero (getDefaultSystemPrompt)
-Adicionar regra específica para quando o produto tem preço R$ 0,00:
+### Camada 4 — Instrução de sistema proativa para detecção de valor no contexto
+Adicionar no início do system prompt a instrução de que, antes de usar `buscar_produto`, o bot deve extrair o valor monetário da mensagem do cliente e guardá-lo:
 
 ```
-🔴🔴🔴 REGRA CRÍTICA #7 - PRODUTOS SEM PREÇO DEFINIDO 🔴🔴🔴
-- Quando um produto tem preço R$ 0,00 no cardápio, significa que o preço é VARIÁVEL (ex: porções por kg, por valor)
-- Se o cliente informou um valor (ex: "20 reais de carne", "50 de boi"):
-  → ANOTE o item com o valor informado pelo cliente como preço
-  → NÃO questione o preço — o cliente já informou quanto quer gastar
-  → NÃO peça confirmação de preço — anote e siga para o pagamento
-  → Envie no campo preco_informado do item o valor declarado pelo cliente
-- NUNCA trave o fluxo questionando "o produto está com R$ 0,00 — você quer pedir mesmo assim?"
-- Exemplos:
-  → "quero 20 reais de porção de carne" → 1x PORÇÃO DE CARNE, preco_informado: 20.00
-  → "me manda 50 reais de boi assado" → 1x CARNE DE BOI ASSADO, preco_informado: 50.00
-  → "pede 30 de frango" → 1x FRANGO ASSADO, preco_informado: 30.00
-```
-
-### Correção 4 — Listar cardápio de carnes proativamente
-Quando o cliente mencionar "carne", "porção", "boi", "frango", "linguiça" etc, o bot deve usar `buscar_produto` ou `listar_cardapio` imediatamente para mostrar as opções disponíveis naquela categoria, SEM primeiro confirmar se quer pedir.
-
-Adicionar ao prompt:
-```
-🥩 PEDIDOS DE PORÇÃO/CARNE (específico para churrascaria):
-- Quando o cliente mencionar "porção", "carne", "boi", "frango", "porco", "linguiça":
-  → IMEDIATAMENTE use listar_cardapio para mostrar as opções disponíveis
-  → Não pergunte "qual porção?" sem antes mostrar o cardápio
-  → Se o cliente já disse o tipo (ex: "porco e boi"), anote diretamente sem questionar
-- Pedidos por valor (ex: "20 reais de porção"):
-  → Anote como 1x [PRODUTO] com preco_informado = valor dito pelo cliente
-  → NÃO questione — siga para endereço/pagamento
-```
-
-### Correção 5 — Exibir produtos com preço zero de forma amigável no cardápio
-No `listarCardapio()` linha 513, alterar:
-```typescript
-// ANTES:
-firstMsg += `🔶 ${item.name} - R$ ${item.price.toFixed(2).replace(".", ",")}\n`;
-
-// DEPOIS:
-const priceDisplay = item.price > 0 
-  ? `R$ ${item.price.toFixed(2).replace(".", ",")}` 
-  : "Preço por quantidade";
-firstMsg += `🔶 ${item.name} - ${priceDisplay}\n`;
-```
-
-### Correção 6 — Ampliar `MAX_ITERATIONS` de 6 para 8
-Produtos com preço zero causam iterações extras de raciocínio. Aumentar o limite evita o "não consegui gerar resposta":
-```typescript
-const MAX_ITERATIONS = 8;  // antes: 6
+ANTES de qualquer busca de produto:
+- Verifique se a mensagem do cliente contém um valor monetário (ex: "20 reais", "R$30", "cinquenta reais")
+- Se sim, MEMORIZE esse valor como preco_informado para usar em confirmar_pedido
+- Nunca perca esse valor durante o fluxo
 ```
 
 ---
 
 ## Resumo das Mudanças
 
-| Arquivo | Mudança | Onde |
-|---------|---------|------|
-| `whatsapp-webhook/index.ts` | Upgrade modelo: Flash → Pro | linha 1647 |
-| `whatsapp-webhook/index.ts` | MAX_ITERATIONS: 6 → 8 | linha 1627 |
-| `whatsapp-webhook/index.ts` | `listarCardapio`: exibir "Preço por quantidade" quando price=0 | linhas 513, 528 |
-| `whatsapp-webhook/index.ts` | Interface `ConfirmarPedidoArgs`: adicionar `preco_informado?` por item | linha ~816 |
-| `whatsapp-webhook/index.ts` | `confirmarPedido`: usar `preco_informado` quando price=0 | linha ~951 |
-| `whatsapp-webhook/index.ts` | Prompt: REGRA #7 para produtos com preço zero | `getDefaultSystemPrompt()` |
-| `whatsapp-webhook/index.ts` | Prompt: instrução específica para pedidos de porção/carne | `getDefaultSystemPrompt()` |
+| Arquivo | Seção | Mudança |
+|---------|-------|---------|
+| `whatsapp-webhook/index.ts` | `buscarProduto()` função | Retorno especial com instrução direta ao LLM quando `price=0` |
+| `whatsapp-webhook/index.ts` | `getDefaultSystemPrompt()` início | Adicionar seção "LEIS ABSOLUTAS" no topo, antes da personalidade |
+| `whatsapp-webhook/index.ts` | `confirmarPedido()` | Extração de valor monetário via regex do nome do item como fallback |
+| `whatsapp-webhook/index.ts` | `getDefaultSystemPrompt()` | Instrução de memorizar valor monetário antes de buscar produto |
 
-Nenhuma migration de banco de dados necessária. As mudanças são todas no webhook.
