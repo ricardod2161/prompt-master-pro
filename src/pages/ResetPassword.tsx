@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Loader2, Lock, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
+import { translateAuthError } from "@/lib/translate-auth-error";
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -55,7 +56,7 @@ export default function ResetPassword() {
       toast.success("Senha atualizada com sucesso!");
       setTimeout(() => navigate("/login"), 3000);
     } catch (err: any) {
-      toast.error(err.message || "Erro ao atualizar senha");
+      toast.error(translateAuthError(err.message) || "Erro ao atualizar senha");
     } finally {
       setLoading(false);
     }

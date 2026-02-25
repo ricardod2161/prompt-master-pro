@@ -10,18 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from "sonner";
 import { Utensils, Loader2, Eye, EyeOff } from "lucide-react";
 
-const translateError = (message: string): string => {
-  const translations: Record<string, string> = {
-    "Password is known to be weak and easy to guess. Please choose a different one.": 
-      "Esta senha é muito fraca e comum. Por favor, escolha uma senha mais segura.",
-    "Invalid login credentials": "Email ou senha incorretos.",
-    "Email not confirmed": "Email não confirmado. Verifique sua caixa de entrada.",
-    "User already registered": "Este email já está cadastrado.",
-    "Signup requires a valid password": "A senha é obrigatória.",
-    "Unable to validate email address: invalid format": "Formato de email inválido.",
-  };
-  return translations[message] || message;
-};
+import { translateAuthError as translateError } from "@/lib/translate-auth-error";
 
 export default function Login() {
   const navigate = useNavigate();

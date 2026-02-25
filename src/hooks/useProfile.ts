@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
+import { translateAuthError } from "@/lib/translate-auth-error";
 
 export interface Profile {
   id: string;
@@ -65,7 +66,7 @@ export function useProfile() {
       toast({ title: "Senha atualizada", description: "Sua senha foi alterada com sucesso." });
     },
     onError: (error) => {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      toast({ title: "Erro", description: translateAuthError(error.message), variant: "destructive" });
     },
   });
 
