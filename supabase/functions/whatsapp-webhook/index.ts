@@ -1330,7 +1330,7 @@ async function transcribeAudio(audioBase64: string, mimetype: string): Promise<s
               content: [
                 {
                   type: "text",
-                  text: "Transcreva este áudio de voz em português brasileiro. Retorne APENAS o texto transcrito, sem explicações ou formatação."
+                  text: "Transcreva este áudio de voz em português brasileiro.\nContexto: É um cliente fazendo pedido em restaurante via WhatsApp.\nPreste atenção especial a: nomes de produtos, quantidades (ex: 20 reais, 30 reais, 50 reais, porções de carne, porções de frango), formas de pagamento (pix, dinheiro, cartão) e endereços.\nNúmeros como '20', '30', '50' são SEMPRE quantidades de produtos ou valores monetários de pedido — NUNCA troco.\nRetorne APENAS o texto transcrito, sem explicações ou formatação."
                 },
                 {
                   type: "image_url",
@@ -1950,10 +1950,22 @@ serve(async (req) => {
         if (transcription) {
           messageText = `[Áudio transcrito]: ${transcription}`;
         } else {
+          // Log falha de transcrição para diagnóstico
+          console.log(`[AUDIO-TRANSCRIPTION-FAIL] unit_id=${settings.unit_id} | phone=${phone} | mimetype=${media.mimetype} | size=${media.base64.length}`);
+
+          // Deduplicação: verificar se já pedimos para escrever nos últimos 30 segundos
+          // Buscar a última mensagem do assistente sobre áudio não transcrito
+          const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
+          
+          // Precisamos do conversation_id — será obtido após criar/buscar conversa
+          // Guardamos a flag para verificar após encontrar a conversa
           messageText = "[O cliente enviou um áudio que não pôde ser transcrito]";
+          (globalThis as any).__audioTranscriptionFailed = true;
+          (globalThis as any).__audioFailTimestamp = thirtySecondsAgo;
         }
       } else {
         messageText = "[O cliente enviou um áudio]";
+        console.log(`[AUDIO-TRANSCRIPTION-FAIL] unit_id=${settings.unit_id} | phone=${phone} | reason=download_failed`);
       }
     }
 
@@ -2071,6 +2083,41 @@ serve(async (req) => {
           conversation_id: conversation.id,
           role: "assistant",
           content: settings.welcome_message,
+        });
+      }
+    }
+
+    // Deduplicação de áudio não transcrito: se já respondemos sobre áudio nos últimos 30s, não repetir
+    if ((globalThis as any).__audioTranscriptionFailed) {
+      delete (globalThis as any).__audioTranscriptionFailed;
+      const thirtySecondsAgo = (globalThis as any).__audioFailTimestamp as string;
+      delete (globalThis as any).__audioFailTimestamp;
+
+      const { data: recentAudioResponse } = await supabase
+        .from("whatsapp_messages")
+        .select("id")
+        .eq("conversation_id", conversation.id)
+        .eq("role", "assistant")
+        .ilike("content", "%áudio%não%")
+        .gte("created_at", thirtySecondsAgo)
+        .limit(1);
+
+      if (recentAudioResponse && recentAudioResponse.length > 0) {
+        console.log(`[AUDIO-DEDUP] Skipping duplicate audio-fail response | conversation_id=${conversation.id} | phone=${phone}`);
+        // Salvar mensagem do usuário no histórico mas NÃO responder
+        await supabase.from("whatsapp_messages").insert({
+          conversation_id: conversation.id,
+          role: "user",
+          content: messageText,
+          message_id: messageKey,
+          media_type: mediaType,
+          media_url: mediaUrl,
+          media_duration: mediaDuration,
+          media_caption: mediaCaption,
+          transcription: transcription,
+        });
+        return new Response(JSON.stringify({ status: "audio_deduplicated" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
     }
@@ -2666,11 +2713,16 @@ Cliente: "sim"
 - Você TEM capacidade de responder em áudio/voz. O sistema converte suas respostas em áudio automaticamente.
 - Se o cliente pedir áudio, responda normalmente com texto curto e conversacional - o sistema enviará como áudio.
 - NUNCA diga que "não consegue enviar áudio", "sou assistente de texto" ou "não consigo enviar mensagens de voz".
-- Se receber "[Áudio transcrito]: texto", trate o texto como uma mensagem normal
+- Se receber "[Áudio transcrito]: texto", trate SEMPRE como um PEDIDO do cliente:
+  → Números como "20", "30", "50" em áudio = QUANTIDADE de produtos ou VALOR do pedido (ex: "20 reais de porções de carne" = pedido de R$20 em porções)
+  → NUNCA interprete números em áudio como troco — troco só é informado DEPOIS que você perguntou explicitamente
+  → Exemplos: "quero 2 X-bacon" → 2 unidades; "me manda 3 sucos" → 3 sucos; "20 reais de porções de frango" → pedido de R$20 em porções; "50 de carne" → R$50 em carne
+  → Anote o pedido normalmente e avance para perguntar o endereço/pagamento
 - Se receber "[O cliente enviou um áudio que não pôde ser transcrito]":
-  → Responda: "Recebi seu áudio! 🎤 Infelizmente não consegui entender. Poderia repetir por texto?"
+  → Se for o PRIMEIRO áudio não transcrito recente: "Recebi seu áudio! 🎤 Não consegui transcrever. Poderia escrever seu pedido?"
+  → Se o histórico já tiver esse pedido de texto: NÃO repita. Aguarde silenciosamente o cliente digitar.
+  → NUNCA envie a mesma mensagem de "não entendi áudio" mais de uma vez seguida
 - NUNCA diga que "não consegue processar áudio"
-- SEMPRE seja gentil e peça para repetir quando não entender
 
 🖼️ MENSAGENS COM IMAGEM:
 - Quando receber uma imagem, você verá a análise entre colchetes
