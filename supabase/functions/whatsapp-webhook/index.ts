@@ -2166,6 +2166,102 @@ serve(async (req) => {
     // Build messages array for AI with professional system prompt
     const basePrompt = settings.system_prompt || getDefaultSystemPrompt();
 
+    // === CONTEXTO DE HORÁRIO ===
+    let timeContextBlock = "";
+    try {
+      const { data: unitSettings } = await supabase
+        .from("unit_settings")
+        .select("opening_hours, timezone")
+        .eq("unit_id", settings.unit_id)
+        .maybeSingle();
+
+      const timezone = unitSettings?.timezone || "America/Sao_Paulo";
+      const openingHours = unitSettings?.opening_hours || {
+        monday: { open: "08:00", close: "22:00", closed: false },
+        tuesday: { open: "08:00", close: "22:00", closed: false },
+        wednesday: { open: "08:00", close: "22:00", closed: false },
+        thursday: { open: "08:00", close: "22:00", closed: false },
+        friday: { open: "08:00", close: "23:00", closed: false },
+        saturday: { open: "10:00", close: "23:00", closed: false },
+        sunday: { open: "10:00", close: "20:00", closed: false },
+      };
+
+      const now = new Date(new Date().toLocaleString("en-US", { timeZone: timezone }));
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      const currentTimeStr = `${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}`;
+
+      const dayMap = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const dayNamesPt: Record<string, string> = {
+        sunday: "Domingo", monday: "Segunda-feira", tuesday: "Terça-feira",
+        wednesday: "Quarta-feira", thursday: "Quinta-feira", friday: "Sexta-feira", saturday: "Sábado"
+      };
+      const currentDayKey = dayMap[now.getDay()];
+      const currentDayPt = dayNamesPt[currentDayKey];
+
+      // Saudação correta
+      let saudacao = "Boa noite";
+      if (currentHour >= 6 && currentHour < 12) saudacao = "Bom dia";
+      else if (currentHour >= 12 && currentHour < 18) saudacao = "Boa tarde";
+
+      // Status aberto/fechado
+      const todayHours = (openingHours as any)[currentDayKey];
+      let statusText = "FECHADO";
+      let statusDetail = "";
+      if (todayHours && !todayHours.closed) {
+        const [openH, openM] = todayHours.open.split(":").map(Number);
+        const [closeH, closeM] = todayHours.close.split(":").map(Number);
+        const openMinutes = openH * 60 + openM;
+        const closeMinutes = closeH * 60 + closeM;
+        const nowMinutes = currentHour * 60 + currentMinute;
+        if (nowMinutes >= openMinutes && nowMinutes < closeMinutes) {
+          statusText = "ABERTO";
+          statusDetail = `(fecha às ${todayHours.close})`;
+          // Aviso de fechamento próximo (30 min)
+          if (closeMinutes - nowMinutes <= 30) {
+            statusDetail += " ⚠️ FECHANDO EM BREVE";
+          }
+        } else {
+          statusDetail = `(abre às ${todayHours.open})`;
+        }
+      } else {
+        statusDetail = "(fechado hoje)";
+      }
+
+      // Montar tabela de horários
+      const shortDayNames: Record<string, string> = {
+        monday: "Segunda", tuesday: "Terça", wednesday: "Quarta",
+        thursday: "Quinta", friday: "Sexta", saturday: "Sábado", sunday: "Domingo"
+      };
+      const horariosLines = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        .map(day => {
+          const h = (openingHours as any)[day];
+          if (!h || h.closed) return `  ${shortDayNames[day]}: Fechado`;
+          return `  ${shortDayNames[day]}: ${h.open} - ${h.close}`;
+        }).join("\n");
+
+      timeContextBlock = `
+
+CONTEXTO DE HORÁRIO (dados em tempo real - use estas informações):
+- Agora são ${currentTimeStr} de ${currentDayPt}
+- Saudação correta para este horário: "${saudacao}"
+- Status atual: ${statusText} ${statusDetail}
+- Horários de funcionamento:
+${horariosLines}
+
+REGRAS DE HORÁRIO (aplique SEMPRE):
+- Use SEMPRE a saudação correta para o horário atual ("${saudacao}")
+- Se o cliente disser "bom dia" mas for tarde/noite, responda com a saudação correta: "${saudacao}!"
+- Se perguntarem se está aberto, informe: estamos ${statusText} ${statusDetail} e liste os horários
+- Se estiver FECHADO, informe os horários e pergunte: "Quer deixar seu pedido anotado para quando abrirmos?"
+- Se estiver ABERTO mas perto de fechar (menos de 30 min), avise gentilmente
+- Se o cliente quiser fazer pedido com o restaurante fechado, aceite normalmente após informar
+`;
+      console.log(`[TIME] ${currentTimeStr} ${currentDayPt} - ${statusText} ${statusDetail} - Saudação: ${saudacao}`);
+    } catch (err) {
+      console.error("[TIME] Error building time context:", err);
+    }
+
     // Always inject audio capability instructions (works for both custom and default prompts)
     const audioInstructions = `
 
@@ -2239,7 +2335,7 @@ CERTO (itens do pedido):
 🥤 2x Refrigerante - R$ 10,00"
 `;
 
-    const systemPrompt = basePrompt + formattingRules + audioInstructions;
+    const systemPrompt = basePrompt + timeContextBlock + formattingRules + audioInstructions;
 
     const filteredMessages = (recentMessages || [])
       .reverse()
