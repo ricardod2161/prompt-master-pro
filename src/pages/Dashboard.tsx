@@ -164,14 +164,28 @@ function CashRegisterCard({
 
 export default function Dashboard() {
 
-  useEffect(() => {
-    console.log("USE EFFECT DISPAROU");
-    
-    if (!localStorage.getItem("ff_completed_registration")) {
-      trackPixelEvent("CompleteRegistration", { source: "dashboard_first_access" });
-      localStorage.setItem("ff_completed_registration", "1");
+useEffect(() => {
+  const interval = setInterval(() => {
+    const fbq = typeof window !== "undefined" ? (window as any).fbq : null;
+
+    // Só dispara quando o fbq existir de verdade
+    if (fbq) {
+      if (!localStorage.getItem("ff_completed_registration")) {
+        console.log("DISPARANDO CompleteRegistration");
+
+        fbq("track", "CompleteRegistration", {
+          source: "dashboard_first_access",
+        });
+
+        localStorage.setItem("ff_completed_registration", "1");
+      }
+
+      clearInterval(interval);
     }
-  }, []);
+  }, 500);
+
+  return () => clearInterval(interval);
+}, []);
 
   const {
     stats,
