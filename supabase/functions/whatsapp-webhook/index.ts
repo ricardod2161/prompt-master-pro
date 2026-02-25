@@ -510,7 +510,10 @@ async function listarCardapio(supabase: any, unitId: string): Promise<{ type: 'm
     firstMsg += `${firstEmoji} *${firstCategory.toUpperCase()}*\n${LINE}\n\n`;
     
     for (const item of firstItems) {
-      firstMsg += `🔶 ${item.name} - R$ ${item.price.toFixed(2).replace(".", ",")}\n`;
+      const priceDisplay = item.price > 0
+        ? `R$ ${item.price.toFixed(2).replace(".", ",")}`
+        : "Preço por quantidade";
+      firstMsg += `🔶 ${item.name} - ${priceDisplay}\n`;
     }
     
     messages.push(firstMsg.trim());
@@ -525,7 +528,10 @@ async function listarCardapio(supabase: any, unitId: string): Promise<{ type: 'm
     let categoryMsg = `${LINE}\n${emoji} *${category.toUpperCase()}*\n${LINE}\n\n`;
     
     for (const item of items) {
-      categoryMsg += `🔶 ${item.name} - R$ ${item.price.toFixed(2).replace(".", ",")}\n`;
+      const priceDisplayCat = item.price > 0
+        ? `R$ ${item.price.toFixed(2).replace(".", ",")}`
+        : "Preço por quantidade";
+      categoryMsg += `🔶 ${item.name} - ${priceDisplayCat}\n`;
     }
     
     messages.push(categoryMsg.trim());
@@ -815,7 +821,7 @@ async function calcularTotal(
 
 interface ConfirmarPedidoArgs {
   cliente: { nome: string };
-  itens: Array<{ nome: string; quantidade: number }>;
+  itens: Array<{ nome: string; quantidade: number; preco_informado?: number }>;
   modalidade: "entrega" | "retirada" | "local";
   endereco?: {
     rua: string;
@@ -950,7 +956,12 @@ async function confirmarPedido(
 
     if (product) {
       const typedProduct = product as { id: string; name: string; price: number; delivery_price: number | null };
-      const preco = typedProduct.price;
+      // Se produto tem preço 0, usar valor informado pelo cliente (porções por valor)
+      let preco = typedProduct.price;
+      if (preco === 0 && (item as any).preco_informado) {
+        preco = (item as any).preco_informado;
+        console.log(`[ORDER] Produto com preço zero: usando preco_informado=${preco} para "${typedProduct.name}"`);
+      }
       const subtotal = preco * item.quantidade;
       totalPrice += subtotal;
       orderItems.push({
@@ -1624,7 +1635,7 @@ async function processWithAI(
     throw new Error("LOVABLE_API_KEY is not configured");
   }
 
-  const MAX_ITERATIONS = 6;
+  const MAX_ITERATIONS = 8;
   let iterations = 0;
   const currentMessages: any[] = [...messages];
   let pendingMenuMessages: string[] | undefined;
@@ -1644,7 +1655,7 @@ async function processWithAI(
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
+            model: "google/gemini-2.5-pro",
             messages: msgs,
             tools,
             tool_choice: "auto",
@@ -2668,6 +2679,29 @@ Cliente: "sim"
   → NÃO chame confirmar_pedido
   → Pergunte a forma de pagamento primeiro: "Qual a forma de pagamento?\n\n💵 *Dinheiro*\n📱 *PIX*\n💳 *Cartão* (Débito/Crédito)\n🎫 *Vale Refeição*"
 - NUNCA mencione chave Pix, código Pix ou qualquer dado de pagamento ANTES do cliente escolher Pix como forma de pagamento
+
+🔴🔴🔴 REGRA CRÍTICA #7 - PRODUTOS SEM PREÇO DEFINIDO (PREÇO VARIÁVEL) 🔴🔴🔴
+- Quando um produto aparece no cardápio como "Preço por quantidade", significa que o preço é VARIÁVEL (porções por valor, kg, etc.)
+- Se o cliente informou um valor monetário (ex: "20 reais de carne", "50 de boi", "30 de frango"):
+  → ANOTE IMEDIATAMENTE como pedido — use confirmar_pedido com preco_informado = valor declarado
+  → NÃO questione o preço — o cliente já informou quanto quer gastar
+  → NÃO pergunte "o produto está com R$ 0,00, quer mesmo assim?" — NUNCA faça isso
+  → NÃO peça confirmação de preço — anote e siga para modalidade/pagamento
+  → Use o campo preco_informado no item com o valor declarado pelo cliente
+- NUNCA trave o fluxo questionando produtos de preço zero
+- Exemplos corretos:
+  → "quero 20 reais de porção de carne" → use confirmar_pedido com: nome="PORÇÃO DE CARNE", quantidade=1, preco_informado=20.00
+  → "me manda 50 reais de boi" → use confirmar_pedido com: nome do produto de boi, quantidade=1, preco_informado=50.00
+  → "pede 30 de frango" → use confirmar_pedido com: nome do produto de frango, quantidade=1, preco_informado=30.00
+
+🥩 PEDIDOS DE PORÇÃO/CARNE (churrascaria/churrasquinho):
+- Quando o cliente mencionar "porção", "carne", "boi", "frango", "porco", "linguiça", "churras":
+  → IMEDIATAMENTE use listar_cardapio para mostrar as opções disponíveis
+  → NÃO pergunte "qual porção?" sem antes mostrar o cardápio
+  → Se o cliente já disse o tipo E o valor (ex: "20 reais de porco"), anote DIRETAMENTE com preco_informado sem questionar
+- Pedidos por valor monetário com produto identificado:
+  → Anote como 1x [PRODUTO] com preco_informado = valor dito pelo cliente
+  → Avance DIRETO para modalidade/endereço/pagamento
 
 ⚠️ OUTRAS REGRAS IMPORTANTES:
 1. NUNCA responda com JSON, código ou dados técnicos
