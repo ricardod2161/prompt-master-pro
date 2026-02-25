@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
-import { trackPixelEvent, trackPixelCustomEvent } from "@/hooks/usePixelTracking";
+import { trackPixelEvent } from "@/hooks/usePixelTracking";
 
 // Mock data for demos
 const MOCK_PRODUCTS = [
