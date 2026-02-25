@@ -847,6 +847,10 @@ async function confirmarPedido(
     return "❌ Preciso do nome do cliente para finalizar o pedido.";
   }
 
+  if (!pagamento?.forma) {
+    return "❌ A forma de pagamento não foi informada. Por favor, pergunte ao cliente como ele deseja pagar antes de confirmar o pedido:\n\n💵 *Dinheiro*\n💳 *Cartão* (Crédito/Débito)\n📱 *PIX*\n🎫 *Vale Refeição*";
+  }
+
   if (modalidade === "entrega" && (!endereco?.rua || !endereco?.numero || !endereco?.bairro)) {
     return "❌ Para entrega, preciso do endereço completo (rua, número e bairro).";
   }
@@ -2594,9 +2598,19 @@ Cliente: "sim"
 4. Respostas que NÃO são confirmação: números sozinhos (50, 100), "ok", "tá"
 5. Se o cliente responder só um número, é VALOR DE TROCO, não confirmação!
 
+🔴🔴🔴 REGRA CRÍTICA #6 - FORMA DE PAGAMENTO É OBRIGATÓRIA 🔴🔴🔴
+⚠️ NUNCA chame confirmar_pedido sem ter a forma de pagamento confirmada pelo cliente!
+- Você DEVE perguntar a forma de pagamento SEMPRE, sem exceção
+- NUNCA assuma que o pagamento é Pix ou qualquer outro método
+- NUNCA pule a ETAPA 7 (forma de pagamento)
+- Se o cliente confirmou o pedido mas você ainda não perguntou a forma de pagamento:
+  → NÃO chame confirmar_pedido
+  → Pergunte a forma de pagamento primeiro: "Qual a forma de pagamento?\n\n💵 *Dinheiro*\n📱 *PIX*\n💳 *Cartão* (Débito/Crédito)\n🎫 *Vale Refeição*"
+- NUNCA mencione chave Pix, código Pix ou qualquer dado de pagamento ANTES do cliente escolher Pix como forma de pagamento
+
 ⚠️ OUTRAS REGRAS IMPORTANTES:
 1. NUNCA responda com JSON, código ou dados técnicos
-2. NUNCA pule etapas do fluxo - siga a ordem
+2. NUNCA pule etapas do fluxo - siga a ordem: modalidade → endereço → pagamento → resumo → confirmar
 3. NUNCA finalize pedido sem TODOS os dados E confirmação explícita
 4. SEMPRE confirme os itens antes de pedir endereço/modalidade
 5. SEMPRE pergunte sobre troco se pagamento for dinheiro
@@ -2691,13 +2705,17 @@ Colete o endereço completo:
 • Qual o *bairro*?
 • Tem algum *ponto de referência*?"
 
-ETAPA 7 - FORMA DE PAGAMENTO:
-Pergunte como vai pagar:
+ETAPA 7 - FORMA DE PAGAMENTO (OBRIGATÓRIA - NUNCA PULE):
+⚠️ ESTA ETAPA É OBRIGATÓRIA. Sempre pergunte antes de mostrar o resumo.
 "Agora, qual a forma de pagamento?
-💵 Dinheiro
-💳 Cartão de Crédito/Débito
-📱 Pix
-🎫 Vale Refeição"
+
+💵 *Dinheiro*
+💳 *Cartão* (Crédito/Débito)
+📱 *PIX*
+🎫 *Vale Refeição*"
+
+🚫 NUNCA mencione chave Pix, dados bancários ou qualquer informação de pagamento ANTES do cliente escolher PIX.
+🚫 NUNCA pule esta etapa mesmo que o cliente confirme o pedido antes de informar o pagamento.
 
 ETAPA 8 - TROCO (apenas se DINHEIRO):
 "O total é R$ [TOTAL]. Vai precisar de troco? Se sim, para quanto vai pagar?"
