@@ -735,7 +735,15 @@ async function buscarProduto(supabase: any, unitId: string, nome: string): Promi
     for (const product of directMatches) {
       const price = product.price;
       result += `🍽️ *${product.name}*\n`;
-      result += `💰 R$ ${price.toFixed(2).replace(".", ",")}\n`;
+      if (price === 0) {
+        result += `💰 Preço por quantidade (cliente informa o valor)\n`;
+        result += `\n⚠️ PRODUTO DE PREÇO VARIÁVEL — INSTRUÇÃO OBRIGATÓRIA AO ASSISTENTE:\n`;
+        result += `Se o cliente JÁ informou um valor monetário (ex: "20 reais", "50 de boi", "30 de frango"), você DEVE chamar IMEDIATAMENTE confirmar_pedido com preco_informado = [valor declarado pelo cliente].\n`;
+        result += `NÃO questione o preço. NÃO diga "não consigo registrar". NÃO peça confirmação de preço. APENAS confirme o pedido com preco_informado.\n`;
+        result += `Se o cliente NÃO disse um valor, pergunte: "Qual o valor que deseja gastar nessa porção?"\n`;
+      } else {
+        result += `💰 R$ ${price.toFixed(2).replace(".", ",")}\n`;
+      }
       if (product.description) {
         result += `📝 ${product.description}\n`;
       }
@@ -751,7 +759,13 @@ async function buscarProduto(supabase: any, unitId: string, nome: string): Promi
     const price = bestMatch.price;
     let result = `Encontrei um produto similar:\n\n`;
     result += `🍽️ *${bestMatch.name}*\n`;
-    result += `💰 R$ ${price.toFixed(2).replace(".", ",")}\n`;
+    if (price === 0) {
+      result += `💰 Preço por quantidade (cliente informa o valor)\n`;
+      result += `\n⚠️ PRODUTO DE PREÇO VARIÁVEL — INSTRUÇÃO OBRIGATÓRIA AO ASSISTENTE:\n`;
+      result += `Se o cliente JÁ informou um valor monetário, chame IMEDIATAMENTE confirmar_pedido com preco_informado = valor declarado. NÃO questione.\n`;
+    } else {
+      result += `💰 R$ ${price.toFixed(2).replace(".", ",")}\n`;
+    }
     if (bestMatch.description) {
       result += `📝 ${bestMatch.description}\n`;
     }
@@ -961,6 +975,14 @@ async function confirmarPedido(
       if (preco === 0 && (item as any).preco_informado) {
         preco = (item as any).preco_informado;
         console.log(`[ORDER] Produto com preço zero: usando preco_informado=${preco} para "${typedProduct.name}"`);
+      }
+      // Camada 3: fallback — extrair valor monetário do nome do item se preco ainda for 0
+      if (preco === 0 && item.nome) {
+        const valorMatch = item.nome.match(/(\d+(?:[.,]\d{1,2})?)\s*(?:reais?|r\$)?/i);
+        if (valorMatch) {
+          preco = parseFloat(valorMatch[1].replace(",", "."));
+          console.log(`[ORDER] Extraindo preço do nome do item: "${item.nome}" → R$ ${preco}`);
+        }
       }
       const subtotal = preco * item.quantidade;
       totalPrice += subtotal;
@@ -2226,7 +2248,34 @@ serve(async (req) => {
       .limit(shouldResetConversation ? 2 : 20);
 
     // Build messages array for AI with professional system prompt
-    const basePrompt = settings.system_prompt || getDefaultSystemPrompt();
+    // LEIS ABSOLUTAS são sempre injetadas no início, mesmo quando o usuário tem prompt customizado
+    const absoluteLaws = `🚨🚨🚨 LEIS ABSOLUTAS — NUNCA VIOLÁVEIS (PRIORIDADE MÁXIMA) 🚨🚨🚨
+
+LEI #1 — PRODUTO COM PREÇO VARIÁVEL ("Preço por quantidade"):
+ANTES de qualquer busca de produto, verifique se a mensagem contém valor monetário (ex: "20 reais", "R$30", "50 de boi"). Se sim, MEMORIZE como preco_informado.
+
+Quando buscar_produto retornar "PRODUTO DE PREÇO VARIÁVEL":
+→ Se o cliente JÁ disse um valor: CHAME IMEDIATAMENTE confirmar_pedido com preco_informado = [valor dito]
+→ Se o cliente NÃO disse um valor: pergunte SOMENTE "Qual o valor que deseja gastar?"
+
+EXEMPLOS OBRIGATÓRIOS:
+  "quero 20 reais de porção de carne" → confirmar_pedido(nome="PORÇÃO DE CARNE", quantidade=1, preco_informado=20.00) ✅
+  "me manda 50 de boi" → confirmar_pedido com preco_informado=50.00 ✅
+  "pede 30 de frango" → confirmar_pedido com preco_informado=30.00 ✅
+
+ABSOLUTAMENTE PROIBIDO:
+  ❌ "não consigo registrar pois o preço é R$ 0,00"
+  ❌ "o produto está com R$ 0,00 no sistema, por isso não posso registrar"
+  ❌ Questionar o preço quando o cliente já informou o valor
+
+🚨🚨🚨 FIM DAS LEIS ABSOLUTAS 🚨🚨🚨
+
+`;
+    const rawPrompt = settings.system_prompt || getDefaultSystemPrompt();
+    // Se for o prompt padrão já tem as leis. Se for customizado, injetar no início
+    const basePrompt = settings.system_prompt 
+      ? absoluteLaws + settings.system_prompt 
+      : rawPrompt;
 
     // === CONTEXTO DE HORÁRIO ===
     let timeContextBlock = "";
@@ -2604,7 +2653,38 @@ CERTO (itens do pedido):
 });
 
 function getDefaultSystemPrompt(): string {
-  return `Você é o ATENDENTE VIRTUAL de um restaurante. Seu objetivo é conduzir o cliente desde a saudação até a confirmação final do pedido de forma profissional, cordial e eficiente.
+  return `🚨🚨🚨 LEIS ABSOLUTAS — NUNCA VIOLÁVEIS 🚨🚨🚨
+
+LEI #1 — PRODUTO COM PREÇO VARIÁVEL (price=0 / "Preço por quantidade"):
+ANTES de qualquer busca de produto, verifique se a mensagem do cliente contém um valor monetário (ex: "20 reais", "R$30", "cinquenta reais", "50 de boi"). Se sim, MEMORIZE esse valor como preco_informado.
+
+Quando buscar_produto retornar "PRODUTO DE PREÇO VARIÁVEL":
+→ Se o cliente JÁ disse um valor: CHAME IMEDIATAMENTE confirmar_pedido com preco_informado = [valor dito]
+→ Se o cliente NÃO disse um valor: pergunte SOMENTE "Qual o valor que deseja gastar nessa porção?"
+
+EXEMPLOS OBRIGATÓRIOS:
+  "quero 20 reais de porção de carne" → confirmar_pedido(nome="PORÇÃO DE CARNE", quantidade=1, preco_informado=20.00) ✅
+  "me manda 50 de boi" → confirmar_pedido(nome=produto_boi, quantidade=1, preco_informado=50.00) ✅
+  "pede 30 de frango" → confirmar_pedido(nome=produto_frango, quantidade=1, preco_informado=30.00) ✅
+
+ABSOLUTAMENTE PROIBIDO:
+  ❌ "não consigo registrar pois o preço é R$ 0,00"
+  ❌ "o produto está com R$ 0,00 no sistema"
+  ❌ "por isso não posso registrar um pedido de R$ 20,00"
+  ❌ Questionar o preço quando o cliente já informou o valor
+  ❌ Pedir confirmação de preço quando o cliente já disse quanto quer gastar
+
+LEI #2 — EXTRAÇÃO DE VALOR MONETÁRIO:
+Quando o cliente menciona qualquer valor + produto:
+  - "20 reais de carne" → preco_informado = 20.00
+  - "30 de frango" → preco_informado = 30.00
+  - "cinquenta de boi" → preco_informado = 50.00
+  - "uma porção de 25 reais" → preco_informado = 25.00
+Extraia o valor ANTES de buscar o produto e use-o diretamente no confirmar_pedido.
+
+🚨🚨🚨 FIM DAS LEIS ABSOLUTAS 🚨🚨🚨
+
+Você é o ATENDENTE VIRTUAL de um restaurante. Seu objetivo é conduzir o cliente desde a saudação até a confirmação final do pedido de forma profissional, cordial e eficiente.
 
 🎯 PERSONALIDADE:
 - Profissional, cordial e prestativo
