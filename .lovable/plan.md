@@ -1,63 +1,48 @@
 
-# Correcao: Pedido #85 - Guarana Antartica 1L registrado como Guarana Kuat Lata
 
-## Diagnostico
+# Correcao: Erros de Senha em Ingles + Email de Recuperacao em Ingles
 
-Investiguei o pedido #85 da cliente "Mariiah". No historico de mensagens do WhatsApp, a IA corretamente identificou "GUARANA ANTARTICA 1L" (R$10) durante toda a conversa. Porem, no banco de dados, o pedido foi registrado com "GUARANA KUAT LATA" (R$6).
+## Problemas Identificados
 
-### Causa raiz: `directMatch` sem normalizacao de acentos
+Analisei os prints e os logs de autenticacao. Ha dois problemas distintos:
 
-Na funcao `confirmarPedido` (linha 905-908), o primeiro passo de matching usa comparacao direta sem remover acentos:
-
+### Problema 1: Mensagem de erro em ingles na pagina /reset-password
+No print, o toast mostra **"New password should be different from the old password."** em ingles. Isso acontece porque a pagina `ResetPassword.tsx` (linha 58) exibe `err.message` diretamente do backend sem traduzir:
 ```text
-directMatch = allProducts.find(p => 
-  p.name.toLowerCase().includes(item.nome.toLowerCase()) ||
-  item.nome.toLowerCase().includes(p.name.toLowerCase())
-);
+toast.error(err.message || "Erro ao atualizar senha");
 ```
 
-Quando a IA passa "Guarana Antartica 1L" com acentos (ex: "Guarana Antartica"), a comparacao falha porque o banco tem "GUARANA ANTARTICA 1L" sem acentos. O directMatch retorna null.
+O sistema de traducao (`translateError`) existe na pagina de Login mas NAO esta sendo usado na pagina de reset de senha.
 
-Em seguida, o sistema cai para `getProductKeyword` que retorna "guarana" -- mas existem 3 produtos com esse keyword (GUARANA ANTARTICA 1L, GUARANA ANTARTICA-ZERO, GUARANA KUAT LATA), entao o single-match tambem falha.
+### Problema 2: Email de recuperacao em ingles
+O email mostra "Reset your password", "Reset Password", "If you didn't request this..." tudo em ingles. Isso acontece porque o projeto nao tem templates de email personalizados -- usa os templates padrao do sistema que sao em ingles.
 
-Finalmente, `findBestProductMatch` e chamado, mas pode selecionar o produto errado se a IA omitir "1L" do nome, fazendo o score de matching ser ambiguo entre os 3 guaranas.
+**Para traduzir o email**, seria necessario configurar um dominio de email customizado e criar templates personalizados. O projeto atualmente NAO tem dominio de email configurado.
 
-### Problema secundario: Score ambiguo entre guaranas
-
-Se a IA passa "Guarana Antartica" (sem "1L"), o Strategy 4 (fuzzy scoring) pode empatar entre produtos similares. Sem o qualificador "1L", o algoritmo pode pegar o primeiro com score >= threshold.
+### Problema 3: ProfileTab tambem sem traducao de erros
+A pagina de configuracoes (`ProfileTab.tsx`) tambem chama `updatePassword` que pode retornar erros em ingles sem traducao.
 
 ---
 
 ## Correcoes
 
-### 1. Normalizar acentos no `directMatch` da funcao `confirmarPedido`
+### 1. Adicionar traducao de erros na pagina ResetPassword
 
-Usar `normalizeProductName` (que ja remove acentos, hifens, stopwords) no `directMatch` em vez de apenas `.toLowerCase()`. Isso garante que "Guarana Antartica 1L" com acentos encontre "GUARANA ANTARTICA 1L" sem acentos.
+Adicionar a funcao `translateError` com todas as mensagens de erro de senha possiveis traduzidas para portugues:
 
-**Antes:**
-```text
-const directMatch = allProducts?.find((p: any) => 
-  p.name.toLowerCase().includes(item.nome.toLowerCase()) ||
-  item.nome.toLowerCase().includes(p.name.toLowerCase())
-);
-```
+| Mensagem original | Traducao |
+|---|---|
+| "New password should be different from the old password." | "A nova senha deve ser diferente da senha atual." |
+| "Password is known to be weak and easy to guess. Please choose a different one." | "Esta senha e muito fraca e comum. Escolha uma senha mais segura." |
+| "Auth session missing!" | "Sessao expirada. Solicite um novo link de recuperacao." |
 
-**Depois:**
-```text
-const directMatch = allProducts?.find((p: any) => {
-  const normalizedP = normalizeProductName(p.name);
-  const normalizedItem = normalizeProductName(item.nome);
-  return normalizedP.includes(normalizedItem) || normalizedItem.includes(normalizedP);
-});
-```
+### 2. Adicionar traducao de erros no ProfileTab/useProfile
 
-### 2. Priorizar match mais especifico no `directMatch`
+Adicionar a mesma funcao de traducao no hook `useProfile.ts` para que erros de troca de senha nas configuracoes tambem aparecam em portugues.
 
-Quando ha multiplos candidatos possiveis (ex: 3 guaranas), priorizar o que tem o melhor ajuste (menor diferenca de comprimento ou maior sobreposicao). Em vez de `.find()` (que retorna o primeiro), usar `.reduce()` para encontrar o melhor match.
+### 3. Email de recuperacao em portugues
 
-### 3. Reforcar instrucao no system prompt para incluir tamanho/variacao
-
-Adicionar instrucao explicita para a IA sempre incluir o tamanho/volume do produto no nome quando chamar `confirmar_pedido` (ex: "GUARANA ANTARTICA 1L" e nao "Guarana Antartica").
+Como nao ha dominio de email configurado, nao e possivel customizar os templates de email neste momento. Vou informar o usuario sobre como configurar isso.
 
 ---
 
@@ -65,10 +50,11 @@ Adicionar instrucao explicita para a IA sempre incluir o tamanho/volume do produ
 
 | Arquivo | Acao |
 |---------|------|
-| `supabase/functions/whatsapp-webhook/index.ts` | Normalizar directMatch com `normalizeProductName`, priorizar match mais especifico, reforcar instrucao no prompt |
+| `src/pages/ResetPassword.tsx` | Adicionar `translateError` e aplicar em todos os erros |
+| `src/hooks/useProfile.ts` | Adicionar traducao nos erros de senha |
+| `src/pages/Login.tsx` | Adicionar traducao "same_password" ao mapa existente |
 
-## Resultado esperado
+## Sobre o email em ingles
 
-- "Guarana Antartica 1L" (com ou sem acentos) sempre encontra "GUARANA ANTARTICA 1L" (R$10)
-- Nunca mais confunde com "GUARANA KUAT LATA" (R$6) ou "GUARANA ANTARTICA-ZERO" (R$6)
-- Matching mais robusto para todos os produtos com nomes similares
+Para traduzir o email de recuperacao de senha para portugues, e necessario configurar um dominio de email customizado. Apos a implementacao das correcoes de traducao de erros, posso guiar voce na configuracao do dominio de email para personalizar os templates.
+
