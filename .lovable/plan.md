@@ -1,88 +1,133 @@
-## Diagnóstico Completo
 
-### Problema 1: Transcrição falhando e gerando respostas duplicadas
+## Diagnóstico dos 4 Prints
 
-O cliente enviou 3 áudios seguidos em sequência rápida. Como a transcrição falha (todos os 3 modelos retornam vazio para `ogg/opus`), o bot responde com a mesma mensagem para cada áudio individualmente — gerando 3 mensagens idênticas: "Recebi seu áudio! Para garantir que seu pedido seja registrado corretamente, poderia me escrever o que deseja? 🙏"
+### Problema Central: "PORÇÃO DE CARNE" com preço R$ 0,00 no cardápio
 
-### Problema 2: Prompt de transcrição inadequado
+Os prints mostram claramente que o produto "PORÇÃO DE CARNE" está cadastrado com preço R$ 0,00. Isso cria uma cascata de comportamentos ruins:
 
-O prompt da transcrição diz apenas "Transcreva este áudio de voz em português brasileiro. Retorne APENAS o texto transcrito". Não há contexto de que é um bot de restaurante recebendo pedidos com números como quantidades ("quero 20 reais de  porções de carne"). O modelo pode confundir "20 reais" com troco.
+1. **Print 3**: Bot mostra o cardápio com "PORÇÃO DE CARNE - R$ 0,00" → correto até aqui
+2. **Cliente**: "Quero uma porção de carne de 20 reais" → bot entra em colapso lógico porque o produto existe mas tem preço R$ 0,00
+3. **Print 4**: Bot questiona se o cliente quer pedir mesmo com R$ 0,00 em vez de simplesmente anotar
+4. **Print 5**: Bot falha na geração de resposta ("Desculpe, não consegui gerar uma resposta")
+5. **Print 5-6**: Depois de "marque aí no pedido" e "mesmo assim adicione quero 20 reais", bot adiciona mas fica confuso sobre o valor
+6. **Bot pergunta "me confirme o valor exato"** — completamente desnecessário, o valor "20 reais" foi dito pelo cliente
 
-### Problema 3: Instrução do bot ao receber áudio não transcrito é vaga
+### Causa Raiz 1: Produto com preço R$ 0,00 — bot trava
+No `confirmarPedido()` linha ~951-967, quando o preço é 0 o `subtotal = 0 * quantidade = 0`, mas a lógica continua. O PROBLEMA está no `processWithAI()` que usa `gemini-2.5-flash` — ao receber o resultado de `buscar_produto` com R$ 0,00, o LLM entra em loop de raciocínio questionando o preço em vez de simplesmente anotar.
 
-A instrução diz "Poderia me escrever o que deseja?" — o bot usa isso como template literal e repete para cada áudio, sem perceber que o cliente enviou múltiplos áudios e já pediu o texto uma vez.
+### Causa Raiz 2: "20 reais" como valor ≠ quantidade
+O cliente diz "quero uma porção de carne de 20 reais". O bot precisa entender:
+- Produto: "PORÇÃO DE CARNE"  
+- Valor informado pelo cliente: R$ 20,00
+- Ação: Anotar como 1x PORÇÃO DE CARNE com observação "R$ 20,00 em carne"
+
+Mas a instrução atual diz:
+```
+→ Números como "20", "30", "50" em áudio = QUANTIDADE de produtos ou VALOR do pedido
+```
+Isso é ambíguo — "valor do pedido" não explica O QUE FAZER quando o preço no cardápio é R$ 0,00.
+
+### Causa Raiz 3: Bot não mostra as opções de carne
+O print 4 mostra que depois que o cliente pediu "uma porção de carne", o bot listou "CARNES DISPONIVEL" (porco, frango, boi, linguiça). Isso significa que o bot não identificou a categoria de carnes ANTES de pedir confirmação. A instrução para listar o cardápio está correta, mas o bot não está usando `listar_cardapio` proativamente quando o cliente menciona carnes.
+
+### Causa Raiz 4: Modelo `gemini-2.5-flash` gerando "não consegui gerar resposta"
+O print 5 às 12:37 mostra "Desculpe, não consegui gerar uma resposta." — isso ocorre quando o `MAX_ITERATIONS = 6` é atingido ou quando o modelo falha. O Gemini 2.5 Flash pode travar em raciocínio circular com produtos de preço zero.
 
 ---
 
-## Plano de Correção
+## Solução Completa
 
-### Correção 1 — Melhorar prompt de transcrição (linha 1333)
-
-Adicionar contexto de restaurante ao prompt para que o modelo entenda que números são quantidades de itens:
-
-```
-"Transcreva este áudio de voz em português brasileiro. 
-Contexto: É um cliente fazendo pedido em restaurante via WhatsApp. 
-Preste atenção especial a: nomes de produtos, quantidades (ex: 20 reais, 30 reais, 50 rais, porções), 
-formas de pagamento e endereços.
-Retorne APENAS o texto transcrito, sem explicações ou formatação."
-```
-
-### Correção 2 — Deduplicação de respostas para múltiplos áudios (linhas 1944-1958)
-
-Adicionar verificação de rate limiting por conversa: se já enviamos uma mensagem de "não entendi o áudio" nos últimos 30 segundos, NÃO enviar novamente — apenas salvar a mensagem no histórico sem responder.
+### Correção 1 — Upgrade do modelo principal para Gemini 2.5 Pro (linha 1647)
+Trocar `gemini-2.5-flash` por `google/gemini-2.5-pro` para o processamento principal de conversas. O Pro é muito mais inteligente para entender contexto ambíguo como "20 reais de porção de carne" com produto de preço zero.
 
 ```typescript
-// Antes de processar áudio, verificar se já respondemos recentemente
-if (mediaType === "audio" && transcription === "") {
-  const recentResponse = await checkRecentAudioResponse(conversationId, 30);
-  if (recentResponse) {
-    // Já pedimos para escrever recentemente, não repetir
-    return new Response(JSON.stringify({ status: "audio_deduplicated" }), ...);
-  }
+model: "google/gemini-2.5-pro",  // antes: "google/gemini-2.5-flash"
+```
+
+### Correção 2 — Lógica para produtos com preço R$ 0,00 (linha ~951)
+No `confirmarPedido()` e `listarCardapio()`, quando o produto tem preço 0.00, o bot deve:
+- Exibir no cardápio como "PORÇÃO DE CARNE - Consulte o preço"
+- Na confirmação do pedido, usar o valor informado pelo cliente como `unit_price`
+
+No `confirmarPedido()`, adicionar lógica especial:
+```typescript
+// Se produto tem preço 0 mas cliente informou valor, usar valor do cliente
+let preco = typedProduct.price;
+if (preco === 0) {
+  // Tentar extrair preço da observação ou das notas do item
+  preco = item.preco_informado || 0;
 }
 ```
 
-### Correção 3 — Melhorar instrução ao bot para áudio com falha (linha 2670-2671)
-
-Atualizar a instrução para que o bot seja mais inteligente ao detectar múltiplos áudios:
-
-```
-- Se receber "[O cliente enviou um áudio que não pôde ser transcrito]":
-  → Se for o PRIMEIRO áudio não transcrito na conversa atual: 
-     "Recebi seu áudio! 🎤 Não consegui transcrever. Poderia me escrever seu pedido?"
-  → Se já pediu antes e o cliente enviou MAIS áudios: 
-     NÃO repita a mensagem. Aguarde o cliente digitar.
-  → NUNCA envie a mesma mensagem mais de uma vez seguida
-```
-
-### Correção 4 — Instrução para entender pedidos numéricos em áudio (linha 2669)
-
-Adicionar instrução explícita para que quando o áudio for transcrito com números, o bot entenda o contexto:
-
-```
-- Se receber "[Áudio transcrito]: quero 20 reais de porções de carne" → é um PEDIDO
-- Números em áudio são SEMPRE quantidades de produtos, NUNCA troco
-- Troco só é informado DEPOIS que o bot perguntou explicitamente sobre troco
-- Exemplos de pedidos em áudio: "quero 2 X-bacon", "me manda 3 sucos", e  "20 reais de porções de frango"
-```
-
-### Correção 5 — Adicionar log de diagnóstico para falhas de transcrição
-
-Adicionar log `[AUDIO-TRANSCRIPTION-FAIL]` para monitorar quantas vezes a transcrição falha por unidade:
-
+Modificar a interface `ConfirmarPedidoArgs` para suportar `preco_informado` opcional por item:
 ```typescript
-console.log(`[AUDIO-TRANSCRIPTION-FAIL] unit_id=${settings.unit_id} | phone=${phone} | mimetype=${media.mimetype} | size=${media.base64.length}`);
+itens: Array<{ nome: string; quantidade: number; preco_informado?: number }>;
+```
+
+### Correção 3 — Instrução no prompt para produtos com preço zero (getDefaultSystemPrompt)
+Adicionar regra específica para quando o produto tem preço R$ 0,00:
+
+```
+🔴🔴🔴 REGRA CRÍTICA #7 - PRODUTOS SEM PREÇO DEFINIDO 🔴🔴🔴
+- Quando um produto tem preço R$ 0,00 no cardápio, significa que o preço é VARIÁVEL (ex: porções por kg, por valor)
+- Se o cliente informou um valor (ex: "20 reais de carne", "50 de boi"):
+  → ANOTE o item com o valor informado pelo cliente como preço
+  → NÃO questione o preço — o cliente já informou quanto quer gastar
+  → NÃO peça confirmação de preço — anote e siga para o pagamento
+  → Envie no campo preco_informado do item o valor declarado pelo cliente
+- NUNCA trave o fluxo questionando "o produto está com R$ 0,00 — você quer pedir mesmo assim?"
+- Exemplos:
+  → "quero 20 reais de porção de carne" → 1x PORÇÃO DE CARNE, preco_informado: 20.00
+  → "me manda 50 reais de boi assado" → 1x CARNE DE BOI ASSADO, preco_informado: 50.00
+  → "pede 30 de frango" → 1x FRANGO ASSADO, preco_informado: 30.00
+```
+
+### Correção 4 — Listar cardápio de carnes proativamente
+Quando o cliente mencionar "carne", "porção", "boi", "frango", "linguiça" etc, o bot deve usar `buscar_produto` ou `listar_cardapio` imediatamente para mostrar as opções disponíveis naquela categoria, SEM primeiro confirmar se quer pedir.
+
+Adicionar ao prompt:
+```
+🥩 PEDIDOS DE PORÇÃO/CARNE (específico para churrascaria):
+- Quando o cliente mencionar "porção", "carne", "boi", "frango", "porco", "linguiça":
+  → IMEDIATAMENTE use listar_cardapio para mostrar as opções disponíveis
+  → Não pergunte "qual porção?" sem antes mostrar o cardápio
+  → Se o cliente já disse o tipo (ex: "porco e boi"), anote diretamente sem questionar
+- Pedidos por valor (ex: "20 reais de porção"):
+  → Anote como 1x [PRODUTO] com preco_informado = valor dito pelo cliente
+  → NÃO questione — siga para endereço/pagamento
+```
+
+### Correção 5 — Exibir produtos com preço zero de forma amigável no cardápio
+No `listarCardapio()` linha 513, alterar:
+```typescript
+// ANTES:
+firstMsg += `🔶 ${item.name} - R$ ${item.price.toFixed(2).replace(".", ",")}\n`;
+
+// DEPOIS:
+const priceDisplay = item.price > 0 
+  ? `R$ ${item.price.toFixed(2).replace(".", ",")}` 
+  : "Preço por quantidade";
+firstMsg += `🔶 ${item.name} - ${priceDisplay}\n`;
+```
+
+### Correção 6 — Ampliar `MAX_ITERATIONS` de 6 para 8
+Produtos com preço zero causam iterações extras de raciocínio. Aumentar o limite evita o "não consegui gerar resposta":
+```typescript
+const MAX_ITERATIONS = 8;  // antes: 6
 ```
 
 ---
 
-## Arquivos Modificados
+## Resumo das Mudanças
 
+| Arquivo | Mudança | Onde |
+|---------|---------|------|
+| `whatsapp-webhook/index.ts` | Upgrade modelo: Flash → Pro | linha 1647 |
+| `whatsapp-webhook/index.ts` | MAX_ITERATIONS: 6 → 8 | linha 1627 |
+| `whatsapp-webhook/index.ts` | `listarCardapio`: exibir "Preço por quantidade" quando price=0 | linhas 513, 528 |
+| `whatsapp-webhook/index.ts` | Interface `ConfirmarPedidoArgs`: adicionar `preco_informado?` por item | linha ~816 |
+| `whatsapp-webhook/index.ts` | `confirmarPedido`: usar `preco_informado` quando price=0 | linha ~951 |
+| `whatsapp-webhook/index.ts` | Prompt: REGRA #7 para produtos com preço zero | `getDefaultSystemPrompt()` |
+| `whatsapp-webhook/index.ts` | Prompt: instrução específica para pedidos de porção/carne | `getDefaultSystemPrompt()` |
 
-| Arquivo                                        | Seção                                   | Mudança                                                                 |
-| ---------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------- |
-| `supabase/functions/whatsapp-webhook/index.ts` | `transcribeAudio()` linha ~1333         | Prompt com contexto de restaurante e quantidades                        |
-| `supabase/functions/whatsapp-webhook/index.ts` | processamento de áudio linha ~1944-1958 | Deduplicação: verificar se já pediu texto recentemente para não repetir |
-| `supabase/functions/whatsapp-webhook/index.ts` | instrução do bot linha ~2669-2673       | Regras mais claras: não repetir pedido de texto, números = quantidades  |
-| `supabase/functions/whatsapp-webhook/index.ts` | log diagnóstico                         | Adicionar `[AUDIO-TRANSCRIPTION-FAIL]`                                  |
+Nenhuma migration de banco de dados necessária. As mudanças são todas no webhook.
