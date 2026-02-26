@@ -1,98 +1,186 @@
 
+## Análise Completa do Sistema
 
-## Diagnóstico Definitivo
+### Estado Atual
+O sistema funciona mas tem 3 gaps críticos que precisam ser corrigidos:
 
-O print mostra exatamente o problema: o bot diz **"Por isso, eu não consigo registrar um pedido dela no valor de R$ 20,00"** — isso acontece porque o LLM, ao usar `buscar_produto` e receber `price: 0`, entra em modo de "não posso fazer isso" que **sobrepõe o prompt**. A REGRA #7 está no final do prompt (linha 2683) e o modelo a ignora em favor do seu raciocínio interno de "preço inválido".
+1. **Banco de dados**: `products` table não tem coluna `is_variable_price`, `min_price` nem `max_price` — o sistema atual infere preço variável apenas pelo price=0, o que é frágil e ambíguo (produto pode ter price=0 por erro de cadastro, não por design)
 
-### 3 Causas Raiz Identificadas
+2. **Webhook — valores por extenso**: A transcrição de áudio detecta "20 reais", "30 de boi" mas NÃO detecta "vinte reais", "trinta de frango", "cinquenta de boi" (números por extenso em português). O regex atual `(\d+(?:[.,]\d{1,2})?)\s*(?:reais?|r\$)?` só captura dígitos arábicos, nunca palavras.
 
-**Causa 1 — Posição da REGRA #7 no prompt**
-A regra está no final do prompt, onde o modelo tem menos atenção. LLMs tendem a priorizar instruções do início. Quando o `buscar_produto` retorna `price: 0`, o raciocínio natural do modelo ("preço inválido = não posso confirmar") domina.
+3. **Prompt — qualidade e alucinações**: O prompt tem instruções repetidas em 3 lugares distintos (LEIS ABSOLUTAS injetadas inline linha 2252, mais `absoluteLaws` const, mais `getDefaultSystemPrompt()`), criando inconsistência e confusão para o modelo. Há também conflito lógico entre REGRA #2 ("números em texto = troco") e LEIS ABSOLUTAS ("números em áudio = pedido"), que o modelo pode misturar.
 
-**Causa 2 — O retorno de `buscar_produto` não instrui o modelo**
-Quando `buscar_produto` retorna um produto com `price: 0`, a resposta da ferramenta não contém nenhuma instrução. O modelo interpreta o resultado livremente e conclui: "não posso criar pedido de R$20 para produto de R$0". Precisamos que o próprio retorno da ferramenta diga o que fazer.
-
-**Causa 3 — Falta de extração de valor monetário do texto**
-Quando o cliente diz "quero uma porção de carne de 20 reais", o `preco_informado` deveria ser enviado automaticamente pelo LLM (20.00), mas o LLM, ao travar no raciocínio, não envia esse campo.
+4. **UI**: Menu.tsx não tem campo para `is_variable_price`, `min_price`, `max_price` — o administrador não consegue marcar explicitamente que um produto tem preço variável.
 
 ---
 
-## Plano de Correção em 3 Camadas
+## Plano de Execução — 4 Camadas
 
-### Camada 1 — Modificar retorno de `buscarProduto` quando price=0
-Quando o produto tem `price=0`, o retorno da ferramenta deve incluir uma instrução DIRETA ao LLM:
+### CAMADA 1 — Migração de Banco de Dados
+Adicionar 3 colunas na tabela `products`:
+
+```sql
+ALTER TABLE public.products 
+  ADD COLUMN IF NOT EXISTS is_variable_price boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS min_price numeric DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS max_price numeric DEFAULT NULL;
+
+-- Retrocompatibilidade: marcar como variável os produtos que já têm price=0
+UPDATE public.products SET is_variable_price = true WHERE price = 0;
+```
+
+### CAMADA 2 — UI do Cardápio (src/pages/Menu.tsx)
+Adicionar ao formulário de produto:
+
+1. **Toggle switch "Preço Variável"** — quando ativado, desabilita o campo Preço Base e exibe os campos de Preço Mínimo e Máximo aceito
+2. **Campo Preço Mínimo** (opcional) — ex: R$ 10,00
+3. **Campo Preço Máximo** (opcional) — ex: R$ 200,00
+4. **Badge visual** nos cards de produto: mostrar `🔄 Preço Variável` quando `is_variable_price=true`
+
+Interfaces a atualizar:
+- `Product` interface: adicionar `is_variable_price?: boolean`, `min_price?: number | null`, `max_price?: number | null`
+- `productForm` state: adicionar `is_variable_price: false`, `min_price: ""`, `max_price: ""`
+- `openProductDialog`: carregar/resetar os novos campos
+- `handleSaveProduct`: incluir os novos campos no `baseData`
+- `handleDuplicateProduct`: copiar os novos campos
+
+### CAMADA 3 — Engine de Valores por Extenso (whatsapp-webhook/index.ts)
+
+Criar função `parseMonetaryValueFromText(text: string): number | null` que converte:
+- "vinte" → 20, "trinta" → 30, "quarenta" → 40, "cinquenta" → 50, "sessenta" → 60, "setenta" → 70, "oitenta" → 80, "noventa" → 90, "cem" → 100
+- "vinte e cinco" → 25, "trinta e dois" → 32
+- "vinte reais de carne" → 20.00
+- "cinquenta de boi" → 50.00
+- "trinta e cinco reais de frango" → 35.00
+- Continua suportando: "20 reais", "R$30", "50 de boi"
 
 ```typescript
-// ANTES (linha ~395):
-return `✅ Produto encontrado: ${product.name}\n💰 Preço: R$ ${product.price.toFixed(2)}`;
-
-// DEPOIS — se price === 0:
-if (price === 0) {
-  return `✅ Produto encontrado: ${product.name}
-⚠️ PRODUTO DE PREÇO VARIÁVEL (o cliente define o valor)
-🔴 INSTRUÇÃO OBRIGATÓRIA: Se o cliente já informou um valor monetário (ex: "20 reais", "30 reais"), você DEVE chamar IMEDIATAMENTE confirmar_pedido com preco_informado = valor declarado pelo cliente. NÃO questione o preço. NÃO diga "não consigo registrar". APENAS confirme o pedido.`;
-}
-```
-
-### Camada 2 — Mover REGRA #7 para o INÍCIO do system prompt
-Antes de qualquer instrução de personalidade, colocar uma seção de "LEIS ABSOLUTAS":
-
-```
-🚨🚨🚨 LEIS ABSOLUTAS — NUNCA VIOLÁVEIS 🚨🚨🚨
-
-LEI #1 — PRODUTO COM PREÇO VARIÁVEL (price=0):
-Se o resultado de buscar_produto mostrar "PRODUTO DE PREÇO VARIÁVEL":
-→ Se o cliente JÁ disse um valor (ex: "20 reais", "30 de carne", "50 de boi"):
-  CHAME IMEDIATAMENTE confirmar_pedido com preco_informado = [valor dito pelo cliente]
-  NÃO diga "não consigo registrar"
-  NÃO diga "o produto está com R$ 0,00"
-  NÃO peça confirmação de preço
-→ Se o cliente NÃO disse um valor: pergunte "Qual o valor que deseja gastar?"
-
-EXEMPLOS OBRIGATÓRIOS (memorize):
-  Cliente: "quero 20 reais de porção de carne"
-  → confirmar_pedido(nome="PORÇÃO DE CARNE", quantidade=1, preco_informado=20.00) ✅
+function parseMonetaryValueFromText(text: string): number | null {
+  const normalized = text.toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   
-  Cliente: "me manda 50 de boi"  
-  → confirmar_pedido(nome=produto_boi, quantidade=1, preco_informado=50.00) ✅
+  // Map de unidades e dezenas em português
+  const units: Record<string, number> = {
+    "um": 1, "dois": 2, "tres": 3, "quatro": 4, "cinco": 5,
+    "seis": 6, "sete": 7, "oito": 8, "nove": 9, "dez": 10,
+    "onze": 11, "doze": 12, "treze": 13, "quatorze": 14, "quinze": 15,
+    "dezesseis": 16, "dezessete": 17, "dezoito": 18, "dezenove": 19,
+    "vinte": 20, "trinta": 30, "quarenta": 40, "cinquenta": 50,
+    "sessenta": 60, "setenta": 70, "oitenta": 80, "noventa": 90,
+    "cem": 100, "cento": 100, "duzentos": 200, "trezentos": 300,
+  };
   
-  PROIBIDO: "não consigo registrar pois o preço é R$ 0,00" ❌
-  PROIBIDO: "o item aparece com R$ 0,00 no sistema" ❌
-```
-
-### Camada 3 — Extração automática de valor no confirmarPedido (backend)
-No backend (`confirmarPedido`), adicionar uma extração de regex para capturar valores monetários do nome do item quando `preco_informado` não for enviado:
-
-```typescript
-// Se preco é 0 e não veio preco_informado, tentar extrair do nome do item
-// Ex: item.nome = "PORÇÃO DE CARNE 20 REAIS" → extrair 20
-if (preco === 0 && !(item as any).preco_informado) {
-  const valorMatch = item.nome.match(/(\d+(?:[.,]\d{1,2})?)\s*(?:reais?|r\$)?/i);
-  if (valorMatch) {
-    preco = parseFloat(valorMatch[1].replace(",", "."));
-    console.log(`[ORDER] Extraindo preço do nome do item: "${item.nome}" → R$ ${preco}`);
+  // Tentar match direto com número (dígitos arábicos)
+  const digitMatch = normalized.match(/r?\$?\s*(\d+(?:[.,]\d{1,2})?)\s*(?:reais?|de\b)?/);
+  if (digitMatch) return parseFloat(digitMatch[1].replace(",", "."));
+  
+  // Tentar composição de extenso: "vinte e cinco reais"
+  const extensoPattern = /((?:cento?|duzentos?|trezentos?|quatrocentos?|quinhentos?|seiscentos?|setecentos?|oitocentos?|novecentos?|noventa|oitenta|setenta|sessenta|cinquenta|quarenta|trinta|vinte|dezenove|dezoito|dezessete|dezesseis|quinze|quatorze|treze|doze|onze|dez|nove|oito|sete|seis|cinco|quatro|tres|dois|um)(?:\s+e\s+(?:um|dois|tres|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|quatorze|quinze|dezesseis|dezessete|dezoito|dezenove|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa))?)\s*(?:reais?|de\b|r\$)?/i;
+  
+  const extensoMatch = normalized.match(extensoPattern);
+  if (extensoMatch) {
+    const words = extensoMatch[1].split(/\s+e\s+/);
+    let value = 0;
+    for (const word of words) {
+      const trimmed = word.trim();
+      if (units[trimmed] !== undefined) value += units[trimmed];
+    }
+    if (value > 0) return value;
   }
+  
+  return null;
 }
 ```
 
-### Camada 4 — Instrução de sistema proativa para detecção de valor no contexto
-Adicionar no início do system prompt a instrução de que, antes de usar `buscar_produto`, o bot deve extrair o valor monetário da mensagem do cliente e guardá-lo:
+Esta função será usada em:
+1. **`confirmarPedido()`** — substituir o regex simples atual pela nova função
+2. **Prompt de transcrição** — instrução para o Gemini Pro transcrever valores por extenso tal como falados
+3. **`getDefaultSystemPrompt()`** — expandir LEI #2 para incluir exemplos com números por extenso
 
+### CAMADA 4 — Refatoração do Prompt (Prompt Engineering)
+
+**Problema identificado**: O sistema atual injeta as "LEIS ABSOLUTAS" em 3 lugares:
+- `absoluteLaws` const (linha 2252) — injetada no início para prompts customizados
+- `getDefaultSystemPrompt()` (linha 2656) — começa com LEIS ABSOLUTAS duplicadas
+- Resultado: o modelo vê a mesma instrução 2-3x, o que é ruído e pode causar "instruction following collapse"
+
+**Correção do prompt engineering**:
+
+1. **Remover duplicação**: `getDefaultSystemPrompt()` NÃO deve repetir as LEIS ABSOLUTAS porque elas já são injetadas via `absoluteLaws` const para ambos os casos (custom e default prompts)
+
+2. **Reorganizar estrutura do prompt** para hierarquia clara:
 ```
-ANTES de qualquer busca de produto:
-- Verifique se a mensagem do cliente contém um valor monetário (ex: "20 reais", "R$30", "cinquenta reais")
-- Se sim, MEMORIZE esse valor como preco_informado para usar em confirmar_pedido
-- Nunca perca esse valor durante o fluxo
+[SYSTEM_PROMPT ESTRUTURA]
+━━━ SEÇÃO 0: LEIS ABSOLUTAS (sempre injetada - não duplicar)
+━━━ SEÇÃO 1: IDENTIDADE E PERSONALIDADE  
+━━━ SEÇÃO 2: REGRAS DE FORMATAÇÃO (formatação WhatsApp)
+━━━ SEÇÃO 3: REGRAS CRÍTICAS DE FLUXO (troco, confirmação, etc.)
+━━━ SEÇÃO 4: FLUXO OBRIGATÓRIO (etapas 1-10)
+━━━ SEÇÃO 5: CAPACIDADES ESPECIAIS (áudio, imagem)
+━━━ [INJETADO AUTOMATICAMENTE] SEÇÃO 6: CONTEXTO DE HORÁRIO
+━━━ [INJETADO AUTOMATICAMENTE] SEÇÃO 7: CAPACIDADE DE VOZ
+```
+
+3. **Expandir LEI #2** para incluir valores por extenso:
+```
+LEI #2 — EXTRAÇÃO DE VALOR MONETÁRIO (DÍGITOS E EXTENSO):
+  - "20 reais de carne" → preco_informado = 20.00
+  - "30 de frango" → preco_informado = 30.00  
+  - "vinte reais de carne" → preco_informado = 20.00
+  - "trinta de frango" → preco_informado = 30.00
+  - "cinquenta de boi" → preco_informado = 50.00
+  - "vinte e cinco reais" → preco_informado = 25.00
+  - "uma porção de cinquenta" → preco_informado = 50.00
+```
+
+4. **Adicionar instrução no `buscarProduto`**: quando produto tem `is_variable_price=true`, mostrar faixa de preço (min-max) se disponível
+
+5. **Corrigir bug de consistência**: A instrução atual na linha 2831 diz "Números como '20', '30', '50' em áudio = QUANTIDADE de produtos ou VALOR do pedido" — mas na REGRA CRÍTICA #2 diz "número após pergunta de troco = troco". Isso é correto mas o contexto pode confundir. Reformular para deixar absolutamente claro:
+   - Número em áudio ANTES de qualquer pergunta de troco = pedido/valor
+   - Número em texto DEPOIS que o bot perguntou troco = troco
+
+### CAMADA 5 — Webhook: `buscarProduto` + `confirmarPedido` (is_variable_price)
+Atualizar as queries no webhook para incluir os novos campos:
+
+```typescript
+// Em buscarProduto - query atualizada
+.select("name, description, price, delivery_price, is_variable_price, min_price, max_price, category:categories(name)")
+
+// Lógica de exibição quando is_variable_price=true:
+if (product.is_variable_price || price === 0) {
+  const range = (min_price && max_price) 
+    ? `Faixa: R$ ${min_price.toFixed(2)} a R$ ${max_price.toFixed(2)}`
+    : min_price ? `Mínimo: R$ ${min_price.toFixed(2)}`
+    : "Preço definido pelo cliente";
+  result += `💰 PREÇO VARIÁVEL — ${range}\n`;
+  // instrução ao LLM...
+}
+```
+
+```typescript
+// Em confirmarPedido - query atualizada
+.select("id, name, price, delivery_price, is_variable_price, min_price, max_price")
+
+// Lógica expandida com parseMonetaryValueFromText
+if (typedProduct.is_variable_price || preco === 0) {
+  const preco_informado = (item as any).preco_informado 
+    || parseMonetaryValueFromText(item.nome)
+    || parseMonetaryValueFromText(conversationContext || "");
+  // ...
+}
 ```
 
 ---
 
-## Resumo das Mudanças
+## Arquivos Modificados
 
-| Arquivo | Seção | Mudança |
-|---------|-------|---------|
-| `whatsapp-webhook/index.ts` | `buscarProduto()` função | Retorno especial com instrução direta ao LLM quando `price=0` |
-| `whatsapp-webhook/index.ts` | `getDefaultSystemPrompt()` início | Adicionar seção "LEIS ABSOLUTAS" no topo, antes da personalidade |
-| `whatsapp-webhook/index.ts` | `confirmarPedido()` | Extração de valor monetário via regex do nome do item como fallback |
-| `whatsapp-webhook/index.ts` | `getDefaultSystemPrompt()` | Instrução de memorizar valor monetário antes de buscar produto |
+| Arquivo | Mudança |
+|---------|---------|
+| `supabase/migrations/` | Nova migration: adicionar `is_variable_price`, `min_price`, `max_price` à tabela `products` |
+| `src/pages/Menu.tsx` | Toggle "Preço Variável", campos min/max price, badge visual no card |
+| `supabase/functions/whatsapp-webhook/index.ts` | Função `parseMonetaryValueFromText`, queries com novos campos, refatoração do prompt, LEI #2 expandida com extenso |
 
+## Sem Alterações Necessárias
+- `src/integrations/supabase/types.ts` — atualizado automaticamente
+- Nenhuma nova Edge Function necessária
+- Nenhuma mudança de RLS — colunas seguem as políticas existentes de `products`
