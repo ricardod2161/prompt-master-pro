@@ -31,6 +31,9 @@ interface Product {
   available: boolean;
   preparation_time: number;
   image_url?: string | null;
+  is_variable_price?: boolean;
+  min_price?: number | null;
+  max_price?: number | null;
   categories?: Category;
   variations?: ProductVariation[];
 }
