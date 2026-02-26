@@ -997,6 +997,9 @@ export type Database = {
           description: string | null
           id: string
           image_url: string | null
+          is_variable_price: boolean
+          max_price: number | null
+          min_price: number | null
           name: string
           preparation_time: number | null
           price: number
@@ -1011,6 +1014,9 @@ export type Database = {
           description?: string | null
           id?: string
           image_url?: string | null
+          is_variable_price?: boolean
+          max_price?: number | null
+          min_price?: number | null
           name: string
           preparation_time?: number | null
           price?: number
@@ -1025,6 +1031,9 @@ export type Database = {
           description?: string | null
           id?: string
           image_url?: string | null
+          is_variable_price?: boolean
+          max_price?: number | null
+          min_price?: number | null
           name?: string
           preparation_time?: number | null
           price?: number

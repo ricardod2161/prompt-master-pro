@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -89,6 +90,9 @@ interface Product {
   preparation_time: number;
   image_url?: string | null;
   created_at?: string;
+  is_variable_price?: boolean;
+  min_price?: number | null;
+  max_price?: number | null;
   categories?: Category;
   variations?: ProductVariation[];
 }
@@ -132,6 +136,9 @@ export default function Menu() {
     delivery_price: "",
     category_id: "",
     preparation_time: "15",
+    is_variable_price: false,
+    min_price: "",
+    max_price: "",
   });
   const [variationsForm, setVariationsForm] = useState<VariationFormItem[]>([]);
   const [savingProduct, setSavingProduct] = useState(false);
@@ -284,6 +291,9 @@ export default function Menu() {
         delivery_price: product.delivery_price ? String(product.delivery_price) : "",
         category_id: product.category_id || "",
         preparation_time: String(product.preparation_time),
+        is_variable_price: product.is_variable_price || false,
+        min_price: product.min_price ? String(product.min_price) : "",
+        max_price: product.max_price ? String(product.max_price) : "",
       });
       setImagePreview(product.image_url || null);
       setImageFile(null);
@@ -305,6 +315,9 @@ export default function Menu() {
         delivery_price: "",
         category_id: "",
         preparation_time: "15",
+        is_variable_price: false,
+        min_price: "",
+        max_price: "",
       });
       setImagePreview(null);
       setImageFile(null);
@@ -351,10 +364,13 @@ export default function Menu() {
         unit_id: selectedUnit.id,
         name: productForm.name,
         description: productForm.description || null,
-        price: productForm.price ? parseFloat(productForm.price) : 0,
+        price: productForm.is_variable_price ? 0 : (productForm.price ? parseFloat(productForm.price) : 0),
         delivery_price: productForm.delivery_price ? parseFloat(productForm.delivery_price) : null,
         category_id: productForm.category_id || null,
         preparation_time: parseInt(productForm.preparation_time) || 15,
+        is_variable_price: productForm.is_variable_price,
+        min_price: productForm.is_variable_price && productForm.min_price ? parseFloat(productForm.min_price) : null,
+        max_price: productForm.is_variable_price && productForm.max_price ? parseFloat(productForm.max_price) : null,
         ...(imageUrl !== undefined ? { image_url: imageUrl } : {}),
       };
 
@@ -459,6 +475,9 @@ export default function Menu() {
           preparation_time: product.preparation_time,
           image_url: product.image_url,
           available: product.available,
+          is_variable_price: product.is_variable_price || false,
+          min_price: product.min_price || null,
+          max_price: product.max_price || null,
         })
         .select("id")
         .single();
@@ -833,20 +852,83 @@ export default function Menu() {
                       placeholder="Ingredientes, observações..."
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Preço Base</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={productForm.price}
-                        onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
-                        placeholder="0,00"
-                      />
+
+                  {/* Variable Price Toggle */}
+                  <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm font-medium flex items-center gap-1.5">
+                        🔄 Preço Variável
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Cliente define o valor (porções, kg, etc.)
+                      </p>
                     </div>
+                    <Switch
+                      checked={productForm.is_variable_price}
+                      onCheckedChange={(checked) => setProductForm({ ...productForm, is_variable_price: checked, price: checked ? "" : productForm.price })}
+                    />
+                  </div>
+
+                  {/* Min/Max price fields when variable */}
+                  {productForm.is_variable_price && (
+                    <div className="grid grid-cols-2 gap-4 p-3 rounded-lg border border-primary/20 bg-primary/5">
+                      <div className="space-y-2">
+                        <Label className="text-xs">Valor Mínimo (opcional)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={productForm.min_price}
+                          onChange={(e) => setProductForm({ ...productForm, min_price: e.target.value })}
+                          placeholder="Ex: 10,00"
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Valor Máximo (opcional)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={productForm.max_price}
+                          onChange={(e) => setProductForm({ ...productForm, max_price: e.target.value })}
+                          placeholder="Ex: 200,00"
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Fixed price fields when NOT variable */}
+                  {!productForm.is_variable_price && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Preço Base</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={productForm.price}
+                          onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
+                          placeholder="0,00"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Preço Delivery</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={productForm.delivery_price}
+                          onChange={(e) => setProductForm({ ...productForm, delivery_price: e.target.value })}
+                          placeholder="0,00"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {productForm.is_variable_price && (
                     <div className="space-y-2">
-                      <Label>Preço Delivery</Label>
+                      <Label>Preço Delivery (fixo, opcional)</Label>
                       <Input
                         type="number"
                         step="0.01"
@@ -856,7 +938,7 @@ export default function Menu() {
                         placeholder="0,00"
                       />
                     </div>
-                  </div>
+                  )}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Categoria</Label>

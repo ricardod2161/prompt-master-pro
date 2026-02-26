@@ -543,18 +543,58 @@ async function listarCardapio(supabase: any, unitId: string): Promise<{ type: 'm
   return { type: 'multiple', messages };
 }
 
-// Normalize product name for flexible matching
-function normalizeProductName(nome: string): string {
-  return nome
+// ── CAMADA 3: Engine de Valores por Extenso em Português ─────────────────────
+/**
+ * Converts Portuguese monetary expressions (digits and written-out words) to a number.
+ * Examples: "vinte reais" → 20, "cinquenta de boi" → 50, "trinta e cinco" → 35, "20 reais" → 20
+ */
+function parseMonetaryValueFromText(text: string): number | null {
+  if (!text) return null;
+  const normalized = text
     .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // remove accents
-    .replace(/[-–—]/g, ' ') // replace hyphens with spaces for better matching
-    .replace(/\b(de|do|da|dos|das|com|e|o|a|os|as|um|uma|uns|umas)\b/g, '') // remove prepositions/articles
-    .replace(/s\b/g, '') // remove trailing 's' (plural) from words
-    .replace(/\s+/g, ' ')
-    .trim();
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  // ── Priority 1: Arabic digits ─────────────────────────────────────────────
+  // Match patterns like "20 reais", "R$30", "50 de boi", "R$ 25,90"
+  const digitMatch = normalized.match(/r?\$?\s*(\d+(?:[.,]\d{1,2})?)\s*(?:reais?|de\b|r\$)?/i);
+  if (digitMatch) {
+    const val = parseFloat(digitMatch[1].replace(",", "."));
+    if (val > 0) return val;
+  }
+
+  // ── Priority 2: Written-out Portuguese numbers ────────────────────────────
+  const numMap: Record<string, number> = {
+    "um": 1, "uma": 1, "dois": 2, "duas": 2, "tres": 3, "quatro": 4, "cinco": 5,
+    "seis": 6, "sete": 7, "oito": 8, "nove": 9, "dez": 10,
+    "onze": 11, "doze": 12, "treze": 13, "quatorze": 14, "catorze": 14, "quinze": 15,
+    "dezesseis": 16, "dezasseis": 16, "dezessete": 17, "dezoito": 18, "dezenove": 19, "dezanove": 19,
+    "vinte": 20, "trinta": 30, "quarenta": 40, "cinquenta": 50, "cincoenta": 50,
+    "sessenta": 60, "setenta": 70, "oitenta": 80, "noventa": 90,
+    "cem": 100, "cento": 100, "duzentos": 200, "duzentas": 200,
+    "trezentos": 300, "trezentas": 300, "quatrocentos": 400,
+    "quinhentos": 500, "seiscentos": 600, "setecentos": 700,
+    "oitocentos": 800, "novecentos": 900,
+  };
+
+  // Pattern: one or two number words optionally joined by "e"
+  // e.g. "vinte e cinco reais de carne" → ["vinte", "cinco"] → 25
+  const extensoRe = new RegExp(
+    `\\b(${Object.keys(numMap).join("|")})(\\s+e\\s+(${Object.keys(numMap).join("|")}))?\\b`, "i"
+  );
+  const extensoMatch = normalized.match(extensoRe);
+  if (extensoMatch) {
+    const part1Key = extensoMatch[1]?.trim();
+    const part2Key = extensoMatch[3]?.trim();
+    let value = (part1Key && numMap[part1Key]) ? numMap[part1Key] : 0;
+    if (part2Key && numMap[part2Key]) value += numMap[part2Key];
+    if (value > 0) return value;
+  }
+
+  return null;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Levenshtein distance for typo tolerance
 function levenshteinDistance(a: string, b: string): number {
@@ -710,6 +750,9 @@ async function buscarProduto(supabase: any, unitId: string, nome: string): Promi
       description,
       price,
       delivery_price,
+      is_variable_price,
+      min_price,
+      max_price,
       category:categories(name)
     `)
     .eq("unit_id", unitId)
@@ -724,8 +767,19 @@ async function buscarProduto(supabase: any, unitId: string, nome: string): Promi
     return `Não encontrei nenhum produto com "${nome}" no nosso cardápio.`;
   }
 
+  // Helper: format variable price info for AI
+  const formatVariablePrice = (p: any): string => {
+    const isVar = p.is_variable_price || p.price === 0;
+    if (!isVar) return `💰 R$ ${p.price.toFixed(2).replace(".", ",")}\n`;
+    const minP = p.min_price ? `R$ ${Number(p.min_price).toFixed(2).replace(".", ",")}` : null;
+    const maxP = p.max_price ? `R$ ${Number(p.max_price).toFixed(2).replace(".", ",")}` : null;
+    const range = minP && maxP ? `Faixa: ${minP} a ${maxP}` : minP ? `Mínimo: ${minP}` : "Preço definido pelo cliente";
+    return `💰 PREÇO VARIÁVEL — ${range}\n` +
+      `\n🔴 INSTRUÇÃO OBRIGATÓRIA: Se o cliente JÁ informou um valor (ex: "20 reais", "vinte de boi", "cinquenta de frango"), CHAME IMEDIATAMENTE confirmar_pedido com preco_informado = valor declarado. NÃO questione o preço. NÃO diga "não consigo registrar". Se o cliente NÃO disse um valor, pergunte: "Qual o valor que deseja gastar?"\n`;
+  };
+
   // Try direct ilike match first
-  const directMatches = (allProducts as Product[]).filter(p =>
+  const directMatches = (allProducts as any[]).filter(p =>
     p.name.toLowerCase().includes(nome.toLowerCase()) ||
     nome.toLowerCase().includes(p.name.toLowerCase())
   );
@@ -733,20 +787,9 @@ async function buscarProduto(supabase: any, unitId: string, nome: string): Promi
   if (directMatches.length > 0) {
     let result = `Encontrei ${directMatches.length} produto(s):\n\n`;
     for (const product of directMatches) {
-      const price = product.price;
       result += `🍽️ *${product.name}*\n`;
-      if (price === 0) {
-        result += `💰 Preço por quantidade (cliente informa o valor)\n`;
-        result += `\n⚠️ PRODUTO DE PREÇO VARIÁVEL — INSTRUÇÃO OBRIGATÓRIA AO ASSISTENTE:\n`;
-        result += `Se o cliente JÁ informou um valor monetário (ex: "20 reais", "50 de boi", "30 de frango"), você DEVE chamar IMEDIATAMENTE confirmar_pedido com preco_informado = [valor declarado pelo cliente].\n`;
-        result += `NÃO questione o preço. NÃO diga "não consigo registrar". NÃO peça confirmação de preço. APENAS confirme o pedido com preco_informado.\n`;
-        result += `Se o cliente NÃO disse um valor, pergunte: "Qual o valor que deseja gastar nessa porção?"\n`;
-      } else {
-        result += `💰 R$ ${price.toFixed(2).replace(".", ",")}\n`;
-      }
-      if (product.description) {
-        result += `📝 ${product.description}\n`;
-      }
+      result += formatVariablePrice(product);
+      if (product.description) result += `📝 ${product.description}\n`;
       result += "\n";
     }
     return result;
@@ -756,19 +799,10 @@ async function buscarProduto(supabase: any, unitId: string, nome: string): Promi
   const bestMatch = findBestProductMatch(allProducts as Product[], nome);
   
   if (bestMatch) {
-    const price = bestMatch.price;
     let result = `Encontrei um produto similar:\n\n`;
-    result += `🍽️ *${bestMatch.name}*\n`;
-    if (price === 0) {
-      result += `💰 Preço por quantidade (cliente informa o valor)\n`;
-      result += `\n⚠️ PRODUTO DE PREÇO VARIÁVEL — INSTRUÇÃO OBRIGATÓRIA AO ASSISTENTE:\n`;
-      result += `Se o cliente JÁ informou um valor monetário, chame IMEDIATAMENTE confirmar_pedido com preco_informado = valor declarado. NÃO questione.\n`;
-    } else {
-      result += `💰 R$ ${price.toFixed(2).replace(".", ",")}\n`;
-    }
-    if (bestMatch.description) {
-      result += `📝 ${bestMatch.description}\n`;
-    }
+    result += `🍽️ *${(bestMatch as any).name}*\n`;
+    result += formatVariablePrice(bestMatch as any);
+    if ((bestMatch as any).description) result += `📝 ${(bestMatch as any).description}\n`;
     return result;
   }
 
@@ -918,7 +952,7 @@ async function confirmarPedido(
   // Get all available products for flexible matching
   const { data: allProducts } = await supabase
     .from("products")
-    .select("id, name, price, delivery_price")
+    .select("id, name, price, delivery_price, is_variable_price, min_price, max_price")
     .eq("unit_id", unitId)
     .eq("available", true);
 
@@ -969,21 +1003,36 @@ async function confirmarPedido(
     }
 
     if (product) {
-      const typedProduct = product as { id: string; name: string; price: number; delivery_price: number | null };
-      // Se produto tem preço 0, usar valor informado pelo cliente (porções por valor)
+      const typedProduct = product as { id: string; name: string; price: number; delivery_price: number | null; is_variable_price: boolean; min_price: number | null; max_price: number | null };
+      // Se produto tem preço variável, usar valor informado pelo cliente
       let preco = typedProduct.price;
-      if (preco === 0 && (item as any).preco_informado) {
-        preco = (item as any).preco_informado;
-        console.log(`[ORDER] Produto com preço zero: usando preco_informado=${preco} para "${typedProduct.name}"`);
-      }
-      // Camada 3: fallback — extrair valor monetário do nome do item se preco ainda for 0
-      if (preco === 0 && item.nome) {
-        const valorMatch = item.nome.match(/(\d+(?:[.,]\d{1,2})?)\s*(?:reais?|r\$)?/i);
-        if (valorMatch) {
-          preco = parseFloat(valorMatch[1].replace(",", "."));
-          console.log(`[ORDER] Extraindo preço do nome do item: "${item.nome}" → R$ ${preco}`);
+      const isVariable = typedProduct.is_variable_price || preco === 0;
+
+      if (isVariable) {
+        // Priority 1: preco_informado from LLM tool call
+        if ((item as any).preco_informado) {
+          preco = Number((item as any).preco_informado);
+          console.log(`[ORDER] Variável: usando preco_informado=${preco} para "${typedProduct.name}"`);
+        }
+        // Priority 2: parseMonetaryValueFromText from item name (covers extenso)
+        else {
+          const valorExtracted = parseMonetaryValueFromText(item.nome);
+          if (valorExtracted && valorExtracted > 0) {
+            preco = valorExtracted;
+            console.log(`[ORDER] Variável: extraiu do nome "${item.nome}" → R$ ${preco}`);
+          }
+        }
+        // Validate against min/max if configured
+        if (preco > 0 && typedProduct.min_price && preco < typedProduct.min_price) {
+          console.log(`[ORDER] Preço ${preco} abaixo do mínimo ${typedProduct.min_price} — usando mínimo`);
+          preco = typedProduct.min_price;
+        }
+        if (preco > 0 && typedProduct.max_price && preco > typedProduct.max_price) {
+          console.log(`[ORDER] Preço ${preco} acima do máximo ${typedProduct.max_price} — usando máximo`);
+          preco = typedProduct.max_price;
         }
       }
+
       const subtotal = preco * item.quantidade;
       totalPrice += subtotal;
       orderItems.push({
@@ -993,7 +1042,7 @@ async function confirmarPedido(
         quantity: item.quantidade,
         total_price: subtotal
       });
-      console.log(`[ORDER] Matched "${item.nome}" → "${typedProduct.name}"`);
+      console.log(`[ORDER] Matched "${item.nome}" → "${typedProduct.name}" @ R$ ${preco}`);
     } else {
       itensNaoEncontrados.push(item.nome);
       console.log(`[ORDER] No match found for "${item.nome}"`);
@@ -2248,34 +2297,48 @@ serve(async (req) => {
       .limit(shouldResetConversation ? 2 : 20);
 
     // Build messages array for AI with professional system prompt
-    // LEIS ABSOLUTAS são sempre injetadas no início, mesmo quando o usuário tem prompt customizado
-    const absoluteLaws = `🚨🚨🚨 LEIS ABSOLUTAS — NUNCA VIOLÁVEIS (PRIORIDADE MÁXIMA) 🚨🚨🚨
+    // LEIS ABSOLUTAS são sempre injetadas no início (única fonte de verdade — sem duplicação)
+    const absoluteLaws = `🚨🚨🚨 LEIS ABSOLUTAS — PRIORIDADE MÁXIMA — NUNCA VIOLÁVEIS 🚨🚨🚨
 
-LEI #1 — PRODUTO COM PREÇO VARIÁVEL ("Preço por quantidade"):
-ANTES de qualquer busca de produto, verifique se a mensagem contém valor monetário (ex: "20 reais", "R$30", "50 de boi"). Se sim, MEMORIZE como preco_informado.
+━━━ LEI #1 — PRODUTO COM PREÇO VARIÁVEL ━━━
+PASSO 0 (obrigatório): ANTES de buscar qualquer produto, verifique se a mensagem do cliente contém um valor monetário.
+Valores por DÍGITOS: "20 reais", "R$30", "50 de boi", "R$ 25,90"
+Valores por EXTENSO: "vinte reais", "trinta de frango", "cinquenta de boi", "vinte e cinco reais"
+Se sim → MEMORIZE imediatamente como preco_informado.
 
-Quando buscar_produto retornar "PRODUTO DE PREÇO VARIÁVEL":
-→ Se o cliente JÁ disse um valor: CHAME IMEDIATAMENTE confirmar_pedido com preco_informado = [valor dito]
-→ Se o cliente NÃO disse um valor: pergunte SOMENTE "Qual o valor que deseja gastar?"
+Quando buscar_produto retornar "PREÇO VARIÁVEL":
+→ Cliente JÁ disse valor → CHAME IMEDIATAMENTE confirmar_pedido com preco_informado = valor
+→ Cliente NÃO disse valor → pergunte SOMENTE: "Qual o valor que deseja gastar?"
 
-EXEMPLOS OBRIGATÓRIOS:
-  "quero 20 reais de porção de carne" → confirmar_pedido(nome="PORÇÃO DE CARNE", quantidade=1, preco_informado=20.00) ✅
-  "me manda 50 de boi" → confirmar_pedido com preco_informado=50.00 ✅
-  "pede 30 de frango" → confirmar_pedido com preco_informado=30.00 ✅
+━━━ LEI #2 — EXTRAÇÃO DE VALOR MONETÁRIO (DÍGITOS + EXTENSO) ━━━
+OBRIGATÓRIO extrair valor de QUALQUER forma que o cliente o expresse:
+  • "20 reais de carne"          → preco_informado = 20.00
+  • "30 de frango"               → preco_informado = 30.00
+  • "vinte reais de carne"       → preco_informado = 20.00  ← POR EXTENSO
+  • "trinta de frango"           → preco_informado = 30.00  ← POR EXTENSO
+  • "cinquenta de boi"           → preco_informado = 50.00  ← POR EXTENSO
+  • "vinte e cinco reais"        → preco_informado = 25.00  ← COMPOSTO
+  • "uma porção de cinquenta"    → preco_informado = 50.00  ← POR EXTENSO
+  • "me manda 50 de boi"         → preco_informado = 50.00  ← DÍGITO
+  • "[Áudio: vinte reais de boi]"→ preco_informado = 20.00  ← ÁUDIO POR EXTENSO
+
+CONTEXTO PARA EVITAR CONFUSÃO:
+  • Número em áudio/texto ANTES de perguntar troco = PEDIDO/VALOR
+  • Número em texto DEPOIS que o bot perguntou troco = VALOR DE TROCO
 
 ABSOLUTAMENTE PROIBIDO:
   ❌ "não consigo registrar pois o preço é R$ 0,00"
-  ❌ "o produto está com R$ 0,00 no sistema, por isso não posso registrar"
-  ❌ Questionar o preço quando o cliente já informou o valor
+  ❌ "o produto está com R$ 0,00 no sistema"
+  ❌ Questionar preço quando cliente já informou o valor
+  ❌ Pedir confirmação de preço quando cliente já disse quanto quer gastar
 
 🚨🚨🚨 FIM DAS LEIS ABSOLUTAS 🚨🚨🚨
 
 `;
     const rawPrompt = settings.system_prompt || getDefaultSystemPrompt();
-    // Se for o prompt padrão já tem as leis. Se for customizado, injetar no início
-    const basePrompt = settings.system_prompt 
-      ? absoluteLaws + settings.system_prompt 
-      : rawPrompt;
+    // Injetar LEIS ABSOLUTAS no início para ambos os casos (custom ou padrão)
+    // No prompt padrão as leis aparecem apenas UMA VEZ via absoluteLaws (não duplicar)
+    const basePrompt = absoluteLaws + (settings.system_prompt ? settings.system_prompt : rawPrompt.replace(/^🚨🚨🚨 LEIS ABSOLUTAS[\s\S]*?FIM DAS LEIS ABSOLUTAS 🚨🚨🚨\n*/, ""));
 
     // === CONTEXTO DE HORÁRIO ===
     let timeContextBlock = "";
