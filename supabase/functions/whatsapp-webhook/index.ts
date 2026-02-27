@@ -2035,12 +2035,19 @@ serve(async (req) => {
           // Log falha de transcrição para diagnóstico
           console.log(`[AUDIO-TRANSCRIPTION-FAIL] unit_id=${settings.unit_id} | phone=${phone} | mimetype=${media.mimetype} | size=${media.base64.length}`);
 
+          // Persistir falha no banco para diagnóstico e retry
+          (globalThis as any).__audioFailData = {
+            unit_id: settings.unit_id,
+            phone,
+            mimetype: media.mimetype,
+            file_size: media.base64.length,
+            failure_reason: "transcription_failed",
+            audio_base64: media.base64,
+            message_id: messageKey,
+          };
+
           // Deduplicação: verificar se já pedimos para escrever nos últimos 30 segundos
-          // Buscar a última mensagem do assistente sobre áudio não transcrito
           const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
-          
-          // Precisamos do conversation_id — será obtido após criar/buscar conversa
-          // Guardamos a flag para verificar após encontrar a conversa
           messageText = "[O cliente enviou um áudio que não pôde ser transcrito]";
           (globalThis as any).__audioTranscriptionFailed = true;
           (globalThis as any).__audioFailTimestamp = thirtySecondsAgo;
@@ -2048,6 +2055,13 @@ serve(async (req) => {
       } else {
         messageText = "[O cliente enviou um áudio]";
         console.log(`[AUDIO-TRANSCRIPTION-FAIL] unit_id=${settings.unit_id} | phone=${phone} | reason=download_failed`);
+        // Persistir falha de download
+        supabase.from("audio_transcription_logs").insert({
+          unit_id: settings.unit_id,
+          phone,
+          failure_reason: "download_failed",
+          status: "failed",
+        }).then(() => {}).catch(() => {});
       }
     }
 
@@ -2174,6 +2188,23 @@ serve(async (req) => {
       delete (globalThis as any).__audioTranscriptionFailed;
       const thirtySecondsAgo = (globalThis as any).__audioFailTimestamp as string;
       delete (globalThis as any).__audioFailTimestamp;
+
+      // Persistir falha de transcrição no banco para diagnóstico/retry
+      const audioFailData = (globalThis as any).__audioFailData;
+      delete (globalThis as any).__audioFailData;
+      if (audioFailData) {
+        supabase.from("audio_transcription_logs").insert({
+          unit_id: audioFailData.unit_id,
+          conversation_id: conversation.id,
+          message_id: audioFailData.message_id || messageKey,
+          phone: audioFailData.phone,
+          status: "failed",
+          failure_reason: audioFailData.failure_reason,
+          mimetype: audioFailData.mimetype,
+          file_size: audioFailData.file_size,
+          audio_base64: audioFailData.audio_base64,
+        }).then(() => {}).catch((e: Error) => console.error("[AUDIO-LOG-PERSIST-ERROR]", e.message));
+      }
 
       const { data: recentAudioResponse } = await supabase
         .from("whatsapp_messages")

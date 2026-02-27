@@ -58,6 +58,65 @@ export type Database = {
           },
         ]
       }
+      audio_transcription_logs: {
+        Row: {
+          audio_base64: string | null
+          conversation_id: string | null
+          created_at: string
+          failure_reason: string | null
+          file_size: number | null
+          id: string
+          message_id: string | null
+          mimetype: string | null
+          phone: string
+          retry_count: number | null
+          status: string
+          transcription_result: string | null
+          unit_id: string
+          updated_at: string
+        }
+        Insert: {
+          audio_base64?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          failure_reason?: string | null
+          file_size?: number | null
+          id?: string
+          message_id?: string | null
+          mimetype?: string | null
+          phone: string
+          retry_count?: number | null
+          status?: string
+          transcription_result?: string | null
+          unit_id: string
+          updated_at?: string
+        }
+        Update: {
+          audio_base64?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          failure_reason?: string | null
+          file_size?: number | null
+          id?: string
+          message_id?: string | null
+          mimetype?: string | null
+          phone?: string
+          retry_count?: number | null
+          status?: string
+          transcription_result?: string | null
+          unit_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audio_transcription_logs_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bill_payments: {
         Row: {
           amount: number
