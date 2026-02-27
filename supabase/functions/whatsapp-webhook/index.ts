@@ -1214,18 +1214,21 @@ async function confirmarPedido(
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (stripeKey) {
       const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-      const response = await fetch(`${supabaseUrl}/functions/v1/create-order-payment`, {
+      const stripeTimeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000));
+      const stripeFetch = fetch(`${supabaseUrl}/functions/v1/create-order-payment`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${Deno.env.get("SUPABASE_ANON_KEY") || ""}`,
         },
         body: JSON.stringify({ orderId: order.id, unitId }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        stripePaymentUrl = data.url;
+      }).then(async (r) => r.ok ? (await r.json()).url as string : null).catch(() => null);
+      const stripeResult = await Promise.race([stripeFetch, stripeTimeout]);
+      if (stripeResult) {
+        stripePaymentUrl = stripeResult;
         console.log(`[ORDER] Stripe payment link generated: ${stripePaymentUrl}`);
+      } else {
+        console.warn("[ORDER] Stripe payment link timed out or failed (non-blocking)");
       }
     }
   } catch (e) {
@@ -1730,7 +1733,7 @@ async function processWithAI(
             messages: msgs,
             tools,
             tool_choice: "auto",
-            max_tokens: 2000,
+            max_tokens: 3000,
           }),
         }
       );
@@ -1798,6 +1801,12 @@ async function processWithAI(
           customerPhone,
           customerName
         );
+
+        // Early return for confirmar_pedido — send confirmation directly without re-processing by AI
+        if (toolCall.function.name === "confirmar_pedido" && toolResult.text.startsWith("✅")) {
+          console.log("[ORDER] confirmar_pedido succeeded — returning confirmation directly without AI reprocessing");
+          return { response: toolResult.text, menuMessages: pendingMenuMessages };
+        }
 
         // Check if tool returned multiple messages (e.g., menu)
         if (toolResult.multipleMessages) {
