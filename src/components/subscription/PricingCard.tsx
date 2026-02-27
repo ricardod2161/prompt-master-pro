@@ -11,6 +11,7 @@ interface PricingCardProps {
   onSubscribe: (tier: SubscriptionTier) => void;
   onManage: () => void;
   index?: number;
+  isTrialing?: boolean;
 }
 
 const tierIcons: Record<SubscriptionTier, React.ElementType> = {
@@ -32,7 +33,8 @@ export function PricingCard({
   isLoading, 
   onSubscribe, 
   onManage,
-  index = 0
+  index = 0,
+  isTrialing = false,
 }: PricingCardProps) {
   const isCurrentPlan = currentTier === tier;
   const isPopular = config.popular;
@@ -64,10 +66,15 @@ export function PricingCard({
 
       {/* Current Plan Badge */}
       {isCurrentPlan && (
-        <div className="absolute -top-3 right-4">
+        <div className="absolute -top-3 right-4 flex gap-1">
           <div className="rounded-full bg-gradient-to-r from-green-500 to-emerald-600 px-3 py-1 text-xs font-semibold text-white shadow-lg">
             ✓ Seu Plano
           </div>
+          {isTrialing && (
+            <div className="rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-3 py-1 text-xs font-semibold text-white shadow-lg">
+              Trial ativo
+            </div>
+          )}
         </div>
       )}
 

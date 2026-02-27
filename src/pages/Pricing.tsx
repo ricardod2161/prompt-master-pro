@@ -1,4 +1,5 @@
-import { Sparkles, RefreshCw, Shield, HeadphonesIcon, CreditCard, HelpCircle, Mail, Phone } from "lucide-react";
+import { Sparkles, RefreshCw, Shield, HeadphonesIcon, CreditCard, HelpCircle, Mail, Phone, Check, X, Minus } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -104,8 +105,77 @@ export default function Pricing() {
             onSubscribe={startCheckout}
             onManage={openCustomerPortal}
             index={index}
+            isTrialing={subscription.isTrialing}
           />
         ))}
+      </div>
+
+      {/* Comparison Table */}
+      <div className="mb-12 animate-fade-in-up">
+        <div className="text-center mb-6">
+          <h2 className="text-xl sm:text-2xl font-bold">Comparativo de Planos</h2>
+          <p className="text-muted-foreground text-sm mt-1">Veja tudo que cada plano oferece</p>
+        </div>
+        <div className="overflow-x-auto rounded-2xl border bg-card">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left p-4 font-medium text-muted-foreground w-1/2">Funcionalidade</th>
+                {tiers.map(([tier, config]) => {
+                  const isCurrentPlan = subscription.tier === tier;
+                  return (
+                    <th key={tier} className={cn(
+                      "p-4 text-center font-semibold",
+                      isCurrentPlan && "bg-primary/5 text-primary"
+                    )}>
+                      <div className="flex flex-col items-center gap-1">
+                        <span>{config.name}</span>
+                        {isCurrentPlan && (
+                          <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                            {subscription.isTrialing ? "Trial ativo" : "Seu plano"}
+                          </span>
+                        )}
+                        <span className="text-xs font-normal text-muted-foreground">R$ {config.price}/mês</span>
+                      </div>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { label: "PDV completo", starter: true, pro: true, enterprise: true },
+                { label: "Cardápio Digital", starter: true, pro: true, enterprise: true },
+                { label: "KDS (Cozinha)", starter: true, pro: true, enterprise: true },
+                { label: "Módulo Delivery", starter: false, pro: true, enterprise: true },
+                { label: "Integração WhatsApp", starter: false, pro: true, enterprise: true },
+                { label: "Relatórios avançados", starter: false, pro: true, enterprise: true },
+                { label: "API personalizada", starter: false, pro: false, enterprise: true },
+                { label: "Número de unidades", starter: "1", pro: "Até 3", enterprise: "Ilimitadas" },
+                { label: "Suporte", starter: "Email", pro: "Prioritário", enterprise: "24/7 + Gerente" },
+              ].map((row, i) => (
+                <tr key={i} className={cn("border-b last:border-0", i % 2 === 0 && "bg-muted/20")}>
+                  <td className="p-4 font-medium">{row.label}</td>
+                  {(["starter", "pro", "enterprise"] as const).map((tier) => {
+                    const isCurrentPlan = subscription.tier === tier;
+                    const val = row[tier];
+                    return (
+                      <td key={tier} className={cn("p-4 text-center", isCurrentPlan && "bg-primary/5")}>
+                        {val === true ? (
+                          <Check className="h-5 w-5 text-green-500 mx-auto" />
+                        ) : val === false ? (
+                          <X className="h-4 w-4 text-muted-foreground/40 mx-auto" />
+                        ) : (
+                          <span className="text-muted-foreground text-xs">{val}</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Trust Badges */}

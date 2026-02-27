@@ -11,6 +11,7 @@ import { ChatView } from "@/components/whatsapp/ChatView";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { cn } from "@/lib/utils";
+import { SubscriptionGate } from "@/components/subscription/SubscriptionGate";
 
 export default function WhatsAppChat() {
   const navigate = useNavigate();
@@ -118,6 +119,7 @@ export default function WhatsAppChat() {
   }
 
   return (
+    <SubscriptionGate requiredTier="pro">
     <div className="h-[calc(100vh-8rem)] flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b bg-card/50">
@@ -185,5 +187,6 @@ export default function WhatsAppChat() {
         </div>
       </div>
     </div>
+    </SubscriptionGate>
   );
 }

@@ -12,6 +12,7 @@ import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { cn } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { PixTransactionsDashboard } from "@/components/reports/PixTransactionsDashboard";
+import { SubscriptionGate } from "@/components/subscription/SubscriptionGate";
 
 const COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6"];
 
@@ -114,6 +115,7 @@ export default function Reports() {
   }
 
   return (
+    <SubscriptionGate requiredTier="pro">
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -340,5 +342,6 @@ export default function Reports() {
         </TabsContent>
       </Tabs>
     </div>
+    </SubscriptionGate>
   );
 }

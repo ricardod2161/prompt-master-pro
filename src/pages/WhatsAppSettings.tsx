@@ -89,6 +89,7 @@ import {
   useRetryTranscription,
   computeTodayStats,
 } from "@/hooks/useAudioTranscriptionLogs";
+import { SubscriptionGate } from "@/components/subscription/SubscriptionGate";
 
 const WEBHOOK_URL = "https://qxqxahgfqjctvsjddfbh.supabase.co/functions/v1/whatsapp-webhook";
 
@@ -410,6 +411,7 @@ export default function WhatsAppSettings() {
   }
 
   return (
+    <SubscriptionGate requiredTier="pro">
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
       <div className="p-4 md:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
         {/* Header Card */}
@@ -1460,5 +1462,6 @@ export default function WhatsAppSettings() {
         </Tabs>
       </div>
     </div>
+    </SubscriptionGate>
   );
 }
