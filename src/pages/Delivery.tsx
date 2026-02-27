@@ -17,6 +17,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { cn } from "@/lib/utils";
+import { SubscriptionGate } from "@/components/subscription/SubscriptionGate";
 
 export default function Delivery() {
   const { data: orders, isLoading: ordersLoading } = useOrders({ channel: "delivery" });
@@ -77,6 +78,7 @@ export default function Delivery() {
   }
 
   return (
+    <SubscriptionGate requiredTier="pro">
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between animate-fade-in-up">
@@ -312,6 +314,7 @@ export default function Delivery() {
         </DialogContent>
       </Dialog>
     </div>
+    </SubscriptionGate>
   );
 }
 
