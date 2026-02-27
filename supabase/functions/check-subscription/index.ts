@@ -38,20 +38,17 @@ serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "");
     
-    // Use getClaims for JWT validation (consistent with project policy)
-    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
+    // Use service key getUser for reliable email retrieval
+    const serviceClientForAuth = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
     });
-    const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims?.sub) {
-      throw new Error("Authentication error: invalid token");
+    const { data: userData, error: userError } = await serviceClientForAuth.auth.getUser(token);
+    if (userError || !userData?.user?.email) {
+      throw new Error("Authentication error: invalid token or missing email");
     }
     
-    const userId = claimsData.claims.sub as string;
-    const userEmail = claimsData.claims.email as string;
-    if (!userEmail) {
-      throw new Error("User email not available in token");
-    }
+    const userId = userData.user.id;
+    const userEmail = userData.user.email;
     logStep("User authenticated", { userId, email: userEmail });
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });

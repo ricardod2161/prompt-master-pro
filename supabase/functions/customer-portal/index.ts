@@ -36,25 +36,29 @@ serve(async (req) => {
     logStep("Authorization header found");
 
     const token = authHeader.replace("Bearer ", "");
-    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const serviceClientForAuth = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
     });
-    const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims?.sub) {
-      throw new Error("Authentication error: invalid token");
+    const { data: userData, error: userError } = await serviceClientForAuth.auth.getUser(token);
+    if (userError || !userData?.user?.email) {
+      throw new Error("Authentication error: invalid token or missing email");
     }
-    
-    const userEmail = claimsData.claims.email as string;
-    if (!userEmail) {
-      throw new Error("User email not available in token");
-    }
-    logStep("User authenticated", { userId: claimsData.claims.sub, email: userEmail });
+    const userEmail = userData.user.email;
+    logStep("User authenticated", { userId: userData.user.id, email: userEmail });
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
     const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
     
     if (customers.data.length === 0) {
-      throw new Error("Nenhuma conta encontrada. Assine um plano primeiro.");
+      logStep("No Stripe customer found - user may have manual override");
+      return new Response(JSON.stringify({
+        error: "Você possui acesso manual concedido pela equipe. Para gerenciar sua assinatura, entre em contato com o suporte.",
+        isManualOverride: true
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
     }
     
     const customerId = customers.data[0].id;
