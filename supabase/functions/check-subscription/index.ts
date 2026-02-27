@@ -51,39 +51,41 @@ serve(async (req) => {
     const userEmail = userData.user.email;
     logStep("User authenticated", { userId, email: userEmail });
 
+    // ✅ CHECK OVERRIDE FIRST — manual override always wins over Stripe
+    const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
+    const { data: override } = await serviceClient
+      .from("access_overrides")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .or("expires_at.is.null,expires_at.gt.now()")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (override) {
+      logStep("Manual access override found — returning override tier immediately", { tier: override.tier, expires_at: override.expires_at });
+      return new Response(JSON.stringify({
+        subscribed: true,
+        tier: override.tier,
+        productId: null,
+        subscriptionEnd: override.expires_at,
+        status: "manual_override",
+        isTrialing: false,
+        trialEnd: null,
+        isManualOverride: true,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    logStep("No override found, checking Stripe");
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
     const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
     
     if (customers.data.length === 0) {
-      logStep("No Stripe customer found, checking manual overrides");
-      const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
-      const { data: override } = await serviceClient
-        .from("access_overrides")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("is_active", true)
-        .or("expires_at.is.null,expires_at.gt.now()")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (override) {
-        logStep("Manual access override found (no Stripe customer)", { tier: override.tier });
-        return new Response(JSON.stringify({
-          subscribed: true,
-          tier: override.tier,
-          productId: null,
-          subscriptionEnd: override.expires_at,
-          status: "manual_override",
-          isTrialing: false,
-          trialEnd: null,
-          isManualOverride: true,
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 200,
-        });
-      }
-
+      logStep("No Stripe customer found");
       return new Response(JSON.stringify({ 
         subscribed: false,
         tier: null,
@@ -98,14 +100,12 @@ serve(async (req) => {
     const customerId = customers.data[0].id;
     logStep("Found Stripe customer", { customerId });
 
-    // Check for active OR trialing subscriptions
     const subscriptions = await stripe.subscriptions.list({
       customer: customerId,
       status: "all",
       limit: 10,
     });
 
-    // Find active or trialing subscription
     const validSubscription = subscriptions.data.find(
       (sub: { status: string }) => sub.status === 'active' || sub.status === 'trialing'
     );
@@ -116,37 +116,6 @@ serve(async (req) => {
     let status: string | null = null;
     let isTrialing = false;
     let trialEnd: string | null = null;
-
-    // If no valid Stripe subscription, check for manual access override
-    if (!validSubscription) {
-      const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
-      const { data: override } = await serviceClient
-        .from("access_overrides")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("is_active", true)
-        .or("expires_at.is.null,expires_at.gt.now()")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (override) {
-        logStep("Manual access override found", { overrideId: override.id, tier: override.tier, expires_at: override.expires_at });
-        return new Response(JSON.stringify({
-          subscribed: true,
-          tier: override.tier,
-          productId: null,
-          subscriptionEnd: override.expires_at,
-          status: "manual_override",
-          isTrialing: false,
-          trialEnd: null,
-          isManualOverride: true,
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 200,
-        });
-      }
-    }
 
     if (validSubscription) {
       const subscription = validSubscription;
@@ -160,7 +129,6 @@ serve(async (req) => {
         : null;
       productId = subscription.items.data[0].price.product as string;
       
-      // Map product ID to tier
       const tierMap: Record<string, string> = {
         "prod_TulLmt1sNhS2L2": "starter",
         "prod_TulNDUheGUqxbB": "pro",
