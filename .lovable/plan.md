@@ -1,41 +1,50 @@
 
-## Análise de Engenharia — Sistema de Assinaturas
+## Auditoria Completa — Sistema de Planos
 
-### Bugs Identificados
+### O que está funcionando
+- Produtos e prices no Stripe batem exatamente com `subscription-tiers.ts`
+- `check-subscription` detecta `trialing` vs `active` corretamente
+- `create-checkout` envia `trial_period_days: 14`
+- `AppLayout` exibe `TrialBanner` durante trial
+- `customer-portal` funciona corretamente
 
-**BUG CRÍTICO #1 — `SubscriptionBadge` não usa `React.forwardRef`**
-Console logs mostram DOIS warnings:
-- `Warning: Function components cannot be given refs. Check the render method of Pricing. at SubscriptionBadge`
-- `Warning: Function components cannot be given refs. Check the render method of Pricing. at PricingCard`
+### Bugs reais encontrados (sem inventar)
 
-O `SubscriptionBadge` usa `<Tooltip><TooltipTrigger asChild>` — o `asChild` passa a ref para o filho (`<div>`), mas `<div>` não é um componente React que precisa de `forwardRef`. O problema real é que `TooltipTrigger asChild` requer que o filho aceite `ref`. **Correção**: remover `asChild` do `TooltipTrigger` ou encapsular o `div` interno.
+**BUG 1 — `Pricing.tsx` não passa `isTrialing`/`trialEnd` para `SubscriptionBadge`**
+Na linha 74-77 de `Pricing.tsx`, o `SubscriptionBadge` é renderizado sem as props `isTrialing` e `trialEnd`. O badge mostra "Pro" em vez de "Pro · Trial" quando o usuário está em período de teste.
+```tsx
+// ATUAL (errado)
+<SubscriptionBadge tier={subscription.tier} subscriptionEnd={subscription.subscriptionEnd} />
 
-No `PricingCard`, o `Settings` icon é importado no final do arquivo (linha 151) após o `export`, o que funciona em runtime mas é má prática e pode causar issues em strict mode. O warning vem de `PricingCard` porque ele usa componentes internos sem `forwardRef`.
+// CORRETO
+<SubscriptionBadge 
+  tier={subscription.tier} 
+  subscriptionEnd={subscription.subscriptionEnd}
+  isTrialing={subscription.isTrialing}
+  trialEnd={subscription.trialEnd}
+/>
+```
 
-**BUG CRÍTICO #2 — Trial de 14 dias NÃO está configurado no `create-checkout`**
-A função `create-checkout` cria o checkout SEM parâmetro `subscription_data.trial_period_days`. O trial de 14 dias existe no Stripe mas NÃO é ativado via código — ele só funciona se configurado no Stripe Dashboard diretamente no plano. Para garantir consistência programática, o checkout deve passar `subscription_data: { trial_period_days: 14 }`.
+**BUG 2 — `create-checkout` não bloqueia usuário em `trialing`**
+A linha 68-83 de `create-checkout/index.ts` verifica apenas `status: "active"`. Um usuário em trial (status `trialing`) pode abrir um novo checkout e criar conflito.
+```typescript
+// ATUAL — busca só active
+status: "active"
 
-**BUG #3 — `check-subscription` usa API version `2023-10-16` mas `create-checkout` usa `2025-08-27.basil`**
-Inconsistência de versão da Stripe API entre as duas edge functions. Deve ser uniformizado para `2025-08-27.basil`.
+// CORRETO — buscar active E trialing
+status: "all" + filtrar active|trialing
+```
 
-**BUG #4 — `AppLayout` bloqueia acesso mesmo durante trial**
-Linha 62: `if (status && status !== 'active' && status !== 'trialing')` — isso parece correto, mas há um edge case: quando a assinatura ainda não foi checada (`status === null`) e o usuário acaba de se registrar, ele não é bloqueado. Porém, usuários sem assinatura alguma (`subscribed: false`, `status: null`) passam livremente. Isso é intencional (acesso gratuito ilimitado) ou um bug? Com base na lógica atual, parece intencional — mas precisa ser documentado.
+**BUG 3 — `SubscriptionSuccess` não tem retry quando Stripe ainda não processou**
+A página chama `checkSubscription()` uma vez imediatamente após o redirect. Se o Stripe ainda não processou o evento, a subscription retorna vazia e a tela fica em branco (sem plano exibido). Precisa de retry com delay de 2s, até 3 tentativas.
 
-**BUG #5 — `SubscriptionBadge` sem período trial**
-O badge não diferencia entre "ativo" e "em trial". Quando o usuário está em trial, o badge mostra "Pro" sem indicar que é um teste. O `AppLayout` já tem `TrialBanner` mas o badge não reflete o estado.
+**BUG 4 — `SubscriptionSuccess` é rota pública mas usa `useAuth` sem garantia de usuário logado**
+A rota `/subscription-success` está fora do `AppLayout` — qualquer pessoa pode acessar sem estar logada. Isso é aceitável como design mas o `openCustomerPortal` vai falhar sem auth. Adicionar guard.
 
-### Correções a implementar
+### Correções
 
-1. **`supabase/functions/check-subscription/index.ts`**: Atualizar API version para `2025-08-27.basil`
-2. **`supabase/functions/create-checkout/index.ts`**: Adicionar `subscription_data: { trial_period_days: 14 }` no `stripe.checkout.sessions.create`
-3. **`src/components/subscription/SubscriptionBadge.tsx`**: Corrigir o warning do `TooltipTrigger asChild` — remover `asChild` e usar wrapper correto
-4. **`src/components/subscription/PricingCard.tsx`**: Mover import do `Settings` para o topo do arquivo, e verificar se há ref issue
-5. **`src/components/subscription/SubscriptionBadge.tsx`**: Adicionar suporte visual para status `isTrialing` — mostrar badge diferenciado "Pro (Trial)" ou similar
-
-### Arquivos modificados
-| Arquivo | Correção |
+| Arquivo | Mudança |
 |---------|---------|
-| `supabase/functions/check-subscription/index.ts` | Atualizar Stripe API version para `2025-08-27.basil` |
-| `supabase/functions/create-checkout/index.ts` | Adicionar `trial_period_days: 14` no checkout |
-| `src/components/subscription/SubscriptionBadge.tsx` | Corrigir ref warning + indicador visual de trial |
-| `src/components/subscription/PricingCard.tsx` | Mover import `Settings` para o topo, corrigir estrutura |
+| `src/pages/Pricing.tsx` | Passar `isTrialing` e `trialEnd` ao `SubscriptionBadge` |
+| `supabase/functions/create-checkout/index.ts` | Bloquear checkout se já tem subscription `active` OU `trialing` |
+| `src/pages/SubscriptionSuccess.tsx` | Adicionar retry com 3 tentativas (2s de intervalo) ao verificar assinatura |
