@@ -1,53 +1,48 @@
 
-## Análise do estado atual
+## Diagnóstico completo — 3 bugs identificados
 
-O sistema já tem:
-- `AccessOverrideDialog` com toggle liberar/bloquear + plano + duração
-- Edge function `admin-access-override` com actions `grant` e `revoke`
-- `AdminCustomersList` com botão Shield para abrir o dialog
+### Bug 1: `customer-portal` falha com erro 500 para usuários com override manual
+Em `supabase/functions/customer-portal/index.ts` linha 56-58: se não existe cliente Stripe, lança `throw new Error("Nenhuma conta encontrada. Assine um plano primeiro.")`. Usuário da Churascaria não tem Stripe → erro 500 → toast vermelho na tela.
 
-### Problemas identificados:
+**Fix:** Retornar mensagem amigável com status 200 `{ error: "no_stripe_customer" }` ou redirecionar para `/pricing` sem crash.
 
-1. **Visual confuso**: O toggle "Liberar Acesso" desativa e o botão "Salvar" revoga — não fica claro. O usuário precisa de botões explícitos: "Bloquear Acesso", "Liberar Acesso", "Adicionar X dias"
-2. **Falta opção de "adicionar mais dias"** ao override já existente (sem resetar tudo)
-3. **A lista de clientes não mostra o status de acesso claramente** — precisa mostrar: bloqueado, acesso trial ativo (com dias restantes), sem override, com assinatura
-4. **Não existe ação "extend_trial"** na edge function — adicionar dias ao override existente
+### Bug 2: `check-subscription` usa `getClaims()` que pode não retornar `email`
+O JWT anon do Supabase nem sempre inclui `email` nos claims dependendo da versão. O `check-subscription` já funciona (logs mostram `danielysoares008@gmail.com`), mas é frágil. A função deve usar `supabase.auth.getUser(token)` com service key para obter o email com garantia.
 
-### Solução
+**Fix em `check-subscription`:** Trocar `getClaims` → `serviceClient.auth.getUser(token)` para obter email confiável.
 
-**1. Melhorar `AccessOverrideDialog`:**
-- Substituir toggle ambíguo por 3 seções claras:
-  - "Acesso Atual" — status visual (bloqueado/ativo/indefinido com dias restantes)
-  - Botões de ação rápida: "+ 7 dias", "+ 14 dias", "+ 30 dias" 
-  - Seção "Configurar Acesso" com plano, duração personalizada, notas
-  - Botão vermelho explícito "Bloquear Acesso" quando tem override ativo
-  - Botão verde "Liberar Acesso" quando não tem
+### Bug 3: `SubscriptionGate` não reconhece override porque `tier` retorna `null` em alguns caminhos
+Confirmado nos logs: `"Manual access override found (no Stripe customer) - {"tier":"pro"}"` — o override retorna tier. Porém o `canAccessFeature` retorna `false` quando `currentTier` é `null`. Se o `check-subscription` falhar silenciosamente, o tier fica `null` e o gate bloqueia mesmo tendo override.
 
-**2. Adicionar action `extend` na edge function:**
+**Fix em `AuthContext`:** Garantir que erros de `check-subscription` não silenciosamente resetem o tier (já tem try/catch bom). Também: aumentar resiliência adicionando retry automático quando a resposta tem `error` mas sem travar o estado.
+
+### Arquivos a modificar:
+
+| Arquivo | Mudança |
+|---------|---------|
+| `supabase/functions/customer-portal/index.ts` | Tratar ausência de cliente Stripe sem lançar erro 500 — retornar resposta útil |
+| `supabase/functions/check-subscription/index.ts` | Trocar `getClaims` por `auth.getUser` com service key para email confiável |
+| `src/components/subscription/SubscriptionGate.tsx` | Adicionar fallback: se `isSubscriptionLoading` acabou e tier é null mas houve erro, tentar re-check antes de bloquear |
+
+### Solução principal para o customer-portal:
 ```typescript
-if (action === "extend") {
-  // Pega o override ativo e adiciona N dias à data de expiração
-  const existing = await serviceClient.from("access_overrides")
-    .select().eq("user_id", user_id).eq("is_active", true).maybeSingle();
-  
-  const currentExpiry = existing?.expires_at ? new Date(existing.expires_at) : new Date();
-  const newExpiry = new Date(currentExpiry.getTime() + days * 86400000);
-  
-  await serviceClient.from("access_overrides")
-    .update({ expires_at: newExpiry.toISOString() })
-    .eq("id", existing.id);
+if (customers.data.length === 0) {
+  // Usuário tem override manual — não tem Stripe, não pode gerenciar assinatura
+  return new Response(JSON.stringify({ 
+    error: "Você possui acesso manual concedido pela equipe. Para gerenciar sua assinatura, entre em contato com o suporte.",
+    isManualOverride: true 
+  }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    status: 200, // ← 200, não 500, para não crashar o frontend
+  });
 }
 ```
 
-**3. Melhorar card de cliente na lista** — mostrar badge colorido:
-- 🔴 "Bloqueado" — quando não tem override e sem assinatura  
-- 🟡 "Trial X dias" — override com data de expiração
-- 🟢 "Pro Indefinido" — override sem expiração
-- Sem badge — sem informação de acesso
-
-### Arquivos modificados:
-| Arquivo | Mudança |
-|---------|---------|
-| `supabase/functions/admin-access-override/index.ts` | Adicionar action `extend` para adicionar dias ao override existente |
-| `src/components/admin/AccessOverrideDialog.tsx` | UI completa: status visual, botões rápidos +7/+14/+30 dias, ações claras |
-| `src/components/admin/AdminCustomersList.tsx` | Melhorar exibição do status de acesso nos cards |
+### Solução para check-subscription (trocar getClaims → getUser):
+```typescript
+const serviceClient = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+const { data: userData, error: userError } = await serviceClient.auth.getUser(token);
+if (userError || !userData.user?.email) throw new Error("Authentication failed");
+const userId = userData.user.id;
+const userEmail = userData.user.email;
+```
