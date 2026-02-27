@@ -1,48 +1,38 @@
 
-## Diagnóstico completo — 3 bugs identificados
+## Diagnóstico final confirmado pelos logs
 
-### Bug 1: `customer-portal` falha com erro 500 para usuários com override manual
-Em `supabase/functions/customer-portal/index.ts` linha 56-58: se não existe cliente Stripe, lança `throw new Error("Nenhuma conta encontrada. Assine um plano primeiro.")`. Usuário da Churascaria não tem Stripe → erro 500 → toast vermelho na tela.
+O `check-subscription` tem a lógica na ordem errada:
 
-**Fix:** Retornar mensagem amigável com status 200 `{ error: "no_stripe_customer" }` ou redirecionar para `/pricing` sem crash.
+1. Busca no Stripe → encontra assinatura `starter` ativa para `ricardodelima1988@gmail.com`
+2. Como encontrou assinatura válida, NUNCA verifica a tabela `access_overrides`
+3. Retorna `tier: "starter"` → bloqueia WhatsApp/Delivery que requer `pro`
 
-### Bug 2: `check-subscription` usa `getClaims()` que pode não retornar `email`
-O JWT anon do Supabase nem sempre inclui `email` nos claims dependendo da versão. O `check-subscription` já funciona (logs mostram `danielysoares008@gmail.com`), mas é frágil. A função deve usar `supabase.auth.getUser(token)` com service key para obter o email com garantia.
+Mas na tabela `access_overrides` existe:
+- `user_id: 71f57fb8` → `tier: enterprise`, `is_active: true`, `expires_at: null`
 
-**Fix em `check-subscription`:** Trocar `getClaims` → `serviceClient.auth.getUser(token)` para obter email confiável.
+### Fix: Inverter a prioridade — override manual > Stripe
 
-### Bug 3: `SubscriptionGate` não reconhece override porque `tier` retorna `null` em alguns caminhos
-Confirmado nos logs: `"Manual access override found (no Stripe customer) - {"tier":"pro"}"` — o override retorna tier. Porém o `canAccessFeature` retorna `false` quando `currentTier` é `null`. Se o `check-subscription` falhar silenciosamente, o tier fica `null` e o gate bloqueia mesmo tendo override.
+A função deve verificar `access_overrides` PRIMEIRO. Se houver um override ativo, retorna imediatamente com o tier do override. Só usa o Stripe se não tiver override.
 
-**Fix em `AuthContext`:** Garantir que erros de `check-subscription` não silenciosamente resetem o tier (já tem try/catch bom). Também: aumentar resiliência adicionando retry automático quando a resposta tem `error` mas sem travar o estado.
+### Arquivo a modificar: `supabase/functions/check-subscription/index.ts`
 
-### Arquivos a modificar:
-
-| Arquivo | Mudança |
-|---------|---------|
-| `supabase/functions/customer-portal/index.ts` | Tratar ausência de cliente Stripe sem lançar erro 500 — retornar resposta útil |
-| `supabase/functions/check-subscription/index.ts` | Trocar `getClaims` por `auth.getUser` com service key para email confiável |
-| `src/components/subscription/SubscriptionGate.tsx` | Adicionar fallback: se `isSubscriptionLoading` acabou e tier é null mas houve erro, tentar re-check antes de bloquear |
-
-### Solução principal para o customer-portal:
-```typescript
-if (customers.data.length === 0) {
-  // Usuário tem override manual — não tem Stripe, não pode gerenciar assinatura
-  return new Response(JSON.stringify({ 
-    error: "Você possui acesso manual concedido pela equipe. Para gerenciar sua assinatura, entre em contato com o suporte.",
-    isManualOverride: true 
-  }), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-    status: 200, // ← 200, não 500, para não crashar o frontend
-  });
-}
+**Lógica atual (errada):**
+```
+1. Busca Stripe customer
+2. Se não tem customer → verifica override
+3. Busca subscriptions Stripe
+4. Se não tem subscription válida → verifica override
+5. Se tem subscription → retorna tier do Stripe (IGNORA override)
 ```
 
-### Solução para check-subscription (trocar getClaims → getUser):
-```typescript
-const serviceClient = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
-const { data: userData, error: userError } = await serviceClient.auth.getUser(token);
-if (userError || !userData.user?.email) throw new Error("Authentication failed");
-const userId = userData.user.id;
-const userEmail = userData.user.email;
+**Nova lógica (correta):**
 ```
+1. Busca override ativo na tabela access_overrides
+2. Se override existir → retorna tier do override imediatamente
+3. Se não tiver override → busca no Stripe normalmente
+```
+
+### Arquivo: `supabase/functions/check-subscription/index.ts`
+- Mover a verificação de `access_overrides` para ser o PRIMEIRO passo após autenticar o usuário
+- Se override encontrado: retornar imediatamente com o tier do override
+- Caso contrário: seguir fluxo Stripe normal
