@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIsDeveloper } from "@/hooks/useIsDeveloper";
 import { SubscriptionTier, canAccessFeature, SUBSCRIPTION_TIERS } from "@/lib/subscription-tiers";
 import { Button } from "@/components/ui/button";
 import { Lock, Sparkles } from "lucide-react";
@@ -27,12 +28,16 @@ export function SubscriptionGate({
   showUpgradeModal = true 
 }: SubscriptionGateProps) {
   const { subscription, isSubscriptionLoading } = useAuth();
+  const { isDeveloper, loading: devLoading } = useIsDeveloper();
   const [showModal, setShowModal] = useState(false);
   const navigate = useNavigate();
 
+  // Developer always has full access
+  if (isDeveloper) return <>{children}</>;
+
   const hasAccess = canAccessFeature(subscription.tier, requiredTier);
 
-  if (isSubscriptionLoading) {
+  if (isSubscriptionLoading || devLoading) {
     return (
       <div className="flex items-center justify-center p-8">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
