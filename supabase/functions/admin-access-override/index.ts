@@ -29,7 +29,6 @@ serve(async (req) => {
 
     const callerId = claimsData.claims.sub as string;
 
-    // Verify caller is developer using service role
     const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
     const { data: roleData } = await serviceClient
       .from("user_roles")
@@ -46,7 +45,6 @@ serve(async (req) => {
     if (!action || !user_id) throw new Error("Missing action or user_id");
 
     if (action === "grant") {
-      // Revoke any existing active overrides first
       await serviceClient
         .from("access_overrides")
         .update({ is_active: false, updated_at: new Date().toISOString() })
@@ -88,6 +86,61 @@ serve(async (req) => {
       if (error) throw error;
 
       return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    if (action === "extend") {
+      if (!days || days <= 0) throw new Error("Missing or invalid days for extend action");
+
+      const { data: existing, error: fetchError } = await serviceClient
+        .from("access_overrides")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      if (!existing) {
+        // No active override — create one from now + days
+        const expires_at = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+        const { data, error } = await serviceClient
+          .from("access_overrides")
+          .insert({
+            user_id,
+            tier: tier || "pro",
+            granted_by: callerId,
+            expires_at,
+            is_active: true,
+            notes: notes || `+${days} dias adicionados`,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return new Response(JSON.stringify({ success: true, override: data }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      // Extend from current expiry (or now if indefinite)
+      const currentExpiry = existing.expires_at
+        ? new Date(existing.expires_at)
+        : new Date();
+      const newExpiry = new Date(currentExpiry.getTime() + days * 24 * 60 * 60 * 1000);
+
+      const { data, error } = await serviceClient
+        .from("access_overrides")
+        .update({ expires_at: newExpiry.toISOString(), updated_at: new Date().toISOString() })
+        .eq("id", existing.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify({ success: true, override: data }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
       });
