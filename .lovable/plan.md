@@ -1,50 +1,32 @@
 
-## Auditoria Completa — Sistema de Planos
+## Plan
 
-### O que está funcionando
-- Produtos e prices no Stripe batem exatamente com `subscription-tiers.ts`
-- `check-subscription` detecta `trialing` vs `active` corretamente
-- `create-checkout` envia `trial_period_days: 14`
-- `AppLayout` exibe `TrialBanner` durante trial
-- `customer-portal` funciona corretamente
+### 1. Feature comparison table on `/pricing`
+Add a detailed comparison table below the pricing cards showing all features per tier (rows = features, columns = Starter / Pro / Enterprise). Highlight the user's current plan column with a ring/color. Show the Trial badge in the column header when applicable.
 
-### Bugs reais encontrados (sem inventar)
+Features to compare:
+- PDV completo
+- Cardápio Digital
+- KDS
+- Módulo Delivery
+- Integração WhatsApp
+- Relatórios avançados
+- API personalizada
+- Número de unidades
+- Suporte
 
-**BUG 1 — `Pricing.tsx` não passa `isTrialing`/`trialEnd` para `SubscriptionBadge`**
-Na linha 74-77 de `Pricing.tsx`, o `SubscriptionBadge` é renderizado sem as props `isTrialing` e `trialEnd`. O badge mostra "Pro" em vez de "Pro · Trial" quando o usuário está em período de teste.
-```tsx
-// ATUAL (errado)
-<SubscriptionBadge tier={subscription.tier} subscriptionEnd={subscription.subscriptionEnd} />
+**File:** `src/pages/Pricing.tsx` — add a `<ComparisonTable>` section after the pricing cards grid.
 
-// CORRETO
-<SubscriptionBadge 
-  tier={subscription.tier} 
-  subscriptionEnd={subscription.subscriptionEnd}
-  isTrialing={subscription.isTrialing}
-  trialEnd={subscription.trialEnd}
-/>
-```
+### 2. SubscriptionGate on protected pages
+Wrap the page content of Delivery, WhatsApp (Settings + Chat), and Reports with `<SubscriptionGate requiredTier="pro">`. The existing `SubscriptionGate` component already handles the locked UI and upgrade modal.
 
-**BUG 2 — `create-checkout` não bloqueia usuário em `trialing`**
-A linha 68-83 de `create-checkout/index.ts` verifica apenas `status: "active"`. Um usuário em trial (status `trialing`) pode abrir um novo checkout e criar conflito.
-```typescript
-// ATUAL — busca só active
-status: "active"
+**Files:**
+- `src/pages/Delivery.tsx` — wrap return content
+- `src/pages/Reports.tsx` — wrap return content
+- `src/pages/WhatsAppSettings.tsx` — wrap return content
+- `src/pages/WhatsAppChat.tsx` — wrap return content
 
-// CORRETO — buscar active E trialing
-status: "all" + filtrar active|trialing
-```
+### 3. Pass `isTrialing`/`trialEnd` to PricingCard for column badge
+Update `PricingCard` props to accept optional `isTrialing` and show "Trial ativo" chip in the "Seu Plano" badge when applicable.
 
-**BUG 3 — `SubscriptionSuccess` não tem retry quando Stripe ainda não processou**
-A página chama `checkSubscription()` uma vez imediatamente após o redirect. Se o Stripe ainda não processou o evento, a subscription retorna vazia e a tela fica em branco (sem plano exibido). Precisa de retry com delay de 2s, até 3 tentativas.
-
-**BUG 4 — `SubscriptionSuccess` é rota pública mas usa `useAuth` sem garantia de usuário logado**
-A rota `/subscription-success` está fora do `AppLayout` — qualquer pessoa pode acessar sem estar logada. Isso é aceitável como design mas o `openCustomerPortal` vai falhar sem auth. Adicionar guard.
-
-### Correções
-
-| Arquivo | Mudança |
-|---------|---------|
-| `src/pages/Pricing.tsx` | Passar `isTrialing` e `trialEnd` ao `SubscriptionBadge` |
-| `supabase/functions/create-checkout/index.ts` | Bloquear checkout se já tem subscription `active` OU `trialing` |
-| `src/pages/SubscriptionSuccess.tsx` | Adicionar retry com 3 tentativas (2s de intervalo) ao verificar assinatura |
+**File:** `src/components/subscription/PricingCard.tsx`
