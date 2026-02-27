@@ -35,12 +35,18 @@ export default function SubscriptionSuccess() {
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    const checkStatus = async () => {
-      await checkSubscription();
+    const checkWithRetry = async (attempts = 3, delay = 2000) => {
+      for (let i = 0; i < attempts; i++) {
+        await checkSubscription();
+        // If subscription found, stop retrying
+        if (i < attempts - 1) {
+          await new Promise((res) => setTimeout(res, delay));
+        }
+      }
       setIsChecking(false);
     };
-    
-    checkStatus();
+
+    checkWithRetry();
   }, [checkSubscription]);
 
   const tierConfig = subscription.tier ? SUBSCRIPTION_TIERS[subscription.tier] : null;
