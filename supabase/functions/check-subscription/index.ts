@@ -96,9 +96,11 @@ serve(async (req) => {
       const subscription = validSubscription;
       status = subscription.status;
       isTrialing = subscription.status === 'trialing';
-      subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
-      trialEnd = subscription.trial_end 
-        ? new Date(subscription.trial_end * 1000).toISOString() 
+      subscriptionEnd = subscription.current_period_end
+        ? new Date(subscription.current_period_end * 1000).toISOString()
+        : null;
+      trialEnd = subscription.trial_end
+        ? new Date(subscription.trial_end * 1000).toISOString()
         : null;
       productId = subscription.items.data[0].price.product as string;
       
