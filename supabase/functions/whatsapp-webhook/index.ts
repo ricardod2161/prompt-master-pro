@@ -1393,12 +1393,10 @@ async function transcribeAudio(audioBase64: string, mimetype: string): Promise<s
 
   console.log(`Transcribing audio (mimetype: ${mimetype}, size: ${audioBase64.length} chars)`);
 
-  // Strategy 1: Use Gemini 2.5 Pro with data URL (best for ogg/opus from WhatsApp)
+  // Strategy 1: Use Gemini 2.5 Pro with input_audio (ogg/opus native support — WhatsApp always sends OGG)
   try {
-    console.log("Attempting transcription with Gemini 2.5 Pro...");
-    
-    const dataUrl = `data:${mimetype};base64,${audioBase64}`;
-    
+    console.log("Attempting transcription with Gemini 2.5 Pro (input_audio/ogg)...");
+
     const geminiProResponse = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
       {
@@ -1418,9 +1416,10 @@ async function transcribeAudio(audioBase64: string, mimetype: string): Promise<s
                   text: "Transcreva este áudio de voz em português brasileiro.\nContexto: É um cliente fazendo pedido em restaurante via WhatsApp.\nPreste atenção especial a: nomes de produtos, quantidades (ex: 20 reais, 30 reais, 50 reais, porções de carne, porções de frango), formas de pagamento (pix, dinheiro, cartão) e endereços.\nNúmeros como '20', '30', '50' são SEMPRE quantidades de produtos ou valores monetários de pedido — NUNCA troco.\nRetorne APENAS o texto transcrito, sem explicações ou formatação."
                 },
                 {
-                  type: "image_url",
-                  image_url: {
-                    url: dataUrl
+                  type: "input_audio",
+                  input_audio: {
+                    data: audioBase64,
+                    format: "ogg"
                   }
                 }
               ]
@@ -1447,10 +1446,10 @@ async function transcribeAudio(audioBase64: string, mimetype: string): Promise<s
     console.error("Gemini Pro error:", error);
   }
 
-  // Strategy 2: Try Gemini Flash with input_audio and mp3 format hint
+  // Strategy 2: Try Gemini Flash with input_audio/ogg
   try {
-    console.log("Attempting transcription with Gemini Flash...");
-    
+    console.log("Attempting transcription with Gemini Flash (input_audio/ogg)...");
+
     const geminiFlashResponse = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
       {
@@ -1467,13 +1466,13 @@ async function transcribeAudio(audioBase64: string, mimetype: string): Promise<s
               content: [
                 {
                   type: "text",
-                  text: "Transcreva este áudio. Retorne APENAS o texto."
+                  text: "Transcreva este áudio em português brasileiro. Retorne APENAS o texto transcrito."
                 },
                 {
                   type: "input_audio",
                   input_audio: {
                     data: audioBase64,
-                    format: "mp3"
+                    format: "ogg"
                   }
                 }
               ]
@@ -1499,10 +1498,10 @@ async function transcribeAudio(audioBase64: string, mimetype: string): Promise<s
     console.error("Gemini Flash error:", error);
   }
 
-  // Strategy 3: Try GPT-5 with mp3 format hint
+  // Strategy 3: Try GPT-5 with ogg format
   try {
-    console.log("Attempting transcription with GPT-5...");
-    
+    console.log("Attempting transcription with GPT-5 (input_audio/ogg)...");
+
     const gptResponse = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
       {
@@ -1516,20 +1515,20 @@ async function transcribeAudio(audioBase64: string, mimetype: string): Promise<s
           messages: [
             {
               role: "system",
-              content: "Você é um transcritor de áudio. Transcreva em português brasileiro. Retorne APENAS o texto."
+              content: "Você é um transcritor de áudio. Transcreva em português brasileiro. Retorne APENAS o texto transcrito."
             },
             {
               role: "user",
               content: [
                 {
                   type: "text",
-                  text: "Transcreva:"
+                  text: "Transcreva este áudio:"
                 },
                 {
                   type: "input_audio",
                   input_audio: {
                     data: audioBase64,
-                    format: "mp3"
+                    format: "ogg"
                   }
                 }
               ]
@@ -1555,7 +1554,58 @@ async function transcribeAudio(audioBase64: string, mimetype: string): Promise<s
     console.error("GPT-5 error:", error);
   }
 
-  console.log("All transcription methods failed");
+  // Strategy 4: Gemini via data URL (inline_data fallback — most compatible with ogg/opus)
+  try {
+    console.log("Attempting transcription with Gemini Flash (data URL fallback)...");
+
+    const dataUrl = `data:${mimetype};base64,${audioBase64}`;
+
+    const fallbackResponse = await fetch(
+      "https://ai.gateway.lovable.dev/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Transcreva este áudio de voz em português. O áudio é de um cliente fazendo pedido em restaurante. Retorne APENAS o texto falado, sem nenhuma explicação."
+                },
+                {
+                  type: "image_url",
+                  image_url: { url: dataUrl }
+                }
+              ]
+            }
+          ],
+          max_tokens: 1000,
+        }),
+      }
+    );
+
+    if (fallbackResponse.ok) {
+      const data = await fallbackResponse.json();
+      const transcription = data.choices?.[0]?.message?.content?.trim() || "";
+      if (transcription && transcription.length > 2 && !transcription.toLowerCase().includes("não consigo")) {
+        console.log(`Strategy 4 (data URL) transcription successful: "${transcription.substring(0, 80)}..."`);
+        return transcription;
+      }
+    } else {
+      const errorText = await fallbackResponse.text();
+      console.log("Strategy 4 failed:", fallbackResponse.status, errorText.substring(0, 200));
+    }
+  } catch (error) {
+    console.error("Strategy 4 error:", error);
+  }
+
+  console.log("All transcription strategies failed");
   return "";
 }
 
@@ -2033,19 +2083,20 @@ serve(async (req) => {
 
     // Handle audio message - download and transcribe
     if (mediaType === "audio") {
-      console.log("Processing audio message...");
+      console.log("[AUDIO] Processing audio message...");
       const media = await downloadMedia(settings.api_url, settings.api_token, instanceName, messageKey);
       if (media) {
-        mediaUrl = `data:${media.mimetype};base64,${media.base64.substring(0, 100)}...`; // Store reference
+        mediaUrl = `data:${media.mimetype};base64,${media.base64.substring(0, 100)}...`;
         transcription = await transcribeAudio(media.base64, media.mimetype);
         if (transcription) {
+          console.log(`[AUDIO] Transcription OK: "${transcription.substring(0, 80)}"`);
           messageText = `[Áudio transcrito]: ${transcription}`;
         } else {
-          // Log falha de transcrição para diagnóstico
+          // All transcription strategies failed — respond DIRECTLY without going through AI
           console.log(`[AUDIO-TRANSCRIPTION-FAIL] unit_id=${settings.unit_id} | phone=${phone} | mimetype=${media.mimetype} | size=${media.base64.length}`);
 
-          // Persistir falha no banco para diagnóstico e retry
-          (globalThis as any).__audioFailData = {
+          // Persist failure for diagnostics/retry
+          supabase.from("audio_transcription_logs").insert({
             unit_id: settings.unit_id,
             phone,
             mimetype: media.mimetype,
@@ -2053,24 +2104,91 @@ serve(async (req) => {
             failure_reason: "transcription_failed",
             audio_base64: media.base64,
             message_id: messageKey,
-          };
+            status: "failed",
+          }).then(() => {}).catch(() => {});
 
-          // Deduplicação: verificar se já pedimos para escrever nos últimos 30 segundos
-          const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
-          messageText = "[O cliente enviou um áudio que não pôde ser transcrito]";
-          (globalThis as any).__audioTranscriptionFailed = true;
-          (globalThis as any).__audioFailTimestamp = thirtySecondsAgo;
+          // Save user audio message in the conversation (ensure conversation exists first)
+          let convForFallback = null;
+          const { data: existingConv } = await supabase
+            .from("whatsapp_conversations")
+            .select("*")
+            .eq("unit_id", settings.unit_id)
+            .eq("phone", phone)
+            .maybeSingle();
+
+          if (existingConv) {
+            convForFallback = existingConv;
+          } else {
+            const { data: newConv } = await supabase
+              .from("whatsapp_conversations")
+              .insert({
+                unit_id: settings.unit_id,
+                phone,
+                customer_name: customerName,
+                last_message: "[Áudio]",
+                last_message_at: new Date().toISOString(),
+                is_bot_active: true,
+              })
+              .select()
+              .single();
+            convForFallback = newConv;
+          }
+
+          if (convForFallback) {
+            // Save client audio message
+            await supabase.from("whatsapp_messages").insert({
+              conversation_id: convForFallback.id,
+              role: "user",
+              content: "[Áudio]",
+              message_id: messageKey,
+              status: "delivered",
+              media_type: "audio",
+              media_duration: mediaDuration,
+            }).then(() => {}).catch(() => {});
+
+            // Send friendly fallback directly — no AI involved
+            const fallbackMsg = "Recebi seu áudio! 🎤 Infelizmente não consegui transcrever desta vez. Poderia digitar seu pedido? Estou aqui para ajudar! 😊";
+
+            try {
+              const sentId = await sendWhatsAppMessage(
+                settings.api_url,
+                settings.api_token,
+                instanceName,
+                phone,
+                fallbackMsg
+              );
+
+              await supabase.from("whatsapp_messages").insert({
+                conversation_id: convForFallback.id,
+                role: "assistant",
+                content: fallbackMsg,
+                message_id: sentId,
+                status: "sent",
+              });
+
+              await supabase
+                .from("whatsapp_conversations")
+                .update({ last_message: fallbackMsg, last_message_at: new Date().toISOString() })
+                .eq("id", convForFallback.id);
+            } catch (sendErr) {
+              console.error("[AUDIO-FALLBACK] Failed to send fallback message:", sendErr);
+            }
+          }
+
+          // Return early — do NOT process with AI
+          return new Response(JSON.stringify({ status: "audio_transcription_fallback" }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
       } else {
-        messageText = "[O cliente enviou um áudio]";
         console.log(`[AUDIO-TRANSCRIPTION-FAIL] unit_id=${settings.unit_id} | phone=${phone} | reason=download_failed`);
-        // Persistir falha de download
         supabase.from("audio_transcription_logs").insert({
           unit_id: settings.unit_id,
           phone,
           failure_reason: "download_failed",
           status: "failed",
         }).then(() => {}).catch(() => {});
+        messageText = "[O cliente enviou um áudio]";
       }
     }
 
