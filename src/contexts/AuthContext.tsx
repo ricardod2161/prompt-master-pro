@@ -54,10 +54,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setIsSubscriptionLoading(true);
     try {
+      // Check developer role client-side first — developer always gets enterprise
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'developer')
+        .maybeSingle();
+
+      if (roleData) {
+        setSubscription({
+          subscribed: true,
+          tier: 'enterprise' as SubscriptionTier,
+          productId: null,
+          subscriptionEnd: null,
+          status: 'active',
+          isTrialing: false,
+          trialEnd: null
+        });
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke('check-subscription');
       
       if (error) {
         console.error('Error checking subscription:', error);
+        // Keep previous state on error — don't reset to null
         return;
       }
       
@@ -72,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     } catch (error) {
       console.error('Failed to check subscription:', error);
+      // Keep previous state on error
     } finally {
       setIsSubscriptionLoading(false);
     }
