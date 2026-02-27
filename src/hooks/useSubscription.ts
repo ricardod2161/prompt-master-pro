@@ -85,6 +85,14 @@ export function useSubscription() {
         throw new Error(error.message || 'Erro ao abrir portal');
       }
       
+      if (data?.isManualOverride) {
+        toast({
+          title: "Acesso manual",
+          description: data.error || "Seu acesso foi concedido manualmente pela equipe. Entre em contato para alterações.",
+        });
+        return;
+      }
+
       if (data?.error) {
         throw new Error(data.error);
       }
