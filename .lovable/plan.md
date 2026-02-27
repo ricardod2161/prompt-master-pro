@@ -1,39 +1,41 @@
 
-## Diagnóstico Preciso
+## Análise de Engenharia — Sistema de Assinaturas
 
-O print mostra: bot conduziu o pedido perfeitamente (coletou nome, itens, endereço, pagamento, confirmação), chamou `confirmar_pedido`, **o pedido FOI criado no banco** (sem erro de DB), mas o cliente recebeu a mensagem de erro genérica.
+### Bugs Identificados
 
-**Causa raiz:** A função `confirmar_pedido` retorna uma string **enorme** (~800-1200 caracteres) contendo: código Pix EMV completo + link Stripe + link de rastreamento. Essa string entra no contexto do AI como `tool_result`. O AI então tenta gerar uma resposta final — nesse momento o contexto total fica enorme, somado ao fato que o `confirmarPedido` ainda faz chamadas externas (Stripe, Pix) que consomem tempo — causando timeout da Edge Function de 30s ou erro de `max_tokens`. O `catch` captura esse erro e envia a mensagem genérica ao cliente, mesmo que o pedido já esteja registrado.
+**BUG CRÍTICO #1 — `SubscriptionBadge` não usa `React.forwardRef`**
+Console logs mostram DOIS warnings:
+- `Warning: Function components cannot be given refs. Check the render method of Pricing. at SubscriptionBadge`
+- `Warning: Function components cannot be given refs. Check the render method of Pricing. at PricingCard`
 
-**Problemas adicionais identificados:**
-1. O `max_tokens: 2000` pode não ser suficiente para processar o enorme resultado de `confirmar_pedido` + gerar resposta
-2. A geração de link Stripe via fetch externo dentro de `confirmarPedido` pode demorar 5-15s, contribuindo para o timeout
-3. Quando `confirmar_pedido` retorna sucesso, a IA não precisa gerar nova resposta — o resultado já É a mensagem para o cliente
+O `SubscriptionBadge` usa `<Tooltip><TooltipTrigger asChild>` — o `asChild` passa a ref para o filho (`<div>`), mas `<div>` não é um componente React que precisa de `forwardRef`. O problema real é que `TooltipTrigger asChild` requer que o filho aceite `ref`. **Correção**: remover `asChild` do `TooltipTrigger` ou encapsular o `div` interno.
 
-**Correção em 3 partes em `supabase/functions/whatsapp-webhook/index.ts`:**
+No `PricingCard`, o `Settings` icon é importado no final do arquivo (linha 151) após o `export`, o que funciona em runtime mas é má prática e pode causar issues em strict mode. O warning vem de `PricingCard` porque ele usa componentes internos sem `forwardRef`.
 
-### Parte 1 — Enviar confirmação diretamente, sem reprocessar pelo AI
-No `processWithAI`, após executar `confirmar_pedido`, detectar que o resultado é uma confirmação de pedido (começa com `✅ *PEDIDO CONFIRMADO!*`) e retornar imediatamente sem nova iteração do AI:
+**BUG CRÍTICO #2 — Trial de 14 dias NÃO está configurado no `create-checkout`**
+A função `create-checkout` cria o checkout SEM parâmetro `subscription_data.trial_period_days`. O trial de 14 dias existe no Stripe mas NÃO é ativado via código — ele só funciona se configurado no Stripe Dashboard diretamente no plano. Para garantir consistência programática, o checkout deve passar `subscription_data: { trial_period_days: 14 }`.
 
-```typescript
-// No loop de tool_calls, após executeTool:
-if (toolCall.function.name === "confirmar_pedido" && toolResult.text.startsWith("✅ *PEDIDO CONFIRMADO!*")) {
-  // Retornar diretamente sem chamar AI novamente
-  return { response: toolResult.text, menuMessages: pendingMenuMessages };
-}
-```
+**BUG #3 — `check-subscription` usa API version `2023-10-16` mas `create-checkout` usa `2025-08-27.basil`**
+Inconsistência de versão da Stripe API entre as duas edge functions. Deve ser uniformizado para `2025-08-27.basil`.
 
-### Parte 2 — Aumentar max_tokens para 3000 e adicionar timeout explícito
-O modelo precisa de mais tokens quando o contexto inclui o resultado longo do `confirmar_pedido`. Aumentar de 2000 para 3000.
+**BUG #4 — `AppLayout` bloqueia acesso mesmo durante trial**
+Linha 62: `if (status && status !== 'active' && status !== 'trialing')` — isso parece correto, mas há um edge case: quando a assinatura ainda não foi checada (`status === null`) e o usuário acaba de se registrar, ele não é bloqueado. Porém, usuários sem assinatura alguma (`subscribed: false`, `status: null`) passam livremente. Isso é intencional (acesso gratuito ilimitado) ou um bug? Com base na lógica atual, parece intencional — mas precisa ser documentado.
 
-### Parte 3 — Mover geração do link Stripe para fora do caminho crítico (async)
-A chamada a `create-order-payment` (Stripe) dentro de `confirmarPedido` é síncrona e pode demorar. Movê-la para uma Promise não-bloqueante ou adicionar timeout de 5s.
+**BUG #5 — `SubscriptionBadge` sem período trial**
+O badge não diferencia entre "ativo" e "em trial". Quando o usuário está em trial, o badge mostra "Pro" sem indicar que é um teste. O `AppLayout` já tem `TrialBanner` mas o badge não reflete o estado.
 
-### Parte 4 — Adicionar tratamento especial para "pedido já criado"
-Se o erro ocorre DEPOIS que o pedido foi criado (ex: timeout após `confirmar_pedido`), o bot deve enviar uma mensagem informando que o pedido foi recebido, em vez da mensagem de erro genérica. Adicionar detecção de `confirmarPedido` bem-sucedido antes do throw.
+### Correções a implementar
 
-### Arquivo modificado:
-- `supabase/functions/whatsapp-webhook/index.ts`
-  - Linha ~1791: adicionar early return após `confirmar_pedido` bem-sucedido
-  - Linha ~1729: aumentar `max_tokens` de 2000 para 3000  
-  - Linha ~1211: adicionar `Promise.race` com timeout de 5s na chamada Stripe
+1. **`supabase/functions/check-subscription/index.ts`**: Atualizar API version para `2025-08-27.basil`
+2. **`supabase/functions/create-checkout/index.ts`**: Adicionar `subscription_data: { trial_period_days: 14 }` no `stripe.checkout.sessions.create`
+3. **`src/components/subscription/SubscriptionBadge.tsx`**: Corrigir o warning do `TooltipTrigger asChild` — remover `asChild` e usar wrapper correto
+4. **`src/components/subscription/PricingCard.tsx`**: Mover import do `Settings` para o topo do arquivo, e verificar se há ref issue
+5. **`src/components/subscription/SubscriptionBadge.tsx`**: Adicionar suporte visual para status `isTrialing` — mostrar badge diferenciado "Pro (Trial)" ou similar
+
+### Arquivos modificados
+| Arquivo | Correção |
+|---------|---------|
+| `supabase/functions/check-subscription/index.ts` | Atualizar Stripe API version para `2025-08-27.basil` |
+| `supabase/functions/create-checkout/index.ts` | Adicionar `trial_period_days: 14` no checkout |
+| `src/components/subscription/SubscriptionBadge.tsx` | Corrigir ref warning + indicador visual de trial |
+| `src/components/subscription/PricingCard.tsx` | Mover import `Settings` para o topo, corrigir estrutura |
