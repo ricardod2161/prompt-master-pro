@@ -625,6 +625,16 @@ function getProductKeyword(name: string): string {
   return words[0] || '';
 }
 
+function normalizeProductName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // remove accents
+    .replace(/[-_]/g, ' ')           // hyphens/underscores → space
+    .replace(/\s+/g, ' ')            // collapse whitespace
+    .trim();
+}
+
 // Find best matching product using flexible search
 function findBestProductMatch(
   products: Array<{ id?: string; name: string; price: number; delivery_price: number | null; description?: string | null; category?: { name: string } | null }>,
