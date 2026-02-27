@@ -73,7 +73,9 @@ export default function Pricing() {
               <span className="text-sm text-muted-foreground">Seu plano atual:</span>
               <SubscriptionBadge 
                 tier={subscription.tier} 
-                subscriptionEnd={subscription.subscriptionEnd} 
+                subscriptionEnd={subscription.subscriptionEnd}
+                isTrialing={subscription.isTrialing}
+                trialEnd={subscription.trialEnd}
               />
               <Button 
                 variant="ghost" 
