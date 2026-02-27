@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.test-evolution-connection]
 verify_jwt = false
+
+[functions.retry-audio-transcription]
+verify_jwt = false
