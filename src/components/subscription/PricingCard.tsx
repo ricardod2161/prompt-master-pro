@@ -1,4 +1,4 @@
-import { Check, Loader2, Star, Zap, Sparkles, Crown } from "lucide-react";
+import { Check, Loader2, Star, Zap, Sparkles, Crown, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SubscriptionTier, TierConfig } from "@/lib/subscription-tiers";
@@ -147,5 +147,3 @@ export function PricingCard({
   );
 }
 
-// Import for the Settings icon used in the manage button
-import { Settings } from "lucide-react";

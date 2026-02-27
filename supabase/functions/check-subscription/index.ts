@@ -54,7 +54,7 @@ serve(async (req) => {
     }
     logStep("User authenticated", { userId, email: userEmail });
 
-    const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
     const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
     
     if (customers.data.length === 0) {

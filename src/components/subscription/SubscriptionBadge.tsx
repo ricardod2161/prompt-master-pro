@@ -1,4 +1,4 @@
-import { Crown, Sparkles, Zap } from "lucide-react";
+import { Crown, Sparkles, Zap, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SubscriptionTier, SUBSCRIPTION_TIERS } from "@/lib/subscription-tiers";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -8,6 +8,8 @@ import { ptBR } from "date-fns/locale";
 interface SubscriptionBadgeProps {
   tier: SubscriptionTier | null;
   subscriptionEnd: string | null;
+  isTrialing?: boolean;
+  trialEnd?: string | null;
   className?: string;
 }
 
@@ -23,7 +25,13 @@ const tierColors: Record<SubscriptionTier, string> = {
   enterprise: "bg-purple-500/10 text-purple-500 border-purple-500/20"
 };
 
-export function SubscriptionBadge({ tier, subscriptionEnd, className }: SubscriptionBadgeProps) {
+const trialColors: Record<SubscriptionTier, string> = {
+  starter: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  pro: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  enterprise: "bg-amber-500/10 text-amber-600 border-amber-500/20"
+};
+
+export function SubscriptionBadge({ tier, subscriptionEnd, isTrialing, trialEnd, className }: SubscriptionBadgeProps) {
   if (!tier) {
     return (
       <div className={cn(
@@ -37,29 +45,35 @@ export function SubscriptionBadge({ tier, subscriptionEnd, className }: Subscrip
     );
   }
 
-  const Icon = tierIcons[tier];
+  const Icon = isTrialing ? Clock : tierIcons[tier];
   const config = SUBSCRIPTION_TIERS[tier];
-  const formattedDate = subscriptionEnd 
-    ? format(new Date(subscriptionEnd), "dd 'de' MMM 'de' yyyy", { locale: ptBR })
+  const colorClass = isTrialing ? trialColors[tier] : tierColors[tier];
+  
+  const endDate = isTrialing && trialEnd ? trialEnd : subscriptionEnd;
+  const formattedDate = endDate
+    ? format(new Date(endDate), "dd 'de' MMM 'de' yyyy", { locale: ptBR })
     : null;
 
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
+      <TooltipTrigger>
         <div className={cn(
           "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium cursor-help transition-all hover:scale-105",
-          tierColors[tier],
+          colorClass,
           className
         )}>
           <Icon className="h-3 w-3" />
-          <span>{config.name}</span>
+          <span>{config.name}{isTrialing ? " · Trial" : ""}</span>
         </div>
       </TooltipTrigger>
       <TooltipContent>
-        <p className="font-medium">Plano {config.name}</p>
+        <p className="font-medium">{isTrialing ? `Trial — Plano ${config.name}` : `Plano ${config.name}`}</p>
+        {isTrialing && (
+          <p className="text-xs text-amber-500 font-medium">Período de teste gratuito</p>
+        )}
         {formattedDate && (
           <p className="text-xs text-muted-foreground">
-            Renova em {formattedDate}
+            {isTrialing ? `Trial termina em ${formattedDate}` : `Renova em ${formattedDate}`}
           </p>
         )}
       </TooltipContent>
