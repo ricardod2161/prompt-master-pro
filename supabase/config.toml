@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.retry-audio-transcription]
 verify_jwt = false
+
+[functions.admin-access-override]
+verify_jwt = false
