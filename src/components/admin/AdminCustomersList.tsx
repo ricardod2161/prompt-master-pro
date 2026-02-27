@@ -203,9 +203,8 @@ export function AdminCustomersList() {
         ) : (
           filtered.map((customer) => {
             const override = overridesMap.get(customer.user_id);
-            const hasOverride = !!override;
             const isExpired = override?.expires_at ? new Date(override.expires_at) < new Date() : false;
-            const activeOverride = hasOverride && !isExpired ? override : null;
+            const activeOverride = override && !isExpired ? override : null;
 
             return (
               <Card key={customer.id} className={cn("hover:shadow-md transition-shadow border-border/50", activeOverride && "border-primary/40")}>
@@ -216,17 +215,29 @@ export function AdminCustomersList() {
                         <h3 className="font-semibold text-base truncate">
                           {customer.full_name || "Sem nome"}
                         </h3>
-                        {activeOverride && (
-                          <Badge className="text-xs gap-1 bg-primary/10 text-primary border-primary/30 border">
-                            <Shield className="h-3 w-3" />
-                            Override {activeOverride.tier.charAt(0).toUpperCase() + activeOverride.tier.slice(1)}
-                            {activeOverride.expires_at && (
-                              <span className="ml-1 opacity-70">
-                                · até {format(new Date(activeOverride.expires_at), "dd/MM", { locale: ptBR })}
-                              </span>
-                            )}
-                          </Badge>
-                        )}
+                        {(() => {
+                          if (!override) return null;
+                          const expired = override.expires_at ? new Date(override.expires_at) < new Date() : false;
+                          if (expired) return (
+                            <Badge variant="outline" className="text-xs gap-1 border-destructive/40 text-destructive bg-destructive/10">
+                              <Shield className="h-3 w-3" />
+                              Trial expirado
+                            </Badge>
+                          );
+                          if (!override.expires_at) return (
+                            <Badge variant="outline" className="text-xs gap-1 border-emerald-500/40 text-emerald-700 bg-emerald-500/10">
+                              <Shield className="h-3 w-3" />
+                              {override.tier.charAt(0).toUpperCase() + override.tier.slice(1)} Indefinido
+                            </Badge>
+                          );
+                          const days = Math.max(0, Math.ceil((new Date(override.expires_at).getTime() - Date.now()) / 86400000));
+                          return (
+                            <Badge variant="outline" className="text-xs gap-1 border-amber-500/40 text-amber-700 bg-amber-500/10">
+                              <Shield className="h-3 w-3" />
+                              Trial · {days}d
+                            </Badge>
+                          );
+                        })()}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5 font-mono truncate">
                         {customer.user_id}
