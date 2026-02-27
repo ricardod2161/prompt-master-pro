@@ -95,6 +95,9 @@ serve(async (req) => {
         },
       ],
       mode: "subscription",
+      subscription_data: {
+        trial_period_days: 14,
+      },
       success_url: `${origin}/subscription-success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/pricing`,
       allow_promotion_codes: true,
