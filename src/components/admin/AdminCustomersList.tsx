@@ -18,80 +18,89 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Users, UserCheck, Clock, UserX, Filter, Building2, Trash2, Loader2 } from "lucide-react";
+import { Users, UserCheck, UserX, Filter, Building2, Trash2, Loader2, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { AccessOverrideDialog } from "./AccessOverrideDialog";
 
 interface CustomerProfile {
   id: string;
   user_id: string;
   full_name: string | null;
   created_at: string;
-  email?: string;
   units: { id: string; name: string }[];
-  subscription?: {
-    subscribed: boolean;
-    tier: string | null;
-    status: string | null;
-    isTrialing: boolean;
-  };
+}
+
+interface AccessOverride {
+  id: string;
+  user_id: string;
+  tier: string;
+  is_active: boolean;
+  expires_at: string | null;
+  notes: string | null;
 }
 
 function useAdminCustomers() {
   return useQuery({
     queryKey: ["admin-customers"],
     queryFn: async () => {
-      // Get all profiles
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
         .select("id, user_id, full_name, created_at");
-
       if (profilesError) throw profilesError;
 
-      // Get all user_units with unit names
       const { data: userUnits, error: unitsError } = await supabase
         .from("user_units")
         .select("user_id, unit_id, units(id, name)");
-
       if (unitsError) throw unitsError;
 
-      // Build map of user_id -> units
       const unitsMap = new Map<string, { id: string; name: string }[]>();
       userUnits?.forEach((uu: any) => {
         const existing = unitsMap.get(uu.user_id) || [];
-        if (uu.units) {
-          existing.push({ id: uu.units.id, name: uu.units.name });
-        }
+        if (uu.units) existing.push({ id: uu.units.id, name: uu.units.name });
         unitsMap.set(uu.user_id, existing);
       });
 
-      // Merge
-      const customers: CustomerProfile[] = (profiles || []).map((p) => ({
+      return (profiles || []).map((p) => ({
         id: p.id,
         user_id: p.user_id,
         full_name: p.full_name,
         created_at: p.created_at,
         units: unitsMap.get(p.user_id) || [],
-      }));
-
-      return customers;
+      })) as CustomerProfile[];
     },
   });
 }
 
-const statusConfig = {
-  active: { label: "Ativo", color: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" },
-  trialing: { label: "Trial", color: "bg-blue-500/10 text-blue-600 border-blue-500/30" },
-  none: { label: "Sem Plano", color: "bg-muted text-muted-foreground border-border" },
-};
+function useAccessOverrides() {
+  return useQuery({
+    queryKey: ["admin-access-overrides"],
+    queryFn: async () => {
+      // Query directly since developer RLS allows it
+      const { data, error } = await (supabase as any)
+        .from("access_overrides")
+        .select("*")
+        .eq("is_active", true);
+      if (error) throw error;
+      return (data || []) as AccessOverride[];
+    },
+  });
+}
 
 export function AdminCustomersList() {
   const { data: customers = [], isLoading } = useAdminCustomers();
+  const { data: overrides = [] } = useAccessOverrides();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [overrideDialog, setOverrideDialog] = useState<{ open: boolean; customer: CustomerProfile | null }>({ open: false, customer: null });
+
+  const overridesMap = useMemo(() => {
+    const map = new Map<string, AccessOverride>();
+    overrides.forEach((o) => map.set(o.user_id, o));
+    return map;
+  }, [overrides]);
 
   const deleteCustomerMutation = useMutation({
     mutationFn: async ({ userId, profileId }: { userId: string; profileId: string }) => {
@@ -111,9 +120,6 @@ export function AdminCustomersList() {
     },
   });
 
-  // For now, subscription data is not fetched per-user (would require calling edge fn per user).
-  // We show profiles + units. Subscription check would need a batch endpoint.
-
   const filtered = useMemo(() => {
     return customers.filter((c) => {
       if (search) {
@@ -122,40 +128,28 @@ export function AdminCustomersList() {
           !c.full_name?.toLowerCase().includes(s) &&
           !c.user_id.toLowerCase().includes(s) &&
           !c.units.some((u) => u.name.toLowerCase().includes(s))
-        ) {
-          return false;
-        }
+        ) return false;
       }
       return true;
     });
   }, [customers, search]);
 
-  const stats = useMemo(() => {
-    return {
-      total: customers.length,
-      withUnits: customers.filter((c) => c.units.length > 0).length,
-      noUnits: customers.filter((c) => c.units.length === 0).length,
-    };
-  }, [customers]);
+  const stats = useMemo(() => ({
+    total: customers.length,
+    withUnits: customers.filter((c) => c.units.length > 0).length,
+    noUnits: customers.filter((c) => c.units.length === 0).length,
+  }), [customers]);
 
   if (isLoading) {
     return (
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[...Array(3)].map((_, i) => (
-            <Card key={i}>
-              <CardContent className="p-5">
-                <Skeleton className="h-10 w-full" />
-              </CardContent>
-            </Card>
+            <Card key={i}><CardContent className="p-5"><Skeleton className="h-10 w-full" /></CardContent></Card>
           ))}
         </div>
         {[...Array(5)].map((_, i) => (
-          <Card key={i}>
-            <CardContent className="p-4">
-              <Skeleton className="h-16 w-full" />
-            </CardContent>
-          </Card>
+          <Card key={i}><CardContent className="p-4"><Skeleton className="h-16 w-full" /></CardContent></Card>
         ))}
       </div>
     );
@@ -207,74 +201,117 @@ export function AdminCustomersList() {
             </CardContent>
           </Card>
         ) : (
-          filtered.map((customer) => (
-            <Card key={customer.id} className="hover:shadow-md transition-shadow border-border/50">
-              <CardContent className="p-4 sm:p-5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-base truncate">
-                        {customer.full_name || "Sem nome"}
-                      </h3>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5 font-mono truncate">
-                      {customer.user_id}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Cadastro: {format(new Date(customer.created_at), "dd/MM/yyyy", { locale: ptBR })}
-                    </p>
-                  </div>
+          filtered.map((customer) => {
+            const override = overridesMap.get(customer.user_id);
+            const hasOverride = !!override;
+            const isExpired = override?.expires_at ? new Date(override.expires_at) < new Date() : false;
+            const activeOverride = hasOverride && !isExpired ? override : null;
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    {customer.units.length > 0 ? (
-                      customer.units.map((unit) => (
-                        <Badge
-                          key={unit.id}
-                          variant="outline"
-                          className="text-xs gap-1"
-                        >
-                          <Building2 className="h-3 w-3" />
-                          {unit.name}
+            return (
+              <Card key={customer.id} className={cn("hover:shadow-md transition-shadow border-border/50", activeOverride && "border-primary/40")}>
+                <CardContent className="p-4 sm:p-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-semibold text-base truncate">
+                          {customer.full_name || "Sem nome"}
+                        </h3>
+                        {activeOverride && (
+                          <Badge className="text-xs gap-1 bg-primary/10 text-primary border-primary/30 border">
+                            <Shield className="h-3 w-3" />
+                            Override {activeOverride.tier.charAt(0).toUpperCase() + activeOverride.tier.slice(1)}
+                            {activeOverride.expires_at && (
+                              <span className="ml-1 opacity-70">
+                                · até {format(new Date(activeOverride.expires_at), "dd/MM", { locale: ptBR })}
+                              </span>
+                            )}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5 font-mono truncate">
+                        {customer.user_id}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Cadastro: {format(new Date(customer.created_at), "dd/MM/yyyy", { locale: ptBR })}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {customer.units.length > 0 ? (
+                        customer.units.map((unit) => (
+                          <Badge key={unit.id} variant="outline" className="text-xs gap-1">
+                            <Building2 className="h-3 w-3" />
+                            {unit.name}
+                          </Badge>
+                        ))
+                      ) : (
+                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                          Sem unidade
                         </Badge>
-                      ))
-                    ) : (
-                      <Badge variant="outline" className="text-xs text-muted-foreground">
-                        Sem unidade
-                      </Badge>
-                    )}
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Excluir Cliente</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Tem certeza que deseja excluir <strong>{customer.full_name || "este cliente"}</strong>? 
-                            Todas as roles, unidades e notificações associadas serão removidas. Esta ação não pode ser desfeita.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => deleteCustomerMutation.mutate({ userId: customer.user_id, profileId: customer.id })}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          >
-                            {deleteCustomerMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
-                            Excluir
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                      )}
+
+                      {/* Manage Access Button */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn(
+                          "h-8 w-8",
+                          activeOverride
+                            ? "text-primary hover:text-primary hover:bg-primary/10"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                        title="Gerenciar Acesso"
+                        onClick={() => setOverrideDialog({ open: true, customer })}
+                      >
+                        <Shield className="h-4 w-4" />
+                      </Button>
+
+                      {/* Delete Button */}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir Cliente</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Tem certeza que deseja excluir <strong>{customer.full_name || "este cliente"}</strong>?
+                              Todas as roles, unidades e notificações associadas serão removidas. Esta ação não pode ser desfeita.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => deleteCustomerMutation.mutate({ userId: customer.user_id, profileId: customer.id })}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              {deleteCustomerMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                              Excluir
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
+                </CardContent>
+              </Card>
+            );
+          })
         )}
       </div>
+
+      {/* Access Override Dialog */}
+      {overrideDialog.customer && (
+        <AccessOverrideDialog
+          open={overrideDialog.open}
+          onOpenChange={(open) => setOverrideDialog((s) => ({ ...s, open }))}
+          customerId={overrideDialog.customer.user_id}
+          customerName={overrideDialog.customer.full_name || "Cliente"}
+          currentOverride={overridesMap.get(overrideDialog.customer.user_id) || null}
+        />
+      )}
     </div>
   );
 }
