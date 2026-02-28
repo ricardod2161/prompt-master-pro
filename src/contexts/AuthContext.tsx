@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState<SubscriptionState>(defaultSubscription);
-  const [isSubscriptionLoading, setIsSubscriptionLoading] = useState(false);
+  const [isSubscriptionLoading, setIsSubscriptionLoading] = useState(true);
   const subscriptionCheckInterval = useRef<NodeJS.Timeout | null>(null);
 
   const checkSubscription = useCallback(async () => {
