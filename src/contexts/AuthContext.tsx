@@ -43,12 +43,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState<SubscriptionState>(defaultSubscription);
-  const [isSubscriptionLoading, setIsSubscriptionLoading] = useState(true);
+  const [isSubscriptionLoading, setIsSubscriptionLoading] = useState(false);
   const subscriptionCheckInterval = useRef<NodeJS.Timeout | null>(null);
 
   const checkSubscription = useCallback(async () => {
     if (!user) {
       setSubscription(defaultSubscription);
+      setIsSubscriptionLoading(false);
       return;
     }
 
@@ -72,6 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isTrialing: false,
           trialEnd: null
         });
+        setIsSubscriptionLoading(false);
         return;
       }
 
@@ -79,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (error) {
         console.error('Error checking subscription:', error);
-        // Keep previous state on error — don't reset to null
+        setIsSubscriptionLoading(false);
         return;
       }
       
@@ -94,7 +96,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     } catch (error) {
       console.error('Failed to check subscription:', error);
-      // Keep previous state on error
     } finally {
       setIsSubscriptionLoading(false);
     }
@@ -107,6 +108,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+        // If no session, subscription loading is done
+        if (!session) {
+          setIsSubscriptionLoading(false);
+        }
       }
     );
 
@@ -115,6 +120,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      if (!session) {
+        setIsSubscriptionLoading(false);
+      }
     });
 
     return () => authSubscription.unsubscribe();
