@@ -27,13 +27,13 @@ export function SubscriptionGate({
   fallback,
   showUpgradeModal = true 
 }: SubscriptionGateProps) {
-  const { subscription, isSubscriptionLoading } = useAuth();
+  const { subscription, isSubscriptionLoading, loading: authLoading } = useAuth();
   const { isDeveloper, loading: devLoading } = useIsDeveloper();
   const [showModal, setShowModal] = useState(false);
   const navigate = useNavigate();
 
-  // Show spinner while loading subscription or developer status
-  if (isSubscriptionLoading || devLoading) {
+  // Wait for auth session, subscription check, AND developer role check to all finish
+  if (authLoading || isSubscriptionLoading || devLoading) {
     return (
       <div className="flex items-center justify-center p-8">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
