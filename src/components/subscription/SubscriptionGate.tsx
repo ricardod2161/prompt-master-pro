@@ -32,11 +32,7 @@ export function SubscriptionGate({
   const [showModal, setShowModal] = useState(false);
   const navigate = useNavigate();
 
-  // Developer always has full access
-  if (isDeveloper) return <>{children}</>;
-
-  const hasAccess = canAccessFeature(subscription.tier, requiredTier);
-
+  // Show spinner while loading subscription or developer status
   if (isSubscriptionLoading || devLoading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -44,6 +40,11 @@ export function SubscriptionGate({
       </div>
     );
   }
+
+  // Developer always has full access
+  if (isDeveloper) return <>{children}</>;
+
+  const hasAccess = canAccessFeature(subscription.tier, requiredTier);
 
   if (hasAccess) {
     return <>{children}</>;
