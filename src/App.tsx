@@ -9,6 +9,7 @@ import { UnitProvider } from "@/contexts/UnitContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useTheme } from "@/hooks/useTheme";
 import { useEffect } from "react";
+import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 
 // Pages
 import Landing from "./pages/Landing";
@@ -54,63 +55,64 @@ const queryClient = new QueryClient({
 
 // Component to apply theme colors globally
 function ThemeColorApplier() {
-  // This hook automatically applies colors when settings load
   useTheme();
   return null;
 }
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
-      <TooltipProvider>
-        <AuthProvider>
-          <UnitProvider>
-            <ThemeColorApplier />
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <Routes>
-                {/* Public routes */}
-                <Route path="/" element={<Landing />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/select-unit" element={<SelectUnit />} />
-                <Route path="/order/:tableId" element={<CustomerOrder />} />
-                <Route path="/track/:token" element={<OrderTracking />} />
-                <Route path="/subscription-success" element={<SubscriptionSuccess />} />
-                <Route path="/privacy" element={<Privacy />} />
-                <Route path="/terms" element={<Terms />} />
-                <Route path="/install" element={<Install />} />
-                <Route path="/reset-password" element={<ResetPassword />} />
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+        <TooltipProvider>
+          <AuthProvider>
+            <UnitProvider>
+              <ThemeColorApplier />
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <Routes>
+                  {/* Public routes */}
+                  <Route path="/" element={<ErrorBoundary><Landing /></ErrorBoundary>} />
+                  <Route path="/login" element={<ErrorBoundary><Login /></ErrorBoundary>} />
+                  <Route path="/select-unit" element={<ErrorBoundary><SelectUnit /></ErrorBoundary>} />
+                  <Route path="/order/:tableId" element={<ErrorBoundary><CustomerOrder /></ErrorBoundary>} />
+                  <Route path="/track/:token" element={<ErrorBoundary><OrderTracking /></ErrorBoundary>} />
+                  <Route path="/subscription-success" element={<ErrorBoundary><SubscriptionSuccess /></ErrorBoundary>} />
+                  <Route path="/privacy" element={<ErrorBoundary><Privacy /></ErrorBoundary>} />
+                  <Route path="/terms" element={<ErrorBoundary><Terms /></ErrorBoundary>} />
+                  <Route path="/install" element={<ErrorBoundary><Install /></ErrorBoundary>} />
+                  <Route path="/reset-password" element={<ErrorBoundary><ResetPassword /></ErrorBoundary>} />
 
-                {/* Protected routes with layout */}
-                <Route element={<AppLayout />}>
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/menu" element={<Menu />} />
-                  <Route path="/pos" element={<POS />} />
-                  <Route path="/kds" element={<KDS />} />
-                  <Route path="/orders" element={<Orders />} />
-                  <Route path="/cashier" element={<Cashier />} />
-                  <Route path="/tables" element={<Tables />} />
-                  <Route path="/inventory" element={<Inventory />} />
-                  <Route path="/reports" element={<Reports />} />
-                  <Route path="/delivery" element={<Delivery />} />
-                  <Route path="/whatsapp/settings" element={<WhatsAppSettings />} />
-                  <Route path="/whatsapp/chat" element={<WhatsAppChat />} />
-                  <Route path="/settings" element={<Settings />} />
-                  <Route path="/marketing" element={<MarketingStudio />} />
-                  <Route path="/pricing" element={<Pricing />} />
-                  <Route path="/admin" element={<Admin />} />
-                </Route>
+                  {/* Protected routes with layout */}
+                  <Route element={<ErrorBoundary><AppLayout /></ErrorBoundary>}>
+                    <Route path="/dashboard" element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
+                    <Route path="/menu" element={<ErrorBoundary><Menu /></ErrorBoundary>} />
+                    <Route path="/pos" element={<ErrorBoundary><POS /></ErrorBoundary>} />
+                    <Route path="/kds" element={<ErrorBoundary><KDS /></ErrorBoundary>} />
+                    <Route path="/orders" element={<ErrorBoundary><Orders /></ErrorBoundary>} />
+                    <Route path="/cashier" element={<ErrorBoundary><Cashier /></ErrorBoundary>} />
+                    <Route path="/tables" element={<ErrorBoundary><Tables /></ErrorBoundary>} />
+                    <Route path="/inventory" element={<ErrorBoundary><Inventory /></ErrorBoundary>} />
+                    <Route path="/reports" element={<ErrorBoundary><Reports /></ErrorBoundary>} />
+                    <Route path="/delivery" element={<ErrorBoundary><Delivery /></ErrorBoundary>} />
+                    <Route path="/whatsapp/settings" element={<ErrorBoundary><WhatsAppSettings /></ErrorBoundary>} />
+                    <Route path="/whatsapp/chat" element={<ErrorBoundary><WhatsAppChat /></ErrorBoundary>} />
+                    <Route path="/settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
+                    <Route path="/marketing" element={<ErrorBoundary><MarketingStudio /></ErrorBoundary>} />
+                    <Route path="/pricing" element={<ErrorBoundary><Pricing /></ErrorBoundary>} />
+                    <Route path="/admin" element={<ErrorBoundary><Admin /></ErrorBoundary>} />
+                  </Route>
 
-                {/* Catch-all */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </BrowserRouter>
-          </UnitProvider>
-        </AuthProvider>
-      </TooltipProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
+                  {/* Catch-all */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </BrowserRouter>
+            </UnitProvider>
+          </AuthProvider>
+        </TooltipProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

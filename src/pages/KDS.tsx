@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
-import { Clock, ChefHat, CheckCircle, AlertTriangle, Play, Bell } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Clock, ChefHat, CheckCircle, AlertTriangle, Play, Bell, BellOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card3D, Card3DContent, Card3DHeader, Card3DTitle } from "@/components/ui/card-3d";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,24 @@ function getWaitTime(createdAt: string): { minutes: number; label: string; isLat
   return { minutes, label, isLate };
 }
 
+function playBeep() {
+  try {
+    const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    oscillator.type = "sine";
+    oscillator.frequency.value = 880;
+    gainNode.gain.setValueAtTime(0.4, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+    oscillator.start(audioCtx.currentTime);
+    oscillator.stop(audioCtx.currentTime + 0.4);
+  } catch {
+    // AudioContext not supported or blocked — silently ignore
+  }
+}
+
 function KDSOrderCard({
   order,
   onStartPreparing,
@@ -39,7 +57,7 @@ function KDSOrderCard({
   const waitTime = getWaitTime(order.created_at);
 
   return (
-    <Card3D 
+    <Card3D
       variant="subtle"
       className={cn(
         "transition-all",
@@ -78,9 +96,7 @@ function KDSOrderCard({
                   <span className="truncate font-medium">{item.product_name}</span>
                 </div>
                 {item.notes && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    📝 {item.notes}
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">📝 {item.notes}</p>
                 )}
               </div>
               {order.status === "preparing" && item.kitchen_status !== "ready" && (
@@ -104,9 +120,7 @@ function KDSOrderCard({
         )}
 
         {order.customer_name && (
-          <p className="text-sm text-muted-foreground">
-            👤 {order.customer_name}
-          </p>
+          <p className="text-sm text-muted-foreground">👤 {order.customer_name}</p>
         )}
 
         {order.status === "pending" && (
@@ -152,7 +166,6 @@ function KDSColumn({
     info: "bg-status-info/5 border-status-info/20",
     success: "bg-status-success/5 border-status-success/20",
   };
-
   const iconColorClasses = {
     warning: "text-status-warning bg-status-warning/10",
     info: "text-status-info bg-status-info/10",
@@ -171,8 +184,8 @@ function KDSColumn({
       <ScrollArea className="flex-1">
         <div className="space-y-3 pr-2">
           {orders.map((order, index) => (
-            <div 
-              key={order.id} 
+            <div
+              key={order.id}
               className="animate-fade-in-up"
               style={{ animationDelay: `${0.05 * index}s` }}
             >
@@ -200,16 +213,18 @@ export default function KDS() {
   const updateOrderStatus = useUpdateOrderStatus();
   const updateKitchenStatus = useUpdateKitchenStatus();
   const sendNotification = useOrderNotification();
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastOrderCount = useRef(0);
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    const stored = localStorage.getItem("kds-sound-enabled");
+    return stored === null ? true : stored === "true";
+  });
 
-  // Filter and categorize orders
+  // Filter and categorize orders (today only)
   const { pending, preparing, ready } = useMemo(() => {
     if (!orders) return { pending: [], preparing: [], ready: [] };
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
     const todayOrders = orders.filter((o) => new Date(o.created_at) >= today);
 
     const withKitchenStatus = todayOrders.map((order) => ({
@@ -224,28 +239,31 @@ export default function KDS() {
     };
   }, [orders]);
 
-  // Play sound on new orders
+  // Play Web Audio API beep on new pending orders
   useEffect(() => {
-    if (pending.length > lastOrderCount.current) {
-      // Play notification sound
-      if (audioRef.current) {
-        audioRef.current.play().catch(() => {});
-      }
+    if (pending.length > lastOrderCount.current && soundEnabled) {
+      playBeep();
     }
     lastOrderCount.current = pending.length;
-  }, [pending.length]);
+  }, [pending.length, soundEnabled]);
+
+  const toggleSound = () => {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      localStorage.setItem("kds-sound-enabled", String(next));
+      return next;
+    });
+  };
 
   const handleStartPreparing = (orderId: string) => {
     updateOrderStatus.mutate({ orderId, status: "preparing" });
   };
 
   const handleMarkReady = (orderId: string) => {
-    // Update status and send notification to customer
     updateOrderStatus.mutate(
       { orderId, status: "ready" },
       {
         onSuccess: () => {
-          // Send WhatsApp notification to customer
           sendNotification.mutate({ orderId, status: "ready" });
         },
       }
@@ -267,15 +285,25 @@ export default function KDS() {
   }
 
   return (
-    <div className="h-[calc(100vh-8rem)]">
-      {/* Hidden audio element for notifications */}
-      <audio
-        ref={audioRef}
-        src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleWkyVbTG6cuuVhgdmM/O0JBXR1eDr7nE0alxMB53q7jC2MKCRCg="
-        preload="auto"
-      />
+    <div className="h-[calc(100vh-8rem)] flex flex-col gap-3">
+      {/* Sound toggle */}
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={toggleSound}
+          className={cn(
+            "gap-2",
+            soundEnabled ? "text-primary" : "text-muted-foreground"
+          )}
+          title={soundEnabled ? "Desativar som" : "Ativar som"}
+        >
+          {soundEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+          {soundEnabled ? "Som ativo" : "Som desativado"}
+        </Button>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0">
         <KDSColumn
           title="Pendentes"
           icon={Clock}

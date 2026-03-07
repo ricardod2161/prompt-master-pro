@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./AuthContext";
 
@@ -22,54 +23,59 @@ const UnitContext = createContext<UnitContextType | undefined>(undefined);
 
 export function UnitProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [units, setUnits] = useState<Unit[]>([]);
-  const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const [selectedUnit, setSelectedUnitState] = useState<Unit | null>(null);
 
-  const fetchUnits = useCallback(async () => {
-    if (!user) {
-      setUnits([]);
-      setSelectedUnit(null);
-      setLoading(false);
-      return;
-    }
+  const { data: units = [], isLoading } = useQuery({
+    queryKey: ['units', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("units")
+        .select("*")
+        .order("name");
 
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("units")
-      .select("*")
-      .order("name");
+      if (error) {
+        console.error("Error fetching units:", error);
+        throw error;
+      }
+      return (data || []) as Unit[];
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000, // 5 min — units rarely change
+  });
 
-    if (error) {
-      console.error("Error fetching units:", error);
-      setUnits([]);
-    } else {
-      setUnits(data || []);
-      
-      // Try to restore selected unit from localStorage
+  // Restore selected unit from localStorage when units load
+  useEffect(() => {
+    if (units.length > 0 && !selectedUnit) {
       const savedUnitId = localStorage.getItem("selectedUnitId");
-      if (savedUnitId && data) {
-        const savedUnit = data.find((u) => u.id === savedUnitId);
+      if (savedUnitId) {
+        const savedUnit = units.find((u) => u.id === savedUnitId);
         if (savedUnit) {
-          setSelectedUnit(savedUnit);
+          setSelectedUnitState(savedUnit);
         }
       }
     }
-    setLoading(false);
+  }, [units, selectedUnit]);
+
+  // Clear units when user logs out
+  useEffect(() => {
+    if (!user) {
+      setSelectedUnitState(null);
+    }
   }, [user]);
 
-  useEffect(() => {
-    fetchUnits();
-  }, [fetchUnits]);
-
-  useEffect(() => {
-    // Persist selected unit
-    if (selectedUnit) {
-      localStorage.setItem("selectedUnitId", selectedUnit.id);
+  const setSelectedUnit = (unit: Unit | null) => {
+    setSelectedUnitState(unit);
+    if (unit) {
+      localStorage.setItem("selectedUnitId", unit.id);
     } else {
       localStorage.removeItem("selectedUnitId");
     }
-  }, [selectedUnit]);
+  };
+
+  const refetchUnits = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['units', user?.id] });
+  };
 
   return (
     <UnitContext.Provider
@@ -77,8 +83,8 @@ export function UnitProvider({ children }: { children: ReactNode }) {
         units,
         selectedUnit,
         setSelectedUnit,
-        loading,
-        refetchUnits: fetchUnits,
+        loading: isLoading,
+        refetchUnits,
       }}
     >
       {children}
