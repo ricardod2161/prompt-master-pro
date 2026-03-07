@@ -211,7 +211,7 @@ useEffect(() => {
         <Button 
           variant="outline" 
           size="sm" 
-          onClick={refetch} 
+          onClick={() => refetch()} 
           disabled={loading}
           className="hover-lift"
         >
