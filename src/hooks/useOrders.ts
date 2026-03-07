@@ -41,6 +41,8 @@ export function useOrders(filters?: {
   status?: OrderStatus;
   channel?: OrderChannel;
   date?: Date;
+  dateRange?: { start: Date; end: Date };
+  limit?: number;
 }) {
   const { selectedUnit } = useUnit();
   const queryClient = useQueryClient();
@@ -60,7 +62,8 @@ export function useOrders(filters?: {
           delivery_order:delivery_orders(*)
         `)
         .eq("unit_id", selectedUnit.id)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(filters?.limit ?? 200);
 
       if (filters?.status) {
         q = q.eq("status", filters.status);
@@ -74,6 +77,10 @@ export function useOrders(filters?: {
         const end = new Date(filters.date);
         end.setHours(23, 59, 59, 999);
         q = q.gte("created_at", start.toISOString()).lte("created_at", end.toISOString());
+      } else if (filters?.dateRange) {
+        q = q
+          .gte("created_at", filters.dateRange.start.toISOString())
+          .lte("created_at", filters.dateRange.end.toISOString());
       }
 
       const { data, error } = await q;

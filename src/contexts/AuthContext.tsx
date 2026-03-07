@@ -44,22 +44,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState<SubscriptionState>(defaultSubscription);
   const [isSubscriptionLoading, setIsSubscriptionLoading] = useState(false);
-  const subscriptionCheckInterval = useRef<NodeJS.Timeout | null>(null);
+  const subscriptionCheckInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const checkSubscription = useCallback(async () => {
-    if (!user) {
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    if (!currentSession?.user) {
       setSubscription(defaultSubscription);
       setIsSubscriptionLoading(false);
       return;
     }
 
+    const currentUser = currentSession.user;
     setIsSubscriptionLoading(true);
     try {
-      // Check developer role client-side first — developer always gets enterprise
+      // Check developer role — always grants enterprise tier
       const { data: roleData } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', user.id)
+        .eq('user_id', currentUser.id)
         .eq('role', 'developer')
         .maybeSingle();
 
@@ -78,13 +80,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const { data, error } = await supabase.functions.invoke('check-subscription');
-      
+
       if (error) {
         console.error('Error checking subscription:', error);
+        // Keep previous subscription state on error (don't reset to null)
         setIsSubscriptionLoading(false);
         return;
       }
-      
+
       setSubscription({
         subscribed: data.subscribed || false,
         tier: data.tier as SubscriptionTier | null,
@@ -96,10 +99,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     } catch (error) {
       console.error('Failed to check subscription:', error);
+      // Keep previous subscription state on error
     } finally {
       setIsSubscriptionLoading(false);
     }
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     // Set up auth state listener BEFORE checking session
@@ -108,14 +112,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
-        // If no session, subscription loading is done
         if (!session) {
           setIsSubscriptionLoading(false);
         }
       }
     );
 
-    // Check current session
+    // Check current session — subscription will be checked by the user-watching useEffect
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -128,45 +131,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => authSubscription.unsubscribe();
   }, []);
 
-  // Check subscription when user changes
+  // Check subscription exactly once when user becomes available, then poll every 10 min
   useEffect(() => {
     if (user) {
       checkSubscription();
-      
-      // Auto-refresh subscription every 5 minutes
-      subscriptionCheckInterval.current = setInterval(() => {
-        checkSubscription();
-      }, 300000);
 
-      // Also refresh when tab becomes visible
-      const handleVisibilityChange = () => {
-        if (document.visibilityState === 'visible') {
-          checkSubscription();
-        }
-      };
-      document.addEventListener('visibilitychange', handleVisibilityChange);
+      // Poll every 10 minutes (was 5 min — excessive)
+      subscriptionCheckInterval.current = setInterval(checkSubscription, 10 * 60 * 1000);
 
       return () => {
         if (subscriptionCheckInterval.current) {
           clearInterval(subscriptionCheckInterval.current);
+          subscriptionCheckInterval.current = null;
         }
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
     } else {
       setSubscription(defaultSubscription);
-      return () => {
-        if (subscriptionCheckInterval.current) {
-          clearInterval(subscriptionCheckInterval.current);
-        }
-      };
+      if (subscriptionCheckInterval.current) {
+        clearInterval(subscriptionCheckInterval.current);
+        subscriptionCheckInterval.current = null;
+      }
     }
   }, [user, checkSubscription]);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error: error as Error | null };
   };
 
@@ -176,9 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password,
       options: {
         emailRedirectTo: window.location.origin,
-        data: {
-          full_name: fullName,
-        },
+        data: { full_name: fullName },
       },
     });
     return { error: error as Error | null };
@@ -197,15 +184,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      session, 
-      loading, 
+    <AuthContext.Provider value={{
+      user,
+      session,
+      loading,
       subscription,
       isSubscriptionLoading,
-      signIn, 
-      signUp, 
-      signOut, 
+      signIn,
+      signUp,
+      signOut,
       resetPassword,
       checkSubscription
     }}>
