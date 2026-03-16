@@ -127,25 +127,31 @@ O **GastroHub** é um sistema de gestão completo para restaurantes, desenvolvid
 
 #### 1. Clone o repositório
 ```bash
-git clone <YOUR_GIT_URL>
-cd <YOUR_PROJECT_NAME>
+git clone https://github.com/seu-usuario/gastrohub.git
+cd gastrohub
 ```
 
-#### 2. Instale as dependências
+#### 2. Configure as variáveis de ambiente
+```bash
+cp .env.example .env
+# Edite .env com suas credenciais do Supabase
+```
+
+#### 3. Instale as dependências
 ```bash
 npm install
 # ou
 bun install
 ```
 
-#### 3. Inicie o servidor de desenvolvimento
+#### 4. Inicie o servidor de desenvolvimento
 ```bash
 npm run dev
 # ou
 bun dev
 ```
 
-#### 4. Acesse o sistema
+#### 5. Acesse o sistema
 Abra [http://localhost:5173](http://localhost:5173) no navegador.
 
 ---
