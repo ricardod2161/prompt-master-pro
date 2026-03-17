@@ -1440,7 +1440,7 @@ export default function Menu() {
                           )}
                           <div className="min-w-0">
                             <div className="flex items-center gap-1">
-                              {isTop && <Flame className="w-3 h-3 text-amber-500 shrink-0" />}
+                              {isTop && <Flame className="w-3 h-3 text-warning shrink-0" />}
                               <span className="font-medium truncate max-w-[180px]">{product.name}</span>
                             </div>
                             {product.description && (
