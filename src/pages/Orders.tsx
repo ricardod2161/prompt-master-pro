@@ -767,8 +767,8 @@ export default function Orders() {
 
       {/* Inline chip filters */}
       <div className="space-y-2">
-        <FilterChips value={statusFilter} onChange={setStatusFilter} options={statusChipOptions} />
-        <FilterChips value={channelFilter} onChange={setChannelFilter} options={channelChipOptions} />
+        <FilterChips value={statusFilter} onChange={(v) => setStatusFilter(v as OrderStatus | "all")} options={statusChipOptions} />
+        <FilterChips value={channelFilter} onChange={(v) => setChannelFilter(v as OrderChannel | "all")} options={channelChipOptions} />
       </div>
 
       {/* Content */}
