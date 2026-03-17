@@ -41,10 +41,9 @@ export interface WhatsAppMessage {
   created_at: string;
 }
 
+// BUG FIX: removed unused `toast` and `queryClient` from useWhatsAppSettings
 export function useWhatsAppSettings() {
   const { selectedUnit } = useUnit();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: ["whatsapp-settings", selectedUnit?.id],
@@ -75,12 +74,17 @@ export function useCreateWhatsAppSettings() {
     mutationFn: async (settings: Partial<WhatsAppSettings>) => {
       if (!selectedUnit?.id) throw new Error("Unidade não selecionada");
 
+      // BUG FIX: use upsert with onConflict to avoid duplicate key error
+      // when saving Bot before API settings
       const { data, error } = await supabase
         .from("whatsapp_settings")
-        .insert({
-          unit_id: selectedUnit.id,
-          ...settings,
-        })
+        .upsert(
+          {
+            unit_id: selectedUnit.id,
+            ...settings,
+          },
+          { onConflict: "unit_id" }
+        )
         .select()
         .single();
 
@@ -162,12 +166,12 @@ export function useWhatsAppConversations() {
     enabled: !!selectedUnit?.id,
   });
 
-  // Setup realtime subscription
+  // BUG FIX: scoped channel name to unit to prevent cross-unit/cross-tab conflicts
   useEffect(() => {
     if (!selectedUnit?.id) return;
 
     const channel = supabase
-      .channel("whatsapp-conversations-realtime")
+      .channel(`whatsapp-conversations-${selectedUnit.id}`)
       .on(
         "postgres_changes",
         {
@@ -274,5 +278,45 @@ export function useTestConnection() {
         description: error.message,
       });
     },
+  });
+}
+
+export function useWhatsAppTodayStats(unitId: string | undefined) {
+  return useQuery({
+    queryKey: ["whatsapp-today-stats", unitId],
+    queryFn: async () => {
+      if (!unitId) return { messagesToday: 0, conversationsToday: 0 };
+
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+
+      const [messagesResult, conversationsResult] = await Promise.all([
+        supabase
+          .from("whatsapp_messages")
+          .select("id", { count: "exact", head: true })
+          .gte("created_at", startOfToday.toISOString())
+          .in(
+            "conversation_id",
+            (
+              await supabase
+                .from("whatsapp_conversations")
+                .select("id")
+                .eq("unit_id", unitId)
+            ).data?.map((c) => c.id) || []
+          ),
+        supabase
+          .from("whatsapp_conversations")
+          .select("id", { count: "exact", head: true })
+          .eq("unit_id", unitId)
+          .gte("created_at", startOfToday.toISOString()),
+      ]);
+
+      return {
+        messagesToday: messagesResult.count ?? 0,
+        conversationsToday: conversationsResult.count ?? 0,
+      };
+    },
+    enabled: !!unitId,
+    refetchInterval: 60_000, // refresh every minute
   });
 }
