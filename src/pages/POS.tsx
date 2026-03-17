@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Search, ShoppingCart, Minus, Plus, Trash2, User, Phone,
   MessageSquare, Pencil, Check, X, Banknote, CreditCard,
