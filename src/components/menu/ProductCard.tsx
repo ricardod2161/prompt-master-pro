@@ -78,14 +78,14 @@ export function ProductCard({
       className={`group relative rounded-lg border bg-card/80 backdrop-blur-sm p-2 transition-all duration-200 hover:border-border
         ${!product.available ? "opacity-50 grayscale-[30%]" : ""}
         ${selected ? "ring-2 ring-primary border-primary/50" : "border-border/50"}
-        ${isTop ? "border-warning/50 shadow-sm shadow-warning/10" : ""}
+        ${isTop ? "border-status-warning/50 shadow-sm shadow-status-warning/10" : ""}
       `}
       style={{ animationDelay: `${index * 30}ms` }}
     >
       {/* Top badge */}
       {isTop && (
         <div className="absolute -top-1.5 -left-1.5 z-10">
-          <div className="bg-warning text-warning-foreground rounded-full w-5 h-5 flex items-center justify-center shadow-sm">
+          <div className="bg-status-warning text-white rounded-full w-5 h-5 flex items-center justify-center shadow-sm">
             <Flame className="w-3 h-3" />
           </div>
         </div>
