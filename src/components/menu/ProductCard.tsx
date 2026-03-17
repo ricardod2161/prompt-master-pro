@@ -78,7 +78,7 @@ export function ProductCard({
       className={`group relative rounded-lg border bg-card/80 backdrop-blur-sm p-2 transition-all duration-200 hover:border-border
         ${!product.available ? "opacity-50 grayscale-[30%]" : ""}
         ${selected ? "ring-2 ring-primary border-primary/50" : "border-border/50"}
-        ${isTop ? "border-amber-500/50 shadow-sm shadow-amber-500/10" : ""}
+        ${isTop ? "border-warning/50 shadow-sm shadow-warning/10" : ""}
       `}
       style={{ animationDelay: `${index * 30}ms` }}
     >
