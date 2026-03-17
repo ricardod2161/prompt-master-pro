@@ -313,9 +313,15 @@ export default function POS() {
     return m;
   }, [cart]);
 
-  const freeTables = useMemo(() =>
-    tables?.filter((t) => t.status === "free") ?? [],
-  [tables]);
+  // Show all non-free tables as selectable if one was pre-selected via URL (allow adding orders to occupied tables)
+  const selectableTables = useMemo(() => {
+    if (!tables) return [];
+    // If a table was pre-selected (came from Tables page), include all tables so it shows up
+    if (preselectedTableId) return tables;
+    return tables.filter((t) => t.status === "free");
+  }, [tables, preselectedTableId]);
+
+  const freeTables = selectableTables;
 
   // ── Cart actions ────────────────────────────────────────────────────────────
   const addToCart = useCallback((product: Product) => {
