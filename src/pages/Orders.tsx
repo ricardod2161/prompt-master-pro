@@ -692,24 +692,24 @@ export default function Orders() {
     }
   };
 
-  const statusChipOptions = [
-    { value: "all" as OrderStatus | "all", label: "Todos", count: orders?.length || 0, chipClass: "border-border text-foreground data-[active=true]:bg-foreground data-[active=true]:text-background" },
+  const statusChipOptions: { value: OrderStatus | "all"; label: string; count: number; chipClass: string }[] = [
+    { value: "all", label: "Todos", count: orders?.length || 0, chipClass: "border-border text-foreground data-[active=true]:bg-foreground data-[active=true]:text-background" },
     ...Object.entries(STATUS_CONFIG)
       .filter(([s]) => s !== "completed")
       .map(([s, cfg]) => ({
-        value: s as OrderStatus | "all",
+        value: s as OrderStatus,
         label: cfg.label,
         count: statusCounts[s] || 0,
         chipClass: cfg.chipClass,
       })),
   ];
 
-  const channelChipOptions = [
-    { value: "all" as OrderChannel | "all", label: "Todos", chipClass: "border-border text-foreground data-[active=true]:bg-foreground data-[active=true]:text-background" },
+  const channelChipOptions: { value: OrderChannel | "all"; label: string; count?: number; chipClass: string }[] = [
+    { value: "all", label: "Todos", chipClass: "border-border text-foreground data-[active=true]:bg-foreground data-[active=true]:text-background" },
     ...Object.entries(CHANNEL_CONFIG)
       .filter(([c]) => c !== "all")
       .map(([c, cfg]) => ({
-        value: c as OrderChannel | "all",
+        value: c as OrderChannel,
         label: cfg.label,
         count: channelCounts[c] || 0,
         chipClass: cfg.chipClass,
