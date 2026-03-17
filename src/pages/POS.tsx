@@ -679,7 +679,7 @@ export default function POS() {
                     <p className={cn(
                       "text-lg font-bold",
                       parseFloat(cashReceived.replace(",", ".") || "0") >= cartTotal
-                        ? "text-green-500"
+                        ? "text-primary"
                         : "text-destructive"
                     )}>
                       {formatCurrency(change)}
