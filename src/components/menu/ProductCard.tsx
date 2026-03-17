@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Pencil, Trash2, Clock, Truck, Copy, ShoppingBag, Layers } from "lucide-react";
+import { Pencil, Trash2, Clock, Truck, Copy, ShoppingBag, Layers, Flame } from "lucide-react";
 
 interface Category {
   id: string;
@@ -50,6 +50,7 @@ interface ProductCardProps {
   onSelect?: (productId: string, selected: boolean) => void;
   selectionMode?: boolean;
   orderCount?: number;
+  isTop?: boolean;
 }
 
 export function ProductCard({
@@ -64,6 +65,7 @@ export function ProductCard({
   onSelect,
   selectionMode = false,
   orderCount,
+  isTop = false,
 }: ProductCardProps) {
   const variations = product.variations || [];
   const hasVariations = variations.length > 0;
@@ -73,9 +75,34 @@ export function ProductCard({
 
   return (
     <div
-      className={`group rounded-lg border border-border/50 bg-card/80 backdrop-blur-sm p-2 transition-all duration-200 hover:border-border ${!product.available ? "opacity-50 grayscale-[30%]" : ""} ${selected ? "ring-2 ring-primary" : ""}`}
+      className={`group relative rounded-lg border bg-card/80 backdrop-blur-sm p-2 transition-all duration-200 hover:border-border
+        ${!product.available ? "opacity-50 grayscale-[30%]" : ""}
+        ${selected ? "ring-2 ring-primary border-primary/50" : "border-border/50"}
+        ${isTop ? "border-status-warning/50 shadow-sm shadow-status-warning/10" : ""}
+      `}
       style={{ animationDelay: `${index * 30}ms` }}
     >
+      {/* Top badge */}
+      {isTop && (
+        <div className="absolute -top-1.5 -left-1.5 z-10">
+          <div className="bg-status-warning text-white rounded-full w-5 h-5 flex items-center justify-center shadow-sm">
+            <Flame className="w-3 h-3" />
+          </div>
+        </div>
+      )}
+
+      {/* Product thumbnail */}
+      {product.image_url && (
+        <div className="w-full h-14 rounded mb-1.5 overflow-hidden">
+          <img
+            src={product.image_url}
+            alt={product.name}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+        </div>
+      )}
+
       {/* Header: Checkbox + Name + Toggle */}
       <div className="flex items-center gap-1.5">
         {selectionMode && (
@@ -127,9 +154,13 @@ export function ProductCard({
       <div className="flex items-center justify-between mt-1.5">
         <div className="flex items-baseline gap-1">
           <span className="text-xs font-bold text-primary">
-            {hasVariations ? `${formatCurrency(minPrice)}+` : formatCurrency(product.price)}
+            {product.is_variable_price
+              ? "Variável"
+              : hasVariations
+              ? `${formatCurrency(minPrice)}+`
+              : formatCurrency(product.price)}
           </span>
-          {!hasVariations && product.delivery_price && (
+          {!hasVariations && !product.is_variable_price && product.delivery_price && (
             <span className="text-[9px] text-muted-foreground flex items-center">
               <Truck className="w-2.5 h-2.5 mr-0.5" />
               {formatCurrency(product.delivery_price)}
