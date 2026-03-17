@@ -232,6 +232,9 @@ function CartPanel({
 // ── Página principal PDV ──────────────────────────────────────────────────────
 
 export default function POS() {
+  const [searchParams] = useSearchParams();
+  const preselectedTableId = searchParams.get("tableId") ?? "";
+
   const { data: products, isLoading: productsLoading } = useProducts();
   const { data: categories } = useCategories();
   const { data: tables } = useTables();
@@ -248,8 +251,9 @@ export default function POS() {
   const [recentOpen, setRecentOpen]               = useState(false);
 
   // Inline channel + table selector (above product grid)
-  const [channel, setChannel]                     = useState<OrderChannel>("counter");
-  const [selectedTable, setSelectedTable]         = useState<string>("");
+  // Pre-select "table" channel and the tableId if passed via URL param
+  const [channel, setChannel]                     = useState<OrderChannel>(preselectedTableId ? "table" : "counter");
+  const [selectedTable, setSelectedTable]         = useState<string>(preselectedTableId);
 
   // Checkout form
   const [customerName, setCustomerName]           = useState("");
