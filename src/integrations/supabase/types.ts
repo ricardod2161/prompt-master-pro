@@ -1217,6 +1217,7 @@ export type Database = {
           created_at: string
           id: string
           number: number
+          occupied_at: string | null
           qr_code: string | null
           status: Database["public"]["Enums"]["table_status"] | null
           unit_id: string
@@ -1227,6 +1228,7 @@ export type Database = {
           created_at?: string
           id?: string
           number: number
+          occupied_at?: string | null
           qr_code?: string | null
           status?: Database["public"]["Enums"]["table_status"] | null
           unit_id: string
@@ -1237,6 +1239,7 @@ export type Database = {
           created_at?: string
           id?: string
           number?: number
+          occupied_at?: string | null
           qr_code?: string | null
           status?: Database["public"]["Enums"]["table_status"] | null
           unit_id?: string
