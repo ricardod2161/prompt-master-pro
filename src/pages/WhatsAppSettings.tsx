@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,6 +58,9 @@ import {
   MicOff,
   BarChart3,
   Radio,
+  Search,
+  ExternalLink as OpenChatIcon,
+  TrendingUp,
 } from "lucide-react";
 import {
   BarChart,
@@ -75,6 +79,7 @@ import {
   useWhatsAppConversations,
   useToggleBotForConversation,
   useTestConnection,
+  useWhatsAppTodayStats,
 } from "@/hooks/useWhatsApp";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { AIPromptGenerator } from "@/components/settings/AIPromptGenerator";
@@ -91,13 +96,18 @@ import {
 } from "@/hooks/useAudioTranscriptionLogs";
 import { SubscriptionGate } from "@/components/subscription/SubscriptionGate";
 
-const WEBHOOK_URL = "https://qxqxahgfqjctvsjddfbh.supabase.co/functions/v1/whatsapp-webhook";
+// BUG FIX: use env variable instead of hardcoded project ID
+const WEBHOOK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`;
+
+const MAX_RETRY_COUNT = 3;
 
 export default function WhatsAppSettings() {
+  const navigate = useNavigate();
   const { selectedUnit } = useUnit();
   const { toast } = useToast();
   const { data: settings, isLoading } = useWhatsAppSettings();
   const { data: conversations, isLoading: loadingConversations, refetch: refetchConversations } = useWhatsAppConversations();
+  const { data: todayStats } = useWhatsAppTodayStats(selectedUnit?.id);
   const createSettings = useCreateWhatsAppSettings();
   const updateSettings = useUpdateWhatsAppSettings();
   const toggleBot = useToggleBotForConversation();
@@ -108,7 +118,10 @@ export default function WhatsAppSettings() {
   const { data: audioHistory = [] } = useAudioTranscriptionHistory();
   const retryTranscription = useRetryTranscription();
   const [retryingId, setRetryingId] = useState<string | null>(null);
-  const todayStats = computeTodayStats(audioLogs);
+  const audioTodayStats = computeTodayStats(audioLogs);
+
+  // Conversation search filter
+  const [conversationSearch, setConversationSearch] = useState("");
 
   // Form state
   const [apiUrl, setApiUrl] = useState("");
@@ -187,8 +200,32 @@ export default function WhatsAppSettings() {
     }
   };
 
-  // Password protection state
-  const [isUnlocked, setIsUnlocked] = useState(false);
+  // BUG FIX: Persist unlock state in sessionStorage scoped to unit
+  const getUnlockKey = useCallback(
+    () => `whatsapp-unlocked-${selectedUnit?.id ?? ""}`,
+    [selectedUnit?.id]
+  );
+
+  const [isUnlocked, setIsUnlocked] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return sessionStorage.getItem(`whatsapp-unlocked-${selectedUnit?.id ?? ""}`) === "true";
+  });
+
+  const handleSetUnlocked = (val: boolean) => {
+    setIsUnlocked(val);
+    if (val) {
+      sessionStorage.setItem(getUnlockKey(), "true");
+    } else {
+      sessionStorage.removeItem(getUnlockKey());
+    }
+  };
+
+  // Re-check sessionStorage when unit changes
+  useEffect(() => {
+    const stored = sessionStorage.getItem(getUnlockKey()) === "true";
+    setIsUnlocked(stored);
+  }, [getUnlockKey]);
+
   const [passwordInput, setPasswordInput] = useState("");
   const [showPasswordInput, setShowPasswordInput] = useState(false);
   const [passwordError, setPasswordError] = useState("");
@@ -220,7 +257,7 @@ export default function WhatsAppSettings() {
 
   const handleUnlock = () => {
     if (passwordInput === settings?.settings_password) {
-      setIsUnlocked(true);
+      handleSetUnlocked(true);
       setPasswordError("");
       setPasswordInput("");
     } else {
@@ -231,27 +268,15 @@ export default function WhatsAppSettings() {
   const handleSavePasswordSettings = () => {
     if (enablePasswordProtection) {
       if (!newPassword) {
-        toast({
-          variant: "destructive",
-          title: "Erro",
-          description: "Digite uma senha para ativar a proteção.",
-        });
+        toast({ variant: "destructive", title: "Erro", description: "Digite uma senha para ativar a proteção." });
         return;
       }
       if (newPassword !== confirmPassword) {
-        toast({
-          variant: "destructive",
-          title: "Erro",
-          description: "As senhas não coincidem.",
-        });
+        toast({ variant: "destructive", title: "Erro", description: "As senhas não coincidem." });
         return;
       }
       if (newPassword.length < 4) {
-        toast({
-          variant: "destructive",
-          title: "Erro",
-          description: "A senha deve ter pelo menos 4 caracteres.",
-        });
+        toast({ variant: "destructive", title: "Erro", description: "A senha deve ter pelo menos 4 caracteres." });
         return;
       }
     }
@@ -261,22 +286,12 @@ export default function WhatsAppSettings() {
     if (settings?.id) {
       updateSettings.mutate(
         { id: settings.id, settings_password: passwordValue },
-        {
-          onSuccess: () => {
-            setNewPassword("");
-            setConfirmPassword("");
-          },
-        }
+        { onSuccess: () => { setNewPassword(""); setConfirmPassword(""); } }
       );
     } else {
       createSettings.mutate(
         { settings_password: passwordValue },
-        {
-          onSuccess: () => {
-            setNewPassword("");
-            setConfirmPassword("");
-          },
-        }
+        { onSuccess: () => { setNewPassword(""); setConfirmPassword(""); } }
       );
     }
   };
@@ -284,20 +299,12 @@ export default function WhatsAppSettings() {
   const handleCopyWebhook = async () => {
     await navigator.clipboard.writeText(WEBHOOK_URL);
     setCopied(true);
-    toast({
-      title: "URL copiada!",
-      description: "Cole na configuração de webhook da Evolution API.",
-    });
+    toast({ title: "URL copiada!", description: "Cole na configuração de webhook da Evolution API." });
     setTimeout(() => setCopied(false), 2000);
   };
 
   const handleSaveApiSettings = () => {
-    const data = {
-      api_url: apiUrl,
-      api_token: apiToken,
-      instance_name: instanceName,
-    };
-
+    const data = { api_url: apiUrl, api_token: apiToken, instance_name: instanceName };
     if (settings?.id) {
       updateSettings.mutate({ id: settings.id, ...data });
     } else {
@@ -314,7 +321,6 @@ export default function WhatsAppSettings() {
       tts_voice_id: ttsVoiceId,
       elevenlabs_api_key: elevenlabsApiKey || null,
     };
-
     if (settings?.id) {
       updateSettings.mutate({ id: settings.id, ...data });
     } else {
@@ -327,10 +333,20 @@ export default function WhatsAppSettings() {
     testConnection.mutate({ apiUrl, apiToken, instanceName });
   };
 
-
   const isConnected = settings?.api_url && settings?.api_token && settings?.instance_name;
   const totalConversations = conversations?.length || 0;
   const activeConversations = conversations?.filter(c => c.is_bot_active)?.length || 0;
+
+  // Filtered conversations for search
+  const filteredConversations = conversations?.filter((c) => {
+    if (!conversationSearch.trim()) return true;
+    const q = conversationSearch.toLowerCase();
+    return (
+      c.phone.includes(conversationSearch) ||
+      c.customer_name?.toLowerCase().includes(q) ||
+      c.last_message?.toLowerCase().includes(q)
+    );
+  }) ?? [];
 
   if (!selectedUnit) {
     return (
@@ -445,7 +461,7 @@ export default function WhatsAppSettings() {
           </CardContent>
         </Card>
 
-        {/* Stats Cards */}
+        {/* Stats Cards — improved with real today data */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="border shadow-sm hover:shadow-md transition-shadow">
             <CardContent className="p-5">
@@ -454,8 +470,8 @@ export default function WhatsAppSettings() {
                   <MessageCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{totalConversations}</p>
-                  <p className="text-sm text-muted-foreground">Conversas</p>
+                  <p className="text-2xl font-bold">{todayStats?.messagesToday ?? 0}</p>
+                  <p className="text-sm text-muted-foreground">Msgs Hoje</p>
                 </div>
               </div>
             </CardContent>
@@ -465,7 +481,21 @@ export default function WhatsAppSettings() {
             <CardContent className="p-5">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
-                  <Bot className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{todayStats?.conversationsToday ?? 0}</p>
+                  <p className="text-sm text-muted-foreground">Conversas Hoje</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border shadow-sm hover:shadow-md transition-shadow">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl">
+                  <Bot className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{activeConversations}</p>
@@ -478,26 +508,12 @@ export default function WhatsAppSettings() {
           <Card className="border shadow-sm hover:shadow-md transition-shadow">
             <CardContent className="p-5">
               <div className="flex items-center gap-4">
-                <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl">
-                  <Activity className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                <div className="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-xl">
+                  <Activity className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{botEnabled ? "ON" : "OFF"}</p>
                   <p className="text-sm text-muted-foreground">Bot Global</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-xl">
-                  <Zap className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{isConnected ? "OK" : "—"}</p>
-                  <p className="text-sm text-muted-foreground">API Status</p>
                 </div>
               </div>
             </CardContent>
@@ -523,7 +539,8 @@ export default function WhatsAppSettings() {
               <Link className="h-4 w-4" />
               <span className="hidden sm:inline">Webhook</span>
             </TabsTrigger>
-            <TabsTrigger value="audio-diag" className="flex items-center gap-2 py-3 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            {/* BUG FIX: renamed tab value from "audio-diag" to "diagnostico" for semantic consistency */}
+            <TabsTrigger value="diagnostico" className="flex items-center gap-2 py-3 data-[state=active]:bg-background data-[state=active]:shadow-sm">
               <Radio className="h-4 w-4" />
               <span className="hidden sm:inline">Diagnóstico</span>
             </TabsTrigger>
@@ -784,18 +801,20 @@ export default function WhatsAppSettings() {
                             <SelectItem value="IKne3meq5aSn9XLyUdCD">👨 Charlie — masculina, casual</SelectItem>
                           </SelectContent>
                         </Select>
+                        {/* BUG FIX: removed isPreviewPlaying from disabled so user can stop playback */}
                         <Button
                           type="button"
                           variant="outline"
                           size="icon"
                           className="h-11 w-11 shrink-0"
-                          disabled={isPreviewLoading || isPreviewPlaying}
+                          disabled={isPreviewLoading}
                           onClick={handleVoicePreview}
+                          title={isPreviewPlaying ? "Parar preview" : "Ouvir amostra"}
                         >
                           {isPreviewLoading ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : isPreviewPlaying ? (
-                            <Square className="h-4 w-4" />
+                            <Square className="h-4 w-4 text-destructive" />
                           ) : (
                             <Play className="h-4 w-4" />
                           )}
@@ -934,6 +953,19 @@ export default function WhatsAppSettings() {
                     Atualizar
                   </Button>
                 </div>
+
+                {/* Search input */}
+                {conversations && conversations.length > 0 && (
+                  <div className="relative mt-2">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar por nome ou telefone..."
+                      value={conversationSearch}
+                      onChange={(e) => setConversationSearch(e.target.value)}
+                      className="pl-9 h-9 bg-muted/40 border-0"
+                    />
+                  </div>
+                )}
               </CardHeader>
               <CardContent>
                 {loadingConversations ? (
@@ -948,60 +980,93 @@ export default function WhatsAppSettings() {
                       As conversas aparecerão aqui quando clientes entrarem em contato pelo WhatsApp.
                     </p>
                   </div>
+                ) : filteredConversations.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                    <Search className="h-8 w-8 mb-2 opacity-40" />
+                    <p className="text-sm">Nenhuma conversa encontrada para "{conversationSearch}"</p>
+                  </div>
                 ) : (
                   <ScrollArea className="h-[500px]">
                     <div className="space-y-3">
-                      {conversations.map((conversation) => (
-                        <div
-                          key={conversation.id}
-                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border bg-card hover:bg-muted/30 transition-colors"
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0">
-                              <User className="h-6 w-6 text-green-600 dark:text-green-400" />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="font-medium truncate">
-                                {conversation.customer_name || "Cliente"}
-                              </p>
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Phone className="h-3 w-3" />
-                                <span>{conversation.phone}</span>
+                      {filteredConversations.map((conversation) => {
+                        // Indicator: last_message might be from user (waiting for reply)
+                        // We use a heuristic: if bot is active the last msg may be from user
+                        const isWaitingReply = conversation.is_bot_active === false;
+
+                        return (
+                          <div
+                            key={conversation.id}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border bg-card hover:bg-muted/30 transition-colors"
+                          >
+                            <div className="flex items-center gap-4">
+                              {/* Avatar with status dot */}
+                              <div className="relative shrink-0">
+                                <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                                  <User className="h-6 w-6 text-green-600 dark:text-green-400" />
+                                </div>
+                                {/* Status indicator: orange = human takeover / green = bot active */}
+                                <span
+                                  className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-card ${
+                                    isWaitingReply
+                                      ? "bg-orange-500"
+                                      : "bg-green-500"
+                                  }`}
+                                  title={isWaitingReply ? "Atendimento humano ativo" : "Bot ativo"}
+                                />
                               </div>
-                              <p className="text-sm text-muted-foreground truncate max-w-[300px] mt-1">
-                                {conversation.last_message || "—"}
-                              </p>
+                              <div className="min-w-0">
+                                <p className="font-medium truncate">
+                                  {conversation.customer_name || "Cliente"}
+                                </p>
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                  <Phone className="h-3 w-3" />
+                                  <span>{conversation.phone}</span>
+                                </div>
+                                <p className="text-sm text-muted-foreground truncate max-w-[260px] mt-0.5">
+                                  {conversation.last_message || "—"}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-4 sm:gap-6">
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Clock className="h-4 w-4" />
-                              <span className="whitespace-nowrap">
-                                {conversation.last_message_at
-                                  ? formatDistanceToNow(new Date(conversation.last_message_at), {
-                                      addSuffix: true,
-                                      locale: ptBR,
+                            
+                            <div className="flex items-center gap-3 sm:gap-4 flex-wrap sm:flex-nowrap">
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Clock className="h-4 w-4 shrink-0" />
+                                <span className="whitespace-nowrap text-xs">
+                                  {conversation.last_message_at
+                                    ? formatDistanceToNow(new Date(conversation.last_message_at), {
+                                        addSuffix: true,
+                                        locale: ptBR,
+                                      })
+                                    : "—"}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">Bot</span>
+                                <Switch
+                                  checked={conversation.is_bot_active || false}
+                                  onCheckedChange={(checked) =>
+                                    toggleBot.mutate({
+                                      conversationId: conversation.id,
+                                      isBotActive: checked,
                                     })
-                                  : "—"}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground">Bot</span>
-                              <Switch
-                                checked={conversation.is_bot_active || false}
-                                onCheckedChange={(checked) =>
-                                  toggleBot.mutate({
-                                    conversationId: conversation.id,
-                                    isBotActive: checked,
-                                  })
-                                }
-                                className="data-[state=checked]:bg-green-600"
-                              />
+                                  }
+                                  className="data-[state=checked]:bg-green-600"
+                                />
+                              </div>
+                              {/* Open chat button */}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 text-xs gap-1.5 shrink-0"
+                                onClick={() => navigate(`/whatsapp?conversation=${conversation.id}`)}
+                              >
+                                <OpenChatIcon className="h-3.5 w-3.5" />
+                                Abrir Chat
+                              </Button>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </ScrollArea>
                 )}
@@ -1093,8 +1158,8 @@ export default function WhatsAppSettings() {
             </Card>
           </TabsContent>
 
-          {/* Audio Diagnostic Tab */}
-          <TabsContent value="audio-diag" className="space-y-6">
+          {/* Audio Diagnostic Tab — BUG FIX: renamed from "audio-diag" to "diagnostico" */}
+          <TabsContent value="diagnostico" className="space-y-6">
             {/* Seção A — Estatísticas do dia */}
             <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
               <Card className="border shadow-sm">
@@ -1104,7 +1169,7 @@ export default function WhatsAppSettings() {
                       <Mic className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">{todayStats.total}</p>
+                      <p className="text-2xl font-bold">{audioTodayStats.total}</p>
                       <p className="text-xs text-muted-foreground">Áudios hoje</p>
                     </div>
                   </div>
@@ -1117,7 +1182,7 @@ export default function WhatsAppSettings() {
                       <Check className="h-5 w-5 text-status-success" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-status-success">{todayStats.success}</p>
+                      <p className="text-2xl font-bold text-status-success">{audioTodayStats.success}</p>
                       <p className="text-xs text-muted-foreground">Com sucesso</p>
                     </div>
                   </div>
@@ -1130,7 +1195,7 @@ export default function WhatsAppSettings() {
                       <MicOff className="h-5 w-5 text-destructive" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-destructive">{todayStats.failed}</p>
+                      <p className="text-2xl font-bold text-destructive">{audioTodayStats.failed}</p>
                       <p className="text-xs text-muted-foreground">Falhas</p>
                     </div>
                   </div>
@@ -1143,12 +1208,9 @@ export default function WhatsAppSettings() {
                       <BarChart3 className="h-4 w-4 text-muted-foreground" />
                       <span className="text-xs text-muted-foreground">Taxa sucesso</span>
                     </div>
-                    <span className="text-sm font-bold">{todayStats.successRate}%</span>
+                    <span className="text-sm font-bold">{audioTodayStats.successRate}%</span>
                   </div>
-                  <Progress
-                    value={todayStats.successRate}
-                    className="h-2"
-                  />
+                  <Progress value={audioTodayStats.successRate} className="h-2" />
                 </CardContent>
               </Card>
             </div>
@@ -1192,79 +1254,89 @@ export default function WhatsAppSettings() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {audioLogs.map((log) => (
-                          <TableRow key={log.id}>
-                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                              {format(new Date(log.created_at), "HH:mm:ss dd/MM")}
-                            </TableCell>
-                            <TableCell className="text-xs font-mono">
-                              {log.phone.replace(/\D/g, "").slice(-11)}
-                            </TableCell>
-                            <TableCell className="text-xs max-w-[140px] truncate">
-                              {log.failure_reason || "—"}
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                              {log.mimetype?.split("/")[1] || "—"}
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                              {log.file_size
-                                ? log.file_size > 1024 * 100
-                                  ? `${(log.file_size / 1024).toFixed(0)}KB`
-                                  : `${log.file_size}B`
-                                : "—"}
-                            </TableCell>
-                            <TableCell>
-                              {log.status === "success" ? (
-                                <Badge className="text-xs bg-status-success/10 text-status-success border-0 hover:bg-status-success/20">
-                                  ✓ Sucesso
-                                </Badge>
-                              ) : log.status === "retried" ? (
-                                <Badge className="text-xs bg-status-warning/10 text-status-warning border-0 hover:bg-status-warning/20">
-                                  ↻ Retried
-                                </Badge>
-                              ) : (
-                                <Badge variant="destructive" className="text-xs">
-                                  ✗ Falha
-                                </Badge>
-                              )}
-                              {log.retry_count > 0 && (
-                                <span className="ml-1 text-xs text-muted-foreground">
-                                  ×{log.retry_count}
-                                </span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {log.status !== "success" && log.audio_base64 && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 text-xs gap-1"
-                                  disabled={retryingId === log.id || retryTranscription.isPending}
-                                  onClick={async () => {
-                                    setRetryingId(log.id);
-                                    try {
-                                      await retryTranscription.mutateAsync(log.id);
-                                    } finally {
-                                      setRetryingId(null);
-                                    }
-                                  }}
-                                >
-                                  {retryingId === log.id ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
+                        {audioLogs.map((log) => {
+                          const maxRetriesReached = (log.retry_count ?? 0) >= MAX_RETRY_COUNT;
+                          return (
+                            <TableRow key={log.id}>
+                              <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                                {format(new Date(log.created_at), "HH:mm:ss dd/MM")}
+                              </TableCell>
+                              <TableCell className="text-xs font-mono">
+                                {log.phone.replace(/\D/g, "").slice(-11)}
+                              </TableCell>
+                              <TableCell className="text-xs max-w-[140px] truncate">
+                                {log.failure_reason || "—"}
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground">
+                                {log.mimetype?.split("/")[1] || "—"}
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground">
+                                {log.file_size
+                                  ? log.file_size > 1024 * 100
+                                    ? `${(log.file_size / 1024).toFixed(0)}KB`
+                                    : `${log.file_size}B`
+                                  : "—"}
+                              </TableCell>
+                              <TableCell>
+                                {log.status === "success" ? (
+                                  <Badge className="text-xs bg-status-success/10 text-status-success border-0 hover:bg-status-success/20">
+                                    ✓ Sucesso
+                                  </Badge>
+                                ) : log.status === "retried" ? (
+                                  <Badge className="text-xs bg-status-warning/10 text-status-warning border-0 hover:bg-status-warning/20">
+                                    ↻ Retried
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="destructive" className="text-xs">
+                                    ✗ Falha
+                                  </Badge>
+                                )}
+                                {(log.retry_count ?? 0) > 0 && (
+                                  <span className="ml-1 text-xs text-muted-foreground">
+                                    ×{log.retry_count}
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {log.status !== "success" && log.audio_base64 && (
+                                  maxRetriesReached ? (
+                                    /* BUG FIX: show "max retries" label instead of retry button */
+                                    <span className="text-xs text-muted-foreground italic">
+                                      Máx. atingido
+                                    </span>
                                   ) : (
-                                    <RefreshCw className="h-3 w-3" />
-                                  )}
-                                  Retry
-                                </Button>
-                              )}
-                              {log.transcription_result && (
-                                <span className="text-xs text-muted-foreground ml-1 max-w-[120px] truncate block text-right" title={log.transcription_result}>
-                                  "{log.transcription_result.substring(0, 30)}…"
-                                </span>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 text-xs gap-1"
+                                      disabled={retryingId === log.id || retryTranscription.isPending}
+                                      onClick={async () => {
+                                        setRetryingId(log.id);
+                                        try {
+                                          await retryTranscription.mutateAsync(log.id);
+                                        } finally {
+                                          setRetryingId(null);
+                                        }
+                                      }}
+                                    >
+                                      {retryingId === log.id ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        <RefreshCw className="h-3 w-3" />
+                                      )}
+                                      Retry
+                                    </Button>
+                                  )
+                                )}
+                                {log.transcription_result && (
+                                  <span className="text-xs text-muted-foreground ml-1 max-w-[120px] truncate block text-right" title={log.transcription_result}>
+                                    "{log.transcription_result.substring(0, 30)}…"
+                                  </span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </ScrollArea>
@@ -1382,9 +1454,7 @@ export default function WhatsAppSettings() {
                             )}
                           </Button>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          Mínimo de 4 caracteres
-                        </p>
+                        <p className="text-xs text-muted-foreground">Mínimo de 4 caracteres</p>
                       </div>
 
                       <div className="space-y-2">
@@ -1445,7 +1515,7 @@ export default function WhatsAppSettings() {
               <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   {[
-                    { title: "Proteção por sessão", desc: "A senha é solicitada cada vez que você acessa esta página" },
+                    { title: "Proteção por sessão", desc: "O desbloqueio persiste enquanto a aba estiver aberta — sem redigitar a cada troca de página" },
                     { title: "Sem recuperação", desc: "Se esquecer a senha, você precisará acessar o banco de dados para removê-la" },
                     { title: "Compartilhamento", desc: "Compartilhe a senha apenas com pessoas autorizadas a configurar o WhatsApp" },
                     { title: "Alteração", desc: "Você pode alterar ou remover a senha a qualquer momento nesta aba" },
