@@ -679,9 +679,18 @@ function BillSheetWrapper({
   open: boolean;
   onOpenChange: (v: boolean) => void;
   unitId: string | undefined;
-  pixConfig?: { pix_key: string; pix_merchant_name: string | null; pix_merchant_city: string | null } | null;
+  pixConfig?: { pix_key?: string | null; pix_merchant_name?: string | null; pix_merchant_city?: string | null } | null;
 }) {
-  const { orders, ordersLoading, billTotal, ordersCount, itemsCount, closeBill, closingBill, billClosed, resetBillState } = useTableBill(table.id, unitId);
+  const { orders, billTotal, ordersCount, itemsCount, closeBill, closingBill, billClosed, resetBillState } = useTableBill(table.id, unitId);
+
+  // Normalize pixConfig to match TableBillSheet's required type
+  const normalizedPixConfig = pixConfig?.pix_key
+    ? {
+        pix_key: pixConfig.pix_key,
+        pix_merchant_name: pixConfig.pix_merchant_name ?? null,
+        pix_merchant_city: pixConfig.pix_merchant_city ?? null,
+      }
+    : undefined;
 
   return (
     <TableBillSheet
@@ -700,7 +709,7 @@ function BillSheetWrapper({
       onCloseBill={closeBill}
       closingBill={closingBill}
       billClosed={billClosed}
-      pixConfig={pixConfig ?? undefined}
+      pixConfig={normalizedPixConfig}
     />
   );
 }
