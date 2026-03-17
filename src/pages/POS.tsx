@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Search, ShoppingCart, Minus, Plus, Trash2, User, Phone,
   MessageSquare, Pencil, Check, X, Banknote, CreditCard,
@@ -231,6 +232,9 @@ function CartPanel({
 // ── Página principal PDV ──────────────────────────────────────────────────────
 
 export default function POS() {
+  const [searchParams] = useSearchParams();
+  const preselectedTableId = searchParams.get("tableId") ?? "";
+
   const { data: products, isLoading: productsLoading } = useProducts();
   const { data: categories } = useCategories();
   const { data: tables } = useTables();
@@ -247,8 +251,9 @@ export default function POS() {
   const [recentOpen, setRecentOpen]               = useState(false);
 
   // Inline channel + table selector (above product grid)
-  const [channel, setChannel]                     = useState<OrderChannel>("counter");
-  const [selectedTable, setSelectedTable]         = useState<string>("");
+  // Pre-select "table" channel and the tableId if passed via URL param
+  const [channel, setChannel]                     = useState<OrderChannel>(preselectedTableId ? "table" : "counter");
+  const [selectedTable, setSelectedTable]         = useState<string>(preselectedTableId);
 
   // Checkout form
   const [customerName, setCustomerName]           = useState("");
@@ -308,9 +313,15 @@ export default function POS() {
     return m;
   }, [cart]);
 
-  const freeTables = useMemo(() =>
-    tables?.filter((t) => t.status === "free") ?? [],
-  [tables]);
+  // Show all non-free tables as selectable if one was pre-selected via URL (allow adding orders to occupied tables)
+  const selectableTables = useMemo(() => {
+    if (!tables) return [];
+    // If a table was pre-selected (came from Tables page), include all tables so it shows up
+    if (preselectedTableId) return tables;
+    return tables.filter((t) => t.status === "free");
+  }, [tables, preselectedTableId]);
+
+  const freeTables = selectableTables;
 
   // ── Cart actions ────────────────────────────────────────────────────────────
   const addToCart = useCallback((product: Product) => {

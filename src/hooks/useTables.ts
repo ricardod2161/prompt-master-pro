@@ -29,12 +29,12 @@ export function useTables() {
     enabled: !!selectedUnit?.id,
   });
 
-  // Realtime subscription
+  // Realtime subscription — scoped per unit to avoid cross-unit conflicts
   useEffect(() => {
     if (!selectedUnit?.id) return;
 
     const channel = supabase
-      .channel("tables-realtime")
+      .channel(`tables-realtime-${selectedUnit.id}`)
       .on(
         "postgres_changes",
         {
@@ -44,7 +44,7 @@ export function useTables() {
           filter: `unit_id=eq.${selectedUnit.id}`,
         },
         () => {
-          queryClient.refetchQueries({ queryKey: ["tables", selectedUnit.id] });
+          queryClient.invalidateQueries({ queryKey: ["tables", selectedUnit?.id] });
         }
       )
       .subscribe();

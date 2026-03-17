@@ -3,7 +3,7 @@ import {
   QrCode, Plus, Trash2, Eye, Users, Clock, UtensilsCrossed, 
   Filter, Grid3X3, RefreshCw, AlertCircle, Check, Loader2,
   Sparkles, ArrowLeft, DollarSign, ArrowUpDown, Receipt,
-  ShoppingCart
+  ShoppingCart, Timer
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Slider } from "@/components/ui/slider";
 import { useTables, useCreateTable, useDeleteTable, useUpdateTableStatus, useGenerateQRCode, type Table, type TableStatus } from "@/hooks/useTables";
 import { useOrders } from "@/hooks/useOrders";
+import { useTableBill } from "@/hooks/useTableBill";
 import { useUnit } from "@/contexts/UnitContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { TableQRCodeDialog } from "@/components/tables/TableQRCodeDialog";
@@ -96,19 +99,20 @@ function TableMetrics({ tables, totalRevenue, avgOccupiedTime }: {
     { label: "Ocupadas", value: metrics.occupied.toString(), icon: UtensilsCrossed, color: "text-blue-500", bgColor: "bg-blue-500/10" },
     { label: "Aguardando", value: metrics.pending.toString(), icon: Clock, color: "text-amber-500", bgColor: "bg-amber-500/10" },
     { label: "Receita Ativa", value: `R$ ${totalRevenue.toFixed(2)}`, icon: DollarSign, color: "text-primary", bgColor: "bg-primary/10" },
+    { label: "Tempo Médio", value: avgOccupiedTime, icon: Timer, color: "text-violet-500", bgColor: "bg-violet-500/10" },
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5">
+    <div className="grid grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
       {metricsData.map((metric) => (
         <Card key={metric.label} className="border-border/50 hover:shadow-md transition-shadow">
-          <CardContent className="p-4 sm:p-5 flex items-center gap-3">
-            <div className={cn("p-2.5 sm:p-3 rounded-xl", metric.bgColor, metric.color)}>
-              <metric.icon className="h-5 w-5 sm:h-6 sm:w-6" />
+          <CardContent className="p-3 sm:p-4 flex items-center gap-2 sm:gap-3">
+            <div className={cn("p-2 rounded-xl shrink-0", metric.bgColor, metric.color)}>
+              <metric.icon className="h-4 w-4 sm:h-5 sm:w-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-xl sm:text-2xl font-bold truncate">{metric.value}</p>
-              <p className="text-xs sm:text-sm text-muted-foreground">{metric.label}</p>
+              <p className="text-lg sm:text-xl font-bold truncate">{metric.value}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{metric.label}</p>
             </div>
           </CardContent>
         </Card>
@@ -126,6 +130,7 @@ function TableCard({
   onDelete,
   onViewOrders,
   onRelease,
+  onNewOrder,
   isUpdating
 }: { 
   table: Table;
@@ -135,18 +140,21 @@ function TableCard({
   onDelete: () => void;
   onViewOrders?: () => void;
   onRelease?: () => void;
+  onNewOrder?: () => void;
   isUpdating?: boolean;
 }) {
   const status = table.status || "free";
   const config = statusConfig[status];
   
-  const occupiedTime = table.updated_at && status !== "free" 
-    ? formatDistanceToNow(new Date(table.updated_at), { locale: ptBR, addSuffix: false })
+  // Use occupied_at for accurate time tracking, fall back to updated_at
+  const occupiedSince = (table as any).occupied_at || (status !== "free" ? table.updated_at : null);
+  const occupiedTime = occupiedSince && status !== "free" 
+    ? formatDistanceToNow(new Date(occupiedSince), { locale: ptBR, addSuffix: false })
     : null;
 
   // Time-based alert: yellow > 1h, red > 2h
-  const occupiedMs = status !== "free" && table.updated_at
-    ? Date.now() - new Date(table.updated_at).getTime()
+  const occupiedMs = status !== "free" && occupiedSince
+    ? Date.now() - new Date(occupiedSince).getTime()
     : 0;
   const isOverdue2h = occupiedMs > 2 * 60 * 60 * 1000;
   const isOverdue1h = occupiedMs > 1 * 60 * 60 * 1000;
@@ -232,12 +240,17 @@ function TableCard({
           {status !== "free" && occupiedTime && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex items-center gap-1.5 text-sm text-muted-foreground bg-background/60 backdrop-blur-sm px-3 py-2 rounded-full border border-border/50">
+                <div className={cn(
+                  "flex items-center gap-1.5 text-sm bg-background/60 backdrop-blur-sm px-3 py-2 rounded-full border border-border/50",
+                  isOverdue2h ? "text-red-500" : isOverdue1h ? "text-yellow-500" : "text-muted-foreground"
+                )}>
                   <Clock className="h-4 w-4" />
                   <span>{occupiedTime}</span>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>Tempo de ocupação: {occupiedTime}</TooltipContent>
+              <TooltipContent>
+                {isOverdue2h ? "⚠️ Mesa há mais de 2 horas!" : isOverdue1h ? "⚠️ Mesa há mais de 1 hora" : `Tempo de ocupação: ${occupiedTime}`}
+              </TooltipContent>
             </Tooltip>
           )}
         </div>
@@ -306,42 +319,61 @@ function TableCard({
         )}
 
         {/* Action Buttons */}
-        <div className="flex gap-3 flex-wrap opacity-90 group-hover:opacity-100 transition-opacity">
+        <div className="flex gap-2 flex-wrap opacity-90 group-hover:opacity-100 transition-opacity">
+          {/* + Pedido button — always visible */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 h-9 sm:h-10 text-sm bg-primary/10 text-primary hover:bg-primary/20 border-primary/30 font-semibold"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNewOrder?.();
+                }}
+              >
+                <Plus className="h-4 w-4 mr-1.5" />
+                <span>Pedido</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Novo pedido no PDV para esta mesa</TooltipContent>
+          </Tooltip>
+
           {status !== "free" && onRelease && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex-1 h-10 sm:h-11 text-sm bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-500/30"
+                  className="flex-1 h-9 sm:h-10 text-sm bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-500/30"
                   onClick={(e) => {
                     e.stopPropagation();
                     onRelease();
                   }}
                 >
-                  <Check className="h-4 w-4 mr-2" />
+                  <Check className="h-4 w-4 mr-1.5" />
                   <span>Liberar</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Liberar mesa (status → Livre)</TooltipContent>
             </Tooltip>
           )}
+
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 h-10 sm:h-11 text-sm bg-background/60 backdrop-blur-sm hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors"
+                className="h-9 sm:h-10 px-3 text-sm bg-background/60 backdrop-blur-sm hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation();
                   onGenerateQR();
                 }}
               >
-                <QrCode className="h-4 w-4 mr-2" />
-                <span>QR Code</span>
+                <QrCode className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Gerar QR Code Escaneável</TooltipContent>
+            <TooltipContent>Gerar QR Code</TooltipContent>
           </Tooltip>
           
           {ordersCount > 0 && (
@@ -350,17 +382,16 @@ function TableCard({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex-1 h-10 sm:h-11 text-sm bg-background/60 backdrop-blur-sm"
+                  className="h-9 sm:h-10 px-3 text-sm bg-background/60 backdrop-blur-sm"
                   onClick={(e) => {
                     e.stopPropagation();
                     onViewOrders?.();
                   }}
                 >
-                  <Eye className="h-4 w-4 mr-2" />
-                  <span>Ver Conta</span>
+                  <Receipt className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Ver pedidos e conta da mesa</TooltipContent>
+              <TooltipContent>Ver Conta</TooltipContent>
             </Tooltip>
           )}
           
@@ -371,7 +402,7 @@ function TableCard({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-10 sm:h-11 px-3 text-destructive hover:text-destructive hover:bg-destructive/10 bg-background/60 backdrop-blur-sm"
+                    className="h-9 sm:h-10 px-3 text-destructive hover:text-destructive hover:bg-destructive/10 bg-background/60 backdrop-blur-sm"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -386,8 +417,16 @@ function TableCard({
                   <AlertCircle className="h-5 w-5 text-destructive" />
                   Remover Mesa {table.number}?
                 </AlertDialogTitle>
-                <AlertDialogDescription>
-                  Esta ação não pode ser desfeita. Pedidos vinculados serão desassociados.
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2">
+                    <p>Esta ação não pode ser desfeita.</p>
+                    {ordersCount > 0 && (
+                      <div className="rounded-lg bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
+                        ⚠️ Esta mesa possui <strong>{ordersCount} pedido{ordersCount > 1 ? "s" : ""} ativo{ordersCount > 1 ? "s" : ""}</strong> no valor total de{" "}
+                        <strong>R$ {totalRevenue.toFixed(2)}</strong>. Os pedidos serão desassociados.
+                      </div>
+                    )}
+                  </div>
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -628,21 +667,137 @@ function StatusLegend() {
   );
 }
 
+// ============= BILL SHEET WRAPPER (uses real hook) =============
+function BillSheetWrapper({
+  table,
+  open,
+  onOpenChange,
+  unitId,
+  pixConfig,
+}: {
+  table: Table;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  unitId: string | undefined;
+  pixConfig?: { pix_key?: string | null; pix_merchant_name?: string | null; pix_merchant_city?: string | null } | null;
+}) {
+  const { orders, billTotal, ordersCount, itemsCount, closeBill, closingBill, billClosed, resetBillState } = useTableBill(table.id, unitId);
+
+  // Normalize pixConfig to match TableBillSheet's required type
+  const normalizedPixConfig = pixConfig?.pix_key
+    ? {
+        pix_key: pixConfig.pix_key,
+        pix_merchant_name: pixConfig.pix_merchant_name ?? null,
+        pix_merchant_city: pixConfig.pix_merchant_city ?? null,
+      }
+    : undefined;
+
+  return (
+    <TableBillSheet
+      open={open}
+      onOpenChange={(v) => {
+        onOpenChange(v);
+        if (!v) resetBillState();
+      }}
+      orders={orders}
+      billTotal={billTotal}
+      ordersCount={ordersCount}
+      itemsCount={itemsCount}
+      tableNumber={table.number}
+      tableId={table.id}
+      unitId={unitId}
+      onCloseBill={closeBill}
+      closingBill={closingBill}
+      billClosed={billClosed}
+      pixConfig={normalizedPixConfig}
+    />
+  );
+}
+
+// ============= STATUS FILTER CHIPS =============
+type StatusFilterValue = TableStatus | "all";
+const STATUS_FILTER_OPTIONS: { value: StatusFilterValue; label: string; color?: string }[] = [
+  { value: "all",           label: "Todas" },
+  { value: "free",          label: "Livres",      color: "emerald" },
+  { value: "occupied",      label: "Ocupadas",    color: "blue" },
+  { value: "pending_order", label: "Aguardando",  color: "amber" },
+];
+
+function StatusFilterChips({ 
+  value, 
+  onChange, 
+  counts 
+}: { 
+  value: StatusFilterValue; 
+  onChange: (v: StatusFilterValue) => void;
+  counts: Record<StatusFilterValue, number>;
+}) {
+  return (
+    <div className="flex gap-2 flex-wrap">
+      {STATUS_FILTER_OPTIONS.map(({ value: v, label, color }) => {
+        const active = value === v;
+        const colorMap: Record<string, string> = {
+          emerald: active ? "bg-emerald-500 text-white border-emerald-500" : "border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10",
+          blue:    active ? "bg-blue-500 text-white border-blue-500"       : "border-blue-500/40 text-blue-600 hover:bg-blue-500/10",
+          amber:   active ? "bg-amber-500 text-white border-amber-500"     : "border-amber-500/40 text-amber-600 hover:bg-amber-500/10",
+        };
+        return (
+          <button
+            key={v}
+            onClick={() => onChange(v)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-all",
+              color ? colorMap[color] : active
+                ? "bg-foreground text-background border-foreground"
+                : "border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
+            )}
+          >
+            {label}
+            <span className={cn(
+              "text-xs px-1.5 py-0.5 rounded-full font-bold",
+              active ? "bg-white/20" : "bg-muted"
+            )}>
+              {counts[v]}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ============= MAIN COMPONENT =============
 export default function Tables() {
   const navigate = useNavigate();
   const { data: tables = [], isLoading, refetch } = useTables();
-  const { data: orders = [] } = useOrders();
+  // Only fetch today's active orders to avoid historical data polluting the active orders map
+  const { data: orders = [] } = useOrders({ date: new Date() });
   const { selectedUnit } = useUnit();
   const createTable = useCreateTable();
   const deleteTable = useDeleteTable();
   const updateTableStatus = useUpdateTableStatus();
   const generateQRCode = useGenerateQRCode();
 
+  // Fetch pixConfig from unit_settings
+  const { data: unitSettings } = useQuery({
+    queryKey: ["unit-settings-pix", selectedUnit?.id],
+    queryFn: async () => {
+      if (!selectedUnit?.id) return null;
+      const { data } = await supabase
+        .from("unit_settings")
+        .select("pix_key, pix_merchant_name, pix_merchant_city")
+        .eq("unit_id", selectedUnit.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!selectedUnit?.id,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [selectedTableQR, setSelectedTableQR] = useState<{ number: number; qr_code: string } | null>(null);
-  const [statusFilter, setStatusFilter] = useState<TableStatus | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [updatingTableId, setUpdatingTableId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("number");
@@ -651,7 +806,7 @@ export default function Tables() {
   const [billSheetOpen, setBillSheetOpen] = useState(false);
   const [billSheetTable, setBillSheetTable] = useState<Table | null>(null);
 
-  // Map orders to tables - now as arrays
+  // Map orders to tables - filter only active statuses
   const tableOrdersMap = useMemo(() => {
     const map = new Map<string, OrderWithItems[]>();
     orders
@@ -675,27 +830,36 @@ export default function Tables() {
     return total;
   }, [tableOrdersMap]);
 
-  // Average occupied time
+  // Average occupied time using occupied_at for accuracy
   const avgOccupiedTime = useMemo(() => {
-    const occupiedTables = tables.filter(t => t.status !== "free" && t.updated_at);
+    const occupiedTables = tables.filter(t => t.status !== "free");
     if (occupiedTables.length === 0) return "—";
-    const totalMs = occupiedTables.reduce((sum, t) => sum + (Date.now() - new Date(t.updated_at).getTime()), 0);
+    const totalMs = occupiedTables.reduce((sum, t) => {
+      const since = (t as any).occupied_at || t.updated_at;
+      return sum + (Date.now() - new Date(since).getTime());
+    }, 0);
     const avgMs = totalMs / occupiedTables.length;
     const mins = Math.round(avgMs / 60000);
     if (mins < 60) return `${mins}min`;
     return `${Math.floor(mins / 60)}h${mins % 60 > 0 ? `${mins % 60}m` : ""}`;
   }, [tables]);
 
+  // Status filter counts
+  const statusCounts = useMemo<Record<StatusFilterValue, number>>(() => ({
+    all:           tables.length,
+    free:          tables.filter(t => t.status === "free").length,
+    occupied:      tables.filter(t => t.status === "occupied").length,
+    pending_order: tables.filter(t => t.status === "pending_order").length,
+  }), [tables]);
+
   // Filter & sort tables
   const filteredTables = useMemo(() => {
-    const filtered = tables
-      .filter(table => {
-        if (statusFilter !== "all" && table.status !== statusFilter) return false;
-        if (searchTerm && !table.number.toString().includes(searchTerm)) return false;
-        return true;
-      });
+    const filtered = tables.filter(table => {
+      if (statusFilter !== "all" && table.status !== statusFilter) return false;
+      if (searchTerm && !table.number.toString().includes(searchTerm)) return false;
+      return true;
+    });
 
-    // Sort
     return filtered.sort((a, b) => {
       switch (sortBy) {
         case "status": {
@@ -703,14 +867,14 @@ export default function Tables() {
           return (order[a.status || "free"] ?? 2) - (order[b.status || "free"] ?? 2);
         }
         case "time": {
-          const aTime = a.status !== "free" ? new Date(a.updated_at).getTime() : Infinity;
-          const bTime = b.status !== "free" ? new Date(b.updated_at).getTime() : Infinity;
-          return aTime - bTime; // oldest first
+          const aTime = a.status !== "free" ? new Date((a as any).occupied_at || a.updated_at).getTime() : Infinity;
+          const bTime = b.status !== "free" ? new Date((b as any).occupied_at || b.updated_at).getTime() : Infinity;
+          return aTime - bTime;
         }
         case "revenue": {
           const aRev = (tableOrdersMap.get(a.id) || []).reduce((s, o) => s + o.total_price, 0);
           const bRev = (tableOrdersMap.get(b.id) || []).reduce((s, o) => s + o.total_price, 0);
-          return bRev - aRev; // highest first
+          return bRev - aRev;
         }
         default:
           return a.number - b.number;
@@ -760,21 +924,20 @@ export default function Tables() {
     setBillSheetOpen(true);
   }, []);
 
-  // Bill sheet data
-  const billSheetOrders = useMemo(() => {
-    if (!billSheetTable) return [];
-    return tableOrdersMap.get(billSheetTable.id) || [];
-  }, [billSheetTable, tableOrdersMap]);
+  // Handle releasing a table — confirm if there are active orders
+  const handleRelease = useCallback((tableId: string, activeOrderCount: number) => {
+    const doRelease = () => {
+      setUpdatingTableId(tableId);
+      updateTableStatus.mutateAsync({ tableId, status: "free" }).finally(() => setUpdatingTableId(null));
+    };
 
-  const billTotal = useMemo(() => 
-    billSheetOrders.reduce((s, o) => s + o.total_price, 0), 
-    [billSheetOrders]
-  );
-
-  const billItemsCount = useMemo(() => 
-    billSheetOrders.reduce((s, o) => s + (o.order_items?.length || 0), 0), 
-    [billSheetOrders]
-  );
+    if (activeOrderCount > 0) {
+      // We let the AlertDialog in TableCard handle the confirmation
+      doRelease();
+    } else {
+      doRelease();
+    }
+  }, [updateTableStatus]);
 
   if (isLoading) {
     return (
@@ -842,39 +1005,32 @@ export default function Tables() {
 
         {/* Filters & Sort */}
         {tables.length > 0 && (
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Input
-                placeholder="Buscar mesa..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 h-10"
-              />
-              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Input
+                  placeholder="Buscar mesa..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 h-10"
+                />
+                <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              </div>
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+                <SelectTrigger className="w-full sm:w-[180px] h-10">
+                  <ArrowUpDown className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <SelectValue placeholder="Ordenar" />
+                </SelectTrigger>
+                <SelectContent className="bg-popover">
+                  <SelectItem value="number">Por Número</SelectItem>
+                  <SelectItem value="status">Por Status</SelectItem>
+                  <SelectItem value="time">Por Tempo (antigas)</SelectItem>
+                  <SelectItem value="revenue">Por Receita</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as TableStatus | "all")}>
-              <SelectTrigger className="w-full sm:w-[160px] h-10">
-                <SelectValue placeholder="Filtrar status" />
-              </SelectTrigger>
-              <SelectContent className="bg-popover">
-                <SelectItem value="all">Todas</SelectItem>
-                <SelectItem value="free">Livres</SelectItem>
-                <SelectItem value="occupied">Ocupadas</SelectItem>
-                <SelectItem value="pending_order">Aguardando</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-              <SelectTrigger className="w-full sm:w-[180px] h-10">
-                <ArrowUpDown className="h-4 w-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Ordenar" />
-              </SelectTrigger>
-              <SelectContent className="bg-popover">
-                <SelectItem value="number">Por Número</SelectItem>
-                <SelectItem value="status">Por Status</SelectItem>
-                <SelectItem value="time">Por Tempo (antigas)</SelectItem>
-                <SelectItem value="revenue">Por Receita</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Status filter chips */}
+            <StatusFilterChips value={statusFilter} onChange={setStatusFilter} counts={statusCounts} />
           </div>
         )}
 
@@ -909,22 +1065,23 @@ export default function Tables() {
           </Card>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6">
-            {filteredTables.map((table) => (
-              <TableCard
-                key={table.id}
-                table={table}
-                activeOrders={tableOrdersMap.get(table.id) || []}
-                onToggleStatus={() => handleToggleStatus(table.id, table.status || "free")}
-                onGenerateQR={() => handleGenerateQR(table.id, table.number)}
-                onDelete={() => deleteTable.mutate(table.id)}
-                onRelease={table.status !== "free" ? () => {
-                  setUpdatingTableId(table.id);
-                  updateTableStatus.mutateAsync({ tableId: table.id, status: "free" }).finally(() => setUpdatingTableId(null));
-                } : undefined}
-                onViewOrders={() => handleViewOrders(table)}
-                isUpdating={updatingTableId === table.id}
-              />
-            ))}
+            {filteredTables.map((table) => {
+              const activeOrders = tableOrdersMap.get(table.id) || [];
+              return (
+                <ReleaseWrapper
+                  key={table.id}
+                  table={table}
+                  activeOrders={activeOrders}
+                  onToggleStatus={() => handleToggleStatus(table.id, table.status || "free")}
+                  onGenerateQR={() => handleGenerateQR(table.id, table.number)}
+                  onDelete={() => deleteTable.mutate(table.id)}
+                  onRelease={table.status !== "free" ? () => handleRelease(table.id, activeOrders.length) : undefined}
+                  onNewOrder={() => navigate(`/pos?tableId=${table.id}`)}
+                  onViewOrders={() => handleViewOrders(table)}
+                  isUpdating={updatingTableId === table.id}
+                />
+              );
+            })}
           </div>
         )}
       </div>
@@ -946,25 +1103,88 @@ export default function Tables() {
         restaurantName={selectedUnit?.name || "Restaurante"}
       />
 
-      {/* Bill Sheet */}
+      {/* Bill Sheet — uses real useTableBill hook */}
       {billSheetTable && (
-        <TableBillSheet
+        <BillSheetWrapper
+          table={billSheetTable}
           open={billSheetOpen}
           onOpenChange={setBillSheetOpen}
-          orders={billSheetOrders}
-          billTotal={billTotal}
-          ordersCount={billSheetOrders.length}
-          itemsCount={billItemsCount}
-          tableNumber={billSheetTable.number}
-          tableId={billSheetTable.id}
           unitId={selectedUnit?.id}
-          onCloseBill={async (phone) => {
-            toast({ title: "Conta fechada!", description: `Resumo enviado para ${phone}` });
-          }}
-          closingBill={false}
-          billClosed={false}
+          pixConfig={unitSettings}
         />
       )}
     </div>
+  );
+}
+
+// ============= RELEASE WRAPPER WITH CONFIRM =============
+// Wraps TableCard to add AlertDialog confirmation when releasing a table with active orders
+function ReleaseWrapper({
+  table,
+  activeOrders,
+  onRelease,
+  ...rest
+}: {
+  table: Table;
+  activeOrders: OrderWithItems[];
+  onToggleStatus: () => void;
+  onGenerateQR: () => void;
+  onDelete: () => void;
+  onRelease?: () => void;
+  onNewOrder?: () => void;
+  onViewOrders?: () => void;
+  isUpdating?: boolean;
+}) {
+  const [releaseConfirmOpen, setReleaseConfirmOpen] = useState(false);
+  const hasActiveOrders = activeOrders.length > 0;
+  const totalRevenue = activeOrders.reduce((s, o) => s + o.total_price, 0);
+
+  const handleRelease = () => {
+    if (hasActiveOrders) {
+      setReleaseConfirmOpen(true);
+    } else {
+      onRelease?.();
+    }
+  };
+
+  return (
+    <>
+      <TableCard
+        table={table}
+        activeOrders={activeOrders}
+        onRelease={onRelease ? handleRelease : undefined}
+        {...rest}
+      />
+
+      {/* Confirm release with active orders */}
+      <AlertDialog open={releaseConfirmOpen} onOpenChange={setReleaseConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              Liberar Mesa {table.number}?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>Esta mesa possui pedidos ativos. Deseja mesmo liberar?</p>
+                <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+                  ⚠️ <strong>{activeOrders.length} pedido{activeOrders.length > 1 ? "s" : ""} ativo{activeOrders.length > 1 ? "s" : ""}</strong> — Total: <strong>R$ {totalRevenue.toFixed(2)}</strong>
+                </div>
+                <p className="text-xs text-muted-foreground">Recomendamos fechar a conta antes de liberar a mesa.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { setReleaseConfirmOpen(false); onRelease?.(); }}
+              className="bg-amber-500 text-white hover:bg-amber-600"
+            >
+              Liberar mesmo assim
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
