@@ -679,7 +679,7 @@ function BillSheetWrapper({
   open: boolean;
   onOpenChange: (v: boolean) => void;
   unitId: string | undefined;
-  pixConfig?: { pix_key?: string | null; pix_merchant_name?: string | null; pix_merchant_city?: string | null } | null;
+  pixConfig?: { pix_key: string; pix_merchant_name: string | null; pix_merchant_city: string | null } | null;
 }) {
   const { orders, ordersLoading, billTotal, ordersCount, itemsCount, closeBill, closingBill, billClosed, resetBillState } = useTableBill(table.id, unitId);
 
