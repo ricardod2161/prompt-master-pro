@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useUnit } from "@/contexts/UnitContext";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { StatCard } from "@/components/ui/stat-card";
 import { toast } from "sonner";
 import {
@@ -56,6 +62,10 @@ import {
   Layers,
   Power,
   PowerOff,
+  LayoutGrid,
+  List,
+  FolderInput,
+  Flame,
 } from "lucide-react";
 import { ProductCard } from "@/components/menu/ProductCard";
 import { CategoryChips } from "@/components/menu/CategoryChips";
@@ -99,6 +109,7 @@ interface Product {
 
 type SortOption = "name-asc" | "name-desc" | "price-asc" | "price-desc" | "recent";
 type AvailabilityFilter = "all" | "available" | "unavailable";
+type ViewMode = "grid" | "list";
 
 // Variation form item
 interface VariationFormItem {
@@ -111,6 +122,7 @@ interface VariationFormItem {
 
 export default function Menu() {
   const { selectedUnit } = useUnit();
+  const queryClient = useQueryClient();
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -118,12 +130,18 @@ export default function Menu() {
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [sortBy, setSortBy] = useState<SortOption>("name-asc");
   const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    (localStorage.getItem("menuViewMode") as ViewMode) || "grid"
+  );
 
   // Bulk selection
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [bulkDeleteDialog, setBulkDeleteDialog] = useState(false);
+  const [moveCategoryOpen, setMoveCategoryOpen] = useState(false);
+  const [movingCategory, setMovingCategory] = useState(false);
 
-  // Order counts
+  // Order counts (today, filtered by unit)
   const [orderCounts, setOrderCounts] = useState<Record<string, number>>({});
 
   // Product dialog state
@@ -146,6 +164,7 @@ export default function Menu() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Category dialog state
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
@@ -174,6 +193,10 @@ export default function Menu() {
     if (!selectedUnit) return;
     setLoading(true);
     try {
+      // Start of today in ISO format for filtering
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+
       const [categoriesRes, productsRes, variationsRes, orderCountsRes] = await Promise.all([
         supabase
           .from("categories")
@@ -185,19 +208,18 @@ export default function Menu() {
           .select("*, categories(*)")
           .eq("unit_id", selectedUnit.id)
           .order("name"),
+        // FIX: Single query with RLS filtering (no nested sub-query)
         supabase
           .from("product_variations")
-          .select("*")
-          .in(
-            "product_id",
-            (await supabase.from("products").select("id").eq("unit_id", selectedUnit.id)).data?.map(
-              (p) => p.id
-            ) || []
-          )
+          .select("*, products!inner(unit_id)")
+          .eq("products.unit_id", selectedUnit.id)
           .order("sort_order"),
+        // FIX: Filter by unit and only today's orders via JOIN
         supabase
           .from("order_items")
-          .select("product_id, quantity")
+          .select("product_id, quantity, orders!inner(unit_id, created_at)")
+          .eq("orders.unit_id", selectedUnit.id)
+          .gte("orders.created_at", startOfToday.toISOString())
           .not("product_id", "is", null),
       ]);
 
@@ -218,7 +240,7 @@ export default function Menu() {
         variations: variationsMap[p.id] || [],
       }));
 
-      // Count orders per product
+      // Count orders per product (today only, current unit)
       const counts: Record<string, number> = {};
       if (orderCountsRes.data) {
         orderCountsRes.data.forEach((item: any) => {
@@ -238,6 +260,12 @@ export default function Menu() {
       setLoading(false);
     }
   };
+
+  // Invalidate React Query caches after mutations (keeps PDV/digital menu in sync)
+  const invalidateRelatedCaches = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["products"] });
+    queryClient.invalidateQueries({ queryKey: ["categories"] });
+  }, [queryClient]);
 
   // Image upload
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -282,6 +310,7 @@ export default function Menu() {
 
   // Product CRUD
   const openProductDialog = (product?: Product) => {
+    setFormError(null);
     if (product) {
       setEditingProduct(product);
       setProductForm({
@@ -297,7 +326,6 @@ export default function Menu() {
       });
       setImagePreview(product.image_url || null);
       setImageFile(null);
-      // Load variations
       setVariationsForm(
         (product.variations || []).map((v) => ({
           id: v.id,
@@ -340,7 +368,6 @@ export default function Menu() {
     setVariationsForm((prev) => {
       const item = prev[index];
       if (item.id) {
-        // Mark for deletion
         return prev.map((v, i) => (i === index ? { ...v, _deleted: true } : v));
       }
       return prev.filter((_, i) => i !== index);
@@ -350,6 +377,30 @@ export default function Menu() {
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUnit) return;
+    setFormError(null);
+
+    // Validations
+    const trimmedName = productForm.name.trim();
+    if (!trimmedName) {
+      setFormError("O nome do produto não pode ser vazio ou conter apenas espaços.");
+      return;
+    }
+
+    const prepTime = parseInt(productForm.preparation_time);
+    if (!prepTime || prepTime < 1) {
+      setFormError("O tempo de preparo deve ser pelo menos 1 minuto.");
+      return;
+    }
+
+    if (productForm.is_variable_price && productForm.min_price && productForm.max_price) {
+      const min = parseFloat(productForm.min_price);
+      const max = parseFloat(productForm.max_price);
+      if (min >= max) {
+        setFormError("O valor mínimo deve ser menor que o valor máximo.");
+        return;
+      }
+    }
+
     setSavingProduct(true);
     try {
       let imageUrl: string | null | undefined = undefined;
@@ -362,12 +413,12 @@ export default function Menu() {
 
       const baseData = {
         unit_id: selectedUnit.id,
-        name: productForm.name,
-        description: productForm.description || null,
+        name: trimmedName,
+        description: productForm.description.trim() || null,
         price: productForm.is_variable_price ? 0 : (productForm.price ? parseFloat(productForm.price) : 0),
         delivery_price: productForm.delivery_price ? parseFloat(productForm.delivery_price) : null,
         category_id: productForm.category_id || null,
-        preparation_time: parseInt(productForm.preparation_time) || 15,
+        preparation_time: prepTime,
         is_variable_price: productForm.is_variable_price,
         min_price: productForm.is_variable_price && productForm.min_price ? parseFloat(productForm.min_price) : null,
         max_price: productForm.is_variable_price && productForm.max_price ? parseFloat(productForm.max_price) : null,
@@ -390,7 +441,6 @@ export default function Menu() {
       const activeVariations = variationsForm.filter((v) => !v._deleted);
       const deletedVariations = variationsForm.filter((v) => v._deleted && v.id);
 
-      // Delete removed variations
       if (deletedVariations.length > 0) {
         await supabase
           .from("product_variations")
@@ -398,13 +448,12 @@ export default function Menu() {
           .in("id", deletedVariations.map((v) => v.id!));
       }
 
-      // Upsert active variations
       for (let i = 0; i < activeVariations.length; i++) {
         const v = activeVariations[i];
         if (!v.name || !v.price) continue;
         const varData = {
           product_id: productId,
-          name: v.name,
+          name: v.name.trim(),
           price: parseFloat(v.price),
           delivery_price: v.delivery_price ? parseFloat(v.delivery_price) : null,
           sort_order: i,
@@ -419,6 +468,7 @@ export default function Menu() {
       toast.success(editingProduct ? "Produto atualizado!" : "Produto criado!");
       setProductDialogOpen(false);
       fetchData();
+      invalidateRelatedCaches();
     } catch (error: any) {
       console.error("Error saving product:", error);
       toast.error("Erro ao salvar produto", { description: error.message });
@@ -432,6 +482,7 @@ export default function Menu() {
       const { error } = await supabase.from("products").update({ available: !product.available }).eq("id", product.id);
       if (error) throw error;
       setProducts((prev) => prev.map((p) => (p.id === product.id ? { ...p, available: !p.available } : p)));
+      invalidateRelatedCaches();
     } catch {
       toast.error("Erro ao atualizar disponibilidade");
     }
@@ -454,6 +505,7 @@ export default function Menu() {
       toast.success("Produto excluído!");
       setDeleteDialog({ open: false, type: "product", id: "", name: "" });
       fetchData();
+      invalidateRelatedCaches();
     } catch {
       toast.error("Erro ao excluir produto");
     }
@@ -483,7 +535,6 @@ export default function Menu() {
         .single();
       if (error) throw error;
 
-      // Copy variations
       if (product.variations && product.variations.length > 0) {
         const variationsCopy = product.variations.map((v) => ({
           product_id: data.id,
@@ -498,6 +549,7 @@ export default function Menu() {
 
       toast.success("Produto duplicado!");
       fetchData();
+      invalidateRelatedCaches();
     } catch {
       toast.error("Erro ao duplicar produto");
     }
@@ -523,24 +575,26 @@ export default function Menu() {
 
   const handleBulkAction = async (action: "activate" | "deactivate" | "delete") => {
     if (selectedProducts.size === 0) return;
+
+    // Confirm bulk delete via dialog
+    if (action === "delete") {
+      setBulkDeleteDialog(true);
+      return;
+    }
+
     setBulkProcessing(true);
     try {
       const ids = Array.from(selectedProducts);
-      if (action === "delete") {
-        const { error } = await supabase.from("products").delete().in("id", ids);
-        if (error) throw error;
-        toast.success(`${ids.length} produto(s) excluído(s)!`);
-      } else {
-        const available = action === "activate";
-        const { error } = await supabase
-          .from("products")
-          .update({ available })
-          .in("id", ids);
-        if (error) throw error;
-        toast.success(`${ids.length} produto(s) ${available ? "ativado(s)" : "desativado(s)"}!`);
-      }
+      const available = action === "activate";
+      const { error } = await supabase
+        .from("products")
+        .update({ available })
+        .in("id", ids);
+      if (error) throw error;
+      toast.success(`${ids.length} produto(s) ${available ? "ativado(s)" : "desativado(s)"}!`);
       clearSelection();
       fetchData();
+      invalidateRelatedCaches();
     } catch {
       toast.error("Erro na ação em lote");
     } finally {
@@ -548,15 +602,60 @@ export default function Menu() {
     }
   };
 
-  // Export CSV
+  const executeBulkDelete = async () => {
+    setBulkDeleteDialog(false);
+    setBulkProcessing(true);
+    try {
+      const ids = Array.from(selectedProducts);
+      const { error } = await supabase.from("products").delete().in("id", ids);
+      if (error) throw error;
+      toast.success(`${ids.length} produto(s) excluído(s)!`);
+      clearSelection();
+      fetchData();
+      invalidateRelatedCaches();
+    } catch {
+      toast.error("Erro ao excluir produtos");
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
+  const handleMoveToCategory = async (categoryId: string | null) => {
+    if (selectedProducts.size === 0) return;
+    setMovingCategory(true);
+    try {
+      const ids = Array.from(selectedProducts);
+      const { error } = await supabase
+        .from("products")
+        .update({ category_id: categoryId })
+        .in("id", ids);
+      if (error) throw error;
+      toast.success(`${ids.length} produto(s) movido(s)!`);
+      setMoveCategoryOpen(false);
+      clearSelection();
+      fetchData();
+      invalidateRelatedCaches();
+    } catch {
+      toast.error("Erro ao mover produtos");
+    } finally {
+      setMovingCategory(false);
+    }
+  };
+
+  // Export CSV — FIX: handle variable price products correctly
   const exportCSV = () => {
     const headers = ["Nome", "Categoria", "Preço", "Preço Delivery", "Disponível", "Tempo Preparo", "Variações"];
     const rows = products.map((p) => {
-      const vars = (p.variations || []).map((v) => `${v.name}: R$${v.price.toFixed(2)}`).join("; ");
+      const vars = (p.variations || [])
+        .map((v) => `${v.name}: R$${v.price.toFixed(2)}${v.delivery_price ? ` (delivery: R$${v.delivery_price.toFixed(2)})` : ""}`)
+        .join("; ");
+      const priceDisplay = p.is_variable_price
+        ? `Variável (${p.min_price ? `min: R$${p.min_price.toFixed(2)}` : ""}${p.min_price && p.max_price ? ", " : ""}${p.max_price ? `max: R$${p.max_price.toFixed(2)}` : ""})`
+        : p.price.toFixed(2);
       return [
         p.name,
         p.categories?.name || "Sem categoria",
-        p.price.toFixed(2),
+        priceDisplay,
         p.delivery_price?.toFixed(2) || "",
         p.available ? "Sim" : "Não",
         String(p.preparation_time),
@@ -594,8 +693,8 @@ export default function Menu() {
     try {
       const categoryData = {
         unit_id: selectedUnit.id,
-        name: categoryForm.name,
-        description: categoryForm.description || null,
+        name: categoryForm.name.trim(),
+        description: categoryForm.description.trim() || null,
         sort_order: editingCategory?.sort_order || categories.length,
       };
       if (editingCategory) {
@@ -609,6 +708,7 @@ export default function Menu() {
       }
       setCategoryDialogOpen(false);
       fetchData();
+      invalidateRelatedCaches();
     } catch (error: any) {
       console.error("Error saving category:", error);
       toast.error("Erro ao salvar categoria", { description: error.message });
@@ -636,6 +736,7 @@ export default function Menu() {
       setDeleteDialog({ open: false, type: "category", id: "", name: "" });
       setCategoryDialogOpen(false);
       fetchData();
+      invalidateRelatedCaches();
     } catch {
       toast.error("Erro ao excluir categoria");
     }
@@ -643,6 +744,11 @@ export default function Menu() {
 
   const handleCategoryReorder = (reorderedCategories: Category[]) => {
     setCategories(reorderedCategories);
+  };
+
+  const handleViewModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    localStorage.setItem("menuViewMode", mode);
   };
 
   const formatCurrency = (value: number) =>
@@ -660,10 +766,21 @@ export default function Menu() {
 
   const availableCount = useMemo(() => products.filter((p) => p.available).length, [products]);
 
+  // FIX: avgPrice excludes variable-price products (which have price=0)
   const avgPrice = useMemo(() => {
-    if (products.length === 0) return 0;
-    return products.reduce((sum, p) => sum + p.price, 0) / products.length;
+    const fixedPriceProducts = products.filter((p) => !p.is_variable_price && p.price > 0);
+    if (fixedPriceProducts.length === 0) return 0;
+    return fixedPriceProducts.reduce((sum, p) => sum + p.price, 0) / fixedPriceProducts.length;
   }, [products]);
+
+  // Top 3 products by today's order count
+  const topProductIds = useMemo(() => {
+    const sorted = Object.entries(orderCounts)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 3)
+      .map(([id]) => id);
+    return new Set(sorted);
+  }, [orderCounts]);
 
   const filteredProducts = useMemo(() => {
     let result = products.filter((product) => {
@@ -796,6 +913,13 @@ export default function Menu() {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
+                  {/* Form error */}
+                  {formError && (
+                    <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-3 py-2">
+                      {formError}
+                    </div>
+                  )}
+
                   {/* Image Upload */}
                   <div className="space-y-2">
                     <Label>Foto do Produto</Label>
@@ -957,17 +1081,18 @@ export default function Menu() {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Tempo de Preparo (min)</Label>
+                      <Label>Tempo de Preparo (min) *</Label>
                       <Input
                         type="number"
                         min="1"
                         value={productForm.preparation_time}
                         onChange={(e) => setProductForm({ ...productForm, preparation_time: e.target.value })}
+                        required
                       />
                     </div>
                   </div>
 
-                  {/* Variations Section */}
+                  {/* Variations Section — FIX: Added delivery_price field */}
                   <div className="space-y-3 pt-2 border-t border-border">
                     <div className="flex items-center justify-between">
                       <Label className="flex items-center gap-1.5">
@@ -996,7 +1121,7 @@ export default function Menu() {
                               className="h-8 text-sm"
                             />
                           </div>
-                          <div className="w-24 space-y-1">
+                          <div className="w-20 space-y-1">
                             <Label className="text-xs">Preço</Label>
                             <Input
                               type="number"
@@ -1004,6 +1129,18 @@ export default function Menu() {
                               min="0"
                               value={variation.price}
                               onChange={(e) => updateVariation(index, "price", e.target.value)}
+                              placeholder="0,00"
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <div className="w-20 space-y-1">
+                            <Label className="text-xs">Delivery</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={variation.delivery_price}
+                              onChange={(e) => updateVariation(index, "delivery_price", e.target.value)}
                               placeholder="0,00"
                               className="h-8 text-sm"
                             />
@@ -1058,6 +1195,7 @@ export default function Menu() {
           icon={Tags}
           iconColor="info"
         />
+        {/* FIX: avgPrice now excludes variable-price products */}
         <StatCard
           title="Preço Médio"
           value={formatCurrency(avgPrice)}
@@ -1066,19 +1204,17 @@ export default function Menu() {
         />
       </div>
 
-      {/* Category Chips */}
-      {categories.length > 0 && (
-        <CategoryChips
-          categories={categories}
-          filterCategory={filterCategory}
-          onFilterChange={setFilterCategory}
-          onEditCategory={openCategoryDialog}
-          productCounts={productCounts}
-          onReorder={handleCategoryReorder}
-        />
-      )}
+      {/* Category Chips — FIX: always rendered (even with no categories) */}
+      <CategoryChips
+        categories={categories}
+        filterCategory={filterCategory}
+        onFilterChange={setFilterCategory}
+        onEditCategory={openCategoryDialog}
+        productCounts={productCounts}
+        onReorder={handleCategoryReorder}
+      />
 
-      {/* Search + Sort + Filters */}
+      {/* Search + Sort + Filters + View Toggle */}
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1089,11 +1225,15 @@ export default function Menu() {
             className="pl-9"
           />
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
           {/* Availability filter */}
           <Select value={availabilityFilter} onValueChange={(v) => setAvailabilityFilter(v as AvailabilityFilter)}>
             <SelectTrigger className="w-[140px]">
-              {availabilityFilter === "all" ? <Eye className="w-3.5 h-3.5 mr-1.5 shrink-0" /> : availabilityFilter === "available" ? <Eye className="w-3.5 h-3.5 mr-1.5 shrink-0" /> : <EyeOff className="w-3.5 h-3.5 mr-1.5 shrink-0" />}
+              {availabilityFilter === "unavailable" ? (
+                <EyeOff className="w-3.5 h-3.5 mr-1.5 shrink-0" />
+              ) : (
+                <Eye className="w-3.5 h-3.5 mr-1.5 shrink-0" />
+              )}
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1116,6 +1256,29 @@ export default function Menu() {
               <SelectItem value="recent">Mais recentes</SelectItem>
             </SelectContent>
           </Select>
+
+          {/* View Mode Toggle */}
+          <div className="flex border border-border rounded-md overflow-hidden">
+            <Button
+              variant={viewMode === "grid" ? "default" : "ghost"}
+              size="icon"
+              className="h-9 w-9 rounded-none"
+              onClick={() => handleViewModeChange("grid")}
+              title="Visualização em grade"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </Button>
+            <Button
+              variant={viewMode === "list" ? "default" : "ghost"}
+              size="icon"
+              className="h-9 w-9 rounded-none"
+              onClick={() => handleViewModeChange("list")}
+              title="Visualização em lista"
+            >
+              <List className="w-4 h-4" />
+            </Button>
+          </div>
+
           {hasActiveFilters && (
             <Button variant="ghost" size="icon" onClick={clearFilters} title="Limpar filtros">
               <FilterX className="w-4 h-4" />
@@ -1126,7 +1289,7 @@ export default function Menu() {
 
       {/* Bulk selection bar */}
       {filteredProducts.length > 0 && (
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex items-center gap-3 text-sm flex-wrap">
           <div className="flex items-center gap-2">
             <Checkbox
               checked={selectedProducts.size === filteredProducts.length && filteredProducts.length > 0}
@@ -1137,7 +1300,7 @@ export default function Menu() {
             </span>
           </div>
           {selectionMode && (
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 flex-wrap">
               <Button
                 variant="outline"
                 size="sm"
@@ -1156,6 +1319,37 @@ export default function Menu() {
                 <PowerOff className="w-3.5 h-3.5 mr-1" />
                 Desativar
               </Button>
+              {/* Move to category */}
+              <Popover open={moveCategoryOpen} onOpenChange={setMoveCategoryOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={bulkProcessing}>
+                    <FolderInput className="w-3.5 h-3.5 mr-1" />
+                    Mover para...
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-2" align="start">
+                  <p className="text-xs font-medium text-muted-foreground mb-2 px-1">Mover para categoria</p>
+                  <button
+                    className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-muted transition-colors"
+                    onClick={() => handleMoveToCategory(null)}
+                    disabled={movingCategory}
+                  >
+                    {movingCategory ? <Loader2 className="w-3 h-3 animate-spin inline mr-1" /> : null}
+                    Sem categoria
+                  </button>
+                  {categories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-muted transition-colors"
+                      onClick={() => handleMoveToCategory(cat.id)}
+                      disabled={movingCategory}
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
+                </PopoverContent>
+              </Popover>
+              {/* FIX: Bulk delete now opens confirmation dialog */}
               <Button
                 variant="destructive"
                 size="sm"
@@ -1163,7 +1357,7 @@ export default function Menu() {
                 disabled={bulkProcessing}
               >
                 <Trash2 className="w-3.5 h-3.5 mr-1" />
-                Excluir
+                Excluir ({selectedProducts.size})
               </Button>
             </div>
           )}
@@ -1177,26 +1371,148 @@ export default function Menu() {
         </p>
       )}
 
-      {/* Products Grid */}
+      {/* Products — Grid View */}
       {filteredProducts.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2">
-          {filteredProducts.map((product, index) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onEdit={openProductDialog}
-              onDelete={confirmDeleteProduct}
-              onToggleAvailability={handleToggleProductAvailability}
-              onDuplicate={handleDuplicateProduct}
-              formatCurrency={formatCurrency}
-              index={index}
-              selected={selectedProducts.has(product.id)}
-              onSelect={toggleSelectProduct}
-              selectionMode={selectionMode}
-              orderCount={orderCounts[product.id]}
-            />
-          ))}
-        </div>
+        viewMode === "grid" ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2">
+            {filteredProducts.map((product, index) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                onEdit={openProductDialog}
+                onDelete={confirmDeleteProduct}
+                onToggleAvailability={handleToggleProductAvailability}
+                onDuplicate={handleDuplicateProduct}
+                formatCurrency={formatCurrency}
+                index={index}
+                selected={selectedProducts.has(product.id)}
+                onSelect={toggleSelectProduct}
+                selectionMode={selectionMode}
+                orderCount={orderCounts[product.id]}
+                isTop={topProductIds.has(product.id)}
+              />
+            ))}
+          </div>
+        ) : (
+          /* List View */
+          <div className="rounded-lg border border-border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="w-8 p-2">
+                    <Checkbox
+                      checked={selectedProducts.size === filteredProducts.length && filteredProducts.length > 0}
+                      onCheckedChange={(checked) => (checked ? selectAll() : clearSelection())}
+                    />
+                  </th>
+                  <th className="text-left p-2 font-medium">Produto</th>
+                  <th className="text-left p-2 font-medium hidden sm:table-cell">Categoria</th>
+                  <th className="text-left p-2 font-medium">Preço</th>
+                  <th className="text-left p-2 font-medium hidden md:table-cell">Delivery</th>
+                  <th className="text-left p-2 font-medium hidden lg:table-cell">Pedidos hoje</th>
+                  <th className="text-center p-2 font-medium">Ativo</th>
+                  <th className="text-right p-2 font-medium">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProducts.map((product) => {
+                  const isTop = topProductIds.has(product.id);
+                  const todayCount = orderCounts[product.id] || 0;
+                  return (
+                    <tr
+                      key={product.id}
+                      className={`border-t border-border/50 hover:bg-muted/30 transition-colors ${selectedProducts.has(product.id) ? "bg-primary/5" : ""} ${!product.available ? "opacity-60" : ""}`}
+                    >
+                      <td className="p-2">
+                        <Checkbox
+                          checked={selectedProducts.has(product.id)}
+                          onCheckedChange={(checked) => toggleSelectProduct(product.id, !!checked)}
+                        />
+                      </td>
+                      <td className="p-2">
+                        <div className="flex items-center gap-2">
+                          {product.image_url && (
+                            <img
+                              src={product.image_url}
+                              alt={product.name}
+                              className="w-8 h-8 rounded object-cover shrink-0"
+                            />
+                          )}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1">
+                              {isTop && <Flame className="w-3 h-3 text-amber-500 shrink-0" />}
+                              <span className="font-medium truncate max-w-[180px]">{product.name}</span>
+                            </div>
+                            {product.description && (
+                              <p className="text-xs text-muted-foreground truncate max-w-[180px]">
+                                {product.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-2 hidden sm:table-cell">
+                        <span className="text-muted-foreground text-xs">
+                          {product.categories?.name || "—"}
+                        </span>
+                      </td>
+                      <td className="p-2">
+                        <span className="font-medium text-primary text-xs">
+                          {product.is_variable_price
+                            ? "Variável"
+                            : (product.variations && product.variations.length > 0)
+                            ? `${formatCurrency(Math.min(product.price, ...product.variations.map(v => v.price)))}+`
+                            : formatCurrency(product.price)}
+                        </span>
+                      </td>
+                      <td className="p-2 hidden md:table-cell">
+                        <span className="text-muted-foreground text-xs">
+                          {product.delivery_price ? formatCurrency(product.delivery_price) : "—"}
+                        </span>
+                      </td>
+                      <td className="p-2 hidden lg:table-cell">
+                        {todayCount > 0 ? (
+                          <Badge variant="secondary" className="text-xs">
+                            {todayCount}×
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="p-2 text-center">
+                        <Switch
+                          checked={product.available ?? true}
+                          onCheckedChange={() => handleToggleProductAvailability(product)}
+                          className="scale-75"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => openProductDialog(product)}
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => confirmDeleteProduct(product.id)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
       ) : (
         <div className="text-center py-16">
           <UtensilsCrossed className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
@@ -1230,6 +1546,29 @@ export default function Menu() {
             >
               <Trash2 className="w-4 h-4 mr-2" />
               Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={bulkDeleteDialog} onOpenChange={setBulkDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {selectedProducts.size} produto(s)</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir <strong>{selectedProducts.size} produto(s)</strong>?
+              Esta ação não pode ser desfeita e removerá todos os dados associados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeBulkDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Excluir {selectedProducts.size} produto(s)
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
