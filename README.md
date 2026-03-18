@@ -210,7 +210,9 @@ Para documentação detalhada, consulte:
 
 ## 📄 Licença
 
-Este projeto está sob a licença MIT.
+MIT License — Copyright (c) 2026 **Paulo Ricardo Dantas de Lima**
+
+Consulte o arquivo [LICENSE](./LICENSE) para os termos completos.
 
 ---
 
