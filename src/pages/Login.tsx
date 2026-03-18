@@ -340,7 +340,7 @@ export default function Login() {
         </GlassCard>
 
         <p className="text-center text-sm text-muted-foreground">
-          © 2026 RestaurantOS. Todos os direitos reservados.
+          © 2026 Paulo Ricardo Dantas de Lima — RestaurantOS. Todos os direitos reservados.
         </p>
       </div>
     </div>
