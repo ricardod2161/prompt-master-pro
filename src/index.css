@@ -2,6 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   iOS / Safari compatibility layer (safe, non-breaking)
+   ========================================================================== */
+@layer base {
+  html, body {
+    /* Fallback + dynamic viewport height for iOS Safari address bar */
+    min-height: 100vh;
+    min-height: 100dvh;
+    /* Prevent pull-to-refresh & overscroll bounce on iOS */
+    overscroll-behavior-y: none;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    /* Respect notch / Dynamic Island on iPhone 14/15/16 Pro */
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Remove grey tap flash on iOS */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent long-press callout menu on buttons/images */
+  button, a, img {
+    -webkit-touch-callout: none;
+  }
+
+  /* Prevent iOS auto-zoom on focused inputs (font-size must be >= 16px) */
+  @supports (-webkit-touch-callout: none) {
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
+}
+
+/* Utility classes for safe-area padding (opt-in per component) */
+@layer utilities {
+  .safe-top { padding-top: env(safe-area-inset-top); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .min-h-dvh { min-height: 100vh; min-height: 100dvh; }
+}
+
 /* RestaurantOS - 3D Professional Design System
    Optimized for kitchen environments and low-light conditions
    Features: 3D shadows, glassmorphism, gradients, micro-animations
