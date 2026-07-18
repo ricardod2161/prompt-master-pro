@@ -14,12 +14,17 @@
 //   });
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { debitAISystem } from "./ai-wallet.ts";
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
 interface ChatOptions {
   functionName: string;
   unitId?: string | null;
+  userId?: string | null;
+  /** Slug do sistema que originou a chamada (restaurant, whatsapp, marketing, ...).
+   *  Obrigatório para debitar a carteira correta. */
+  systemSlug?: string;
   messages: ChatMessage[];
   preferredModel?: string;              // ex: "google/gemini-2.5-flash"
   openaiFallbackModel?: string;         // ex: "gpt-4o-mini"
