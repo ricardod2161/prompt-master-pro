@@ -230,6 +230,15 @@ export async function chatWithFallback(opts: ChatOptions): Promise<ChatResult> {
         fallbackUsed: false,
       });
 
+      if (systemSlug) {
+        await debitAISystem({
+          systemSlug, amount: 1, model: preferredModel,
+          tokensInput: usage.prompt_tokens, tokensOutput: usage.completion_tokens,
+          costUsd: cost, responseMs: Date.now() - t0,
+          unitId, userId, metadata: { function: functionName, fallback: false },
+        });
+      }
+
       return { text, provider: "lovable", model: preferredModel, fallbackUsed: false, totalTokens };
     }
 
