@@ -1834,6 +1834,18 @@ async function processWithAI(
     }
 
     const aiData = await aiResponse.json();
+    // Débito na carteira do sistema WhatsApp
+    const _u = aiData.usage ?? {};
+    await debitAISystem({
+      systemSlug: "whatsapp",
+      amount: 1,
+      model: "google/gemini-2.5-pro",
+      tokensInput: _u.prompt_tokens,
+      tokensOutput: _u.completion_tokens,
+      costUsd: estimateCostUsd("google/gemini-2.5-pro", _u.total_tokens ?? 0),
+      unitId,
+      metadata: { function: "whatsapp-webhook", stage: "bot-turn", iter: iterations },
+    });
     const choice = aiData.choices?.[0];
     
     if (!choice) {
