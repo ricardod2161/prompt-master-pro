@@ -22,6 +22,7 @@ import {
   Crown,
   UserCheck,
   Bot,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
