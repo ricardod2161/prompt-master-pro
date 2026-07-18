@@ -1734,6 +1734,16 @@ export type Database = {
       }
       delete_order_cascade: { Args: { _order_id: string }; Returns: undefined }
       expire_pending_pix_transactions: { Args: never; Returns: number }
+      get_default_unit: { Args: { _user_id: string }; Returns: string }
+      get_user_units: {
+        Args: { _user_id: string }
+        Returns: {
+          address: string
+          id: string
+          is_default: boolean
+          name: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
