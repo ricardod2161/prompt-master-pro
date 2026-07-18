@@ -95,6 +95,10 @@ import {
   computeTodayStats,
 } from "@/hooks/useAudioTranscriptionLogs";
 import { SubscriptionGate } from "@/components/subscription/SubscriptionGate";
+import { WebhookTab } from "@/components/whatsapp-settings/WebhookTab";
+import { ConversationsTab } from "@/components/whatsapp-settings/ConversationsTab";
+import { DiagnosticoTab } from "@/components/whatsapp-settings/DiagnosticoTab";
+import { SecurityTab } from "@/components/whatsapp-settings/SecurityTab";
 
 // BUG FIX: use env variable instead of hardcoded project ID
 const WEBHOOK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`;
