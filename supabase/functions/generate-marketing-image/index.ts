@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { debitAISystem, estimateCostUsd } from "../_shared/ai-wallet.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -159,6 +160,13 @@ Do NOT include:
     }
 
     const aiData = await aiResponse.json();
+    const _mu = aiData.usage ?? {};
+    await debitAISystem({
+      systemSlug: "marketing", amount: 1, model: "google/gemini-3-pro-image-preview",
+      tokensInput: _mu.prompt_tokens, tokensOutput: _mu.completion_tokens,
+      costUsd: estimateCostUsd("google/gemini-2.5-flash-image", _mu.total_tokens ?? 0),
+      metadata: { function: "generate-marketing-image" },
+    });
     const imageData = aiData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
 
     if (!imageData) {

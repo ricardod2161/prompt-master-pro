@@ -14,12 +14,17 @@
 //   });
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { debitAISystem } from "./ai-wallet.ts";
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
 interface ChatOptions {
   functionName: string;
   unitId?: string | null;
+  userId?: string | null;
+  /** Slug do sistema que originou a chamada (restaurant, whatsapp, marketing, ...).
+   *  Obrigatório para debitar a carteira correta. */
+  systemSlug?: string;
   messages: ChatMessage[];
   preferredModel?: string;              // ex: "google/gemini-2.5-flash"
   openaiFallbackModel?: string;         // ex: "gpt-4o-mini"
@@ -178,6 +183,8 @@ export async function chatWithFallback(opts: ChatOptions): Promise<ChatResult> {
   const {
     functionName,
     unitId,
+    userId,
+    systemSlug,
     messages,
     preferredModel = "google/gemini-2.5-flash",
     openaiFallbackModel = "gpt-4o-mini",
@@ -222,6 +229,15 @@ export async function chatWithFallback(opts: ChatOptions): Promise<ChatResult> {
         estimatedCostUsd: cost,
         fallbackUsed: false,
       });
+
+      if (systemSlug) {
+        await debitAISystem({
+          systemSlug, amount: 1, model: preferredModel,
+          tokensInput: usage.prompt_tokens, tokensOutput: usage.completion_tokens,
+          costUsd: cost, responseMs: Date.now() - t0,
+          unitId, userId, metadata: { function: functionName, fallback: false },
+        });
+      }
 
       return { text, provider: "lovable", model: preferredModel, fallbackUsed: false, totalTokens };
     }
@@ -295,6 +311,15 @@ export async function chatWithFallback(opts: ChatOptions): Promise<ChatResult> {
         estimatedCostUsd: cost,
         fallbackUsed: true,
       });
+
+      if (systemSlug) {
+        await debitAISystem({
+          systemSlug, amount: 1, model: openaiFallbackModel,
+          tokensInput: usage.prompt_tokens, tokensOutput: usage.completion_tokens,
+          costUsd: cost, responseMs: Date.now() - t1,
+          unitId, userId, metadata: { function: functionName, fallback: true },
+        });
+      }
 
       return { text, provider: "openai", model: openaiFallbackModel, fallbackUsed: true, totalTokens };
     }

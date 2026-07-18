@@ -236,6 +236,7 @@ serve(async (req) => {
       result = await chatWithFallback({
         functionName: "generate-prompt",
         unitId: body.unitId ?? null,
+        systemSlug: "whatsapp",
         preferredModel: "google/gemini-2.5-flash",
         openaiFallbackModel: "gpt-4o-mini",
         messages: [

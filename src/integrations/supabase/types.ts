@@ -159,6 +159,148 @@ export type Database = {
           },
         ]
       }
+      ai_system_transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          estimated_cost_usd: number | null
+          id: string
+          metadata: Json | null
+          model: string | null
+          response_time_ms: number | null
+          system_id: string
+          tokens_input: number | null
+          tokens_output: number | null
+          type: Database["public"]["Enums"]["ai_transaction_type"]
+          unit_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          estimated_cost_usd?: number | null
+          id?: string
+          metadata?: Json | null
+          model?: string | null
+          response_time_ms?: number | null
+          system_id: string
+          tokens_input?: number | null
+          tokens_output?: number | null
+          type: Database["public"]["Enums"]["ai_transaction_type"]
+          unit_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          estimated_cost_usd?: number | null
+          id?: string
+          metadata?: Json | null
+          model?: string | null
+          response_time_ms?: number | null
+          system_id?: string
+          tokens_input?: number | null
+          tokens_output?: number | null
+          type?: Database["public"]["Enums"]["ai_transaction_type"]
+          unit_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_system_transactions_system_id_fkey"
+            columns: ["system_id"]
+            isOneToOne: false
+            referencedRelation: "ai_systems"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_system_wallets: {
+        Row: {
+          available_credits: number
+          daily_limit: number | null
+          id: string
+          last_reset_at: string
+          last_used_at: string | null
+          monthly_limit: number | null
+          system_id: string
+          updated_at: string
+          used_credits: number
+        }
+        Insert: {
+          available_credits?: number
+          daily_limit?: number | null
+          id?: string
+          last_reset_at?: string
+          last_used_at?: string | null
+          monthly_limit?: number | null
+          system_id: string
+          updated_at?: string
+          used_credits?: number
+        }
+        Update: {
+          available_credits?: number
+          daily_limit?: number | null
+          id?: string
+          last_reset_at?: string
+          last_used_at?: string | null
+          monthly_limit?: number | null
+          system_id?: string
+          updated_at?: string
+          used_credits?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_system_wallets_system_id_fkey"
+            columns: ["system_id"]
+            isOneToOne: true
+            referencedRelation: "ai_systems"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_systems: {
+        Row: {
+          api_key_secret_name: string | null
+          created_at: string
+          default_model: string
+          description: string | null
+          icon: string | null
+          id: string
+          name: string
+          provider: string
+          slug: string
+          status: Database["public"]["Enums"]["ai_system_status"]
+          updated_at: string
+        }
+        Insert: {
+          api_key_secret_name?: string | null
+          created_at?: string
+          default_model?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name: string
+          provider?: string
+          slug: string
+          status?: Database["public"]["Enums"]["ai_system_status"]
+          updated_at?: string
+        }
+        Update: {
+          api_key_secret_name?: string | null
+          created_at?: string
+          default_model?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name?: string
+          provider?: string
+          slug?: string
+          status?: Database["public"]["Enums"]["ai_system_status"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       audio_transcription_logs: {
         Row: {
           audio_base64: string | null
@@ -1759,6 +1901,47 @@ export type Database = {
         }
         Returns: undefined
       }
+      ai_credit_adjust: {
+        Args: {
+          _actor?: string
+          _amount: number
+          _reason?: string
+          _system_slug: string
+        }
+        Returns: Json
+      }
+      ai_debit_credits: {
+        Args: {
+          _amount: number
+          _cost_usd?: number
+          _metadata?: Json
+          _model?: string
+          _response_ms?: number
+          _system_slug: string
+          _tokens_in?: number
+          _tokens_out?: number
+          _unit_id?: string
+          _user_id?: string
+        }
+        Returns: Json
+      }
+      ai_system_set_status: {
+        Args: {
+          _actor?: string
+          _status: Database["public"]["Enums"]["ai_system_status"]
+          _system_slug: string
+        }
+        Returns: undefined
+      }
+      ai_system_update_limits: {
+        Args: {
+          _actor?: string
+          _daily?: number
+          _monthly?: number
+          _system_slug: string
+        }
+        Returns: undefined
+      }
       consume_marketing_credit: {
         Args: { _unit_id: string; _user_id: string }
         Returns: boolean
@@ -1832,6 +2015,13 @@ export type Database = {
       }
     }
     Enums: {
+      ai_system_status: "active" | "blocked" | "suspended"
+      ai_transaction_type:
+        | "debit"
+        | "credit"
+        | "refund"
+        | "monthly_reset"
+        | "admin_adjust"
       app_role:
         | "admin"
         | "manager"
@@ -1989,6 +2179,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      ai_system_status: ["active", "blocked", "suspended"],
+      ai_transaction_type: [
+        "debit",
+        "credit",
+        "refund",
+        "monthly_reset",
+        "admin_adjust",
+      ],
       app_role: [
         "admin",
         "manager",

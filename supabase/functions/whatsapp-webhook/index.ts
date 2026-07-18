@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
+import { debitAISystem, estimateCostUsd } from "../_shared/ai-wallet.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1665,6 +1666,13 @@ async function analyzeImage(imageBase64: string, mimetype: string): Promise<stri
     }
 
     const data = await response.json();
+    const _iu = data.usage ?? {};
+    await debitAISystem({
+      systemSlug: "whatsapp", amount: 1, model: "google/gemini-2.5-flash",
+      tokensInput: _iu.prompt_tokens, tokensOutput: _iu.completion_tokens,
+      costUsd: estimateCostUsd("google/gemini-2.5-flash", _iu.total_tokens ?? 0),
+      metadata: { function: "whatsapp-webhook", stage: "image-analysis" },
+    });
     return data.choices?.[0]?.message?.content || "";
   } catch (error) {
     console.error("Error analyzing image:", error);
@@ -1833,6 +1841,18 @@ async function processWithAI(
     }
 
     const aiData = await aiResponse.json();
+    // Débito na carteira do sistema WhatsApp
+    const _u = aiData.usage ?? {};
+    await debitAISystem({
+      systemSlug: "whatsapp",
+      amount: 1,
+      model: "google/gemini-2.5-pro",
+      tokensInput: _u.prompt_tokens,
+      tokensOutput: _u.completion_tokens,
+      costUsd: estimateCostUsd("google/gemini-2.5-pro", _u.total_tokens ?? 0),
+      unitId,
+      metadata: { function: "whatsapp-webhook", stage: "bot-turn", iter: iterations },
+    });
     const choice = aiData.choices?.[0];
     
     if (!choice) {
