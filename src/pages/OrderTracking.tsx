@@ -23,6 +23,32 @@ import {
 } from "lucide-react";
 import { useMemo, useCallback } from "react";
 
+// iOS Safari-safe clipboard fallback using a hidden textarea + execCommand.
+function fallbackCopy(text: string): boolean {
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "0";
+    ta.style.left = "0";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    // iOS needs a selectable range
+    const range = document.createRange();
+    range.selectNodeContents(ta);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 // Status step component
 function StatusStep({
   label,
@@ -65,7 +91,7 @@ function StatusStep({
 // Loading state
 function LoadingSkeleton() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 p-4">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-background via-background to-muted/20 p-4">
       <div className="max-w-lg mx-auto space-y-6">
         <Skeleton className="h-8 w-32" />
         <Skeleton className="h-24 w-full rounded-2xl" />
@@ -82,7 +108,7 @@ function NotFoundState() {
   const navigate = useNavigate();
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-destructive/5 flex items-center justify-center p-4">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-background via-background to-destructive/5 flex items-center justify-center p-4">
       <Card className="max-w-md w-full border-border/50">
         <CardContent className="pt-8 text-center space-y-6">
           <div className="relative mx-auto w-fit">
@@ -138,23 +164,31 @@ export default function OrderTracking() {
   }, [unitSettings, unitInfo, order]);
 
   // Copy Pix code to clipboard
-  const handleCopyPix = useCallback(async () => {
+  const handleCopyPix = useCallback(() => {
     if (!pixCode) return;
 
-    try {
-      await navigator.clipboard.writeText(pixCode);
+    // iOS Safari-safe copy: try Clipboard API sync, fallback to execCommand on textarea.
+    // Do NOT use async/await before writeText — it breaks user activation on iOS.
+    const showOk = () =>
       toast.success("Código Pix copiado!", {
         description: "Cole no app do seu banco para pagar",
       });
-      
-      // Haptic feedback
-      if (navigator.vibrate) {
-        navigator.vibrate(50);
-      }
-    } catch {
+    const showErr = () =>
       toast.error("Erro ao copiar", {
-        description: "Tente selecionar e copiar manualmente",
+        description: "Selecione e copie manualmente",
       });
+
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(pixCode).then(showOk).catch(() => {
+          fallbackCopy(pixCode) ? showOk() : showErr();
+        });
+      } else {
+        fallbackCopy(pixCode) ? showOk() : showErr();
+      }
+      if (navigator.vibrate) navigator.vibrate(50);
+    } catch {
+      fallbackCopy(pixCode) ? showOk() : showErr();
     }
   }, [pixCode]);
 
@@ -203,7 +237,7 @@ export default function OrderTracking() {
   const isReady = currentStatus === "ready" || currentStatus === "delivered";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-background via-background to-primary/5">
       {/* Header */}
       <header className="sticky top-0 z-10 glass border-b border-border/50 px-4 py-3">
         <div className="max-w-lg mx-auto flex items-center justify-between">
