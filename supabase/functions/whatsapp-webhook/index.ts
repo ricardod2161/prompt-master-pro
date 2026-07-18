@@ -1666,6 +1666,13 @@ async function analyzeImage(imageBase64: string, mimetype: string): Promise<stri
     }
 
     const data = await response.json();
+    const _iu = data.usage ?? {};
+    await debitAISystem({
+      systemSlug: "whatsapp", amount: 1, model: "google/gemini-2.5-flash",
+      tokensInput: _iu.prompt_tokens, tokensOutput: _iu.completion_tokens,
+      costUsd: estimateCostUsd("google/gemini-2.5-flash", _iu.total_tokens ?? 0),
+      metadata: { function: "whatsapp-webhook", stage: "image-analysis" },
+    });
     return data.choices?.[0]?.message?.content || "";
   } catch (error) {
     console.error("Error analyzing image:", error);
