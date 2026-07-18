@@ -49,7 +49,14 @@ const queryClient = new QueryClient({
         if (status === 401 || status === 403) return false;
         return failureCount < 2;
       },
-      staleTime: 30 * 1000,
+      // Cache mais agressivo — reduz refetches desnecessários (custo Supabase + latência)
+      staleTime: 5 * 60 * 1000,       // 5 min: dados considerados frescos
+      gcTime: 10 * 60 * 1000,         // 10 min: mantém em memória mesmo sem observers
+      refetchOnWindowFocus: false,    // não refetchar toda vez que a aba ganha foco
+      refetchOnReconnect: "always",   // mas refetcha se a conexão cair
+    },
+    mutations: {
+      retry: 1,
     },
   },
 });
