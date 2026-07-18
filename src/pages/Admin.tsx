@@ -106,12 +106,13 @@ export default function Admin() {
 
       {/* Tabs with premium styling */}
       <Tabs defaultValue="dashboard" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 md:grid-cols-6 lg:w-auto lg:inline-grid h-auto p-1 bg-muted/50 backdrop-blur">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-7 lg:w-auto lg:inline-grid h-auto p-1 bg-muted/50 backdrop-blur">
           {[
             { value: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
             { value: "customers", icon: UserCheck, label: "Clientes" },
             { value: "users", icon: Users, label: "Usuários" },
             { value: "units", icon: Building2, label: "Unidades" },
+            { value: "wallets", icon: Wallet, label: "Carteiras IA" },
             { value: "ai", icon: Bot, label: "IA" },
             { value: "logs", icon: ScrollText, label: "Logs" },
           ].map((tab) => (
