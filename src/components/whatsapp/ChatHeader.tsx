@@ -43,11 +43,7 @@ export function ChatHeader({
         .slice(0, 2)
     : phone.slice(-2);
 
-  const getStatusText = () => {
-    if (isRecording) return "gravando áudio...";
-    if (isTyping) return "digitando...";
-    return isBotActive ? "Bot ativo" : "Bot desativado";
-  };
+  const isLive = isTyping || isRecording;
 
   return (
     <div
@@ -86,16 +82,15 @@ export function ChatHeader({
             </Badge>
           )}
         </div>
-        <p
-          className={cn(
-            "text-xs",
-            isTyping || isRecording
-              ? "text-green-600 animate-pulse"
-              : "text-muted-foreground"
+        <div className="h-4 flex items-center">
+          {isLive ? (
+            <TypingIndicator mode={isRecording ? "recording" : "typing"} />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {isBotActive ? "Bot ativo" : "Bot desativado"}
+            </p>
           )}
-        >
-          {getStatusText()}
-        </p>
+        </div>
       </div>
 
       <div className="flex items-center gap-2">
