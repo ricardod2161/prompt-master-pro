@@ -129,6 +129,14 @@ export default {
           "0%, 100%": { backgroundPosition: "0% 50%" },
           "50%": { backgroundPosition: "100% 50%" },
         },
+        "typingDot": {
+          "0%, 60%, 100%": { transform: "translateY(0)", opacity: "0.4" },
+          "30%": { transform: "translateY(-3px)", opacity: "1" },
+        },
+        "recBar": {
+          "0%, 100%": { height: "3px" },
+          "50%": { height: "10px" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
