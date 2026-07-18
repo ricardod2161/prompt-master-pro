@@ -91,7 +91,7 @@ function StatusStep({
 // Loading state
 function LoadingSkeleton() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 p-4">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-background via-background to-muted/20 p-4">
       <div className="max-w-lg mx-auto space-y-6">
         <Skeleton className="h-8 w-32" />
         <Skeleton className="h-24 w-full rounded-2xl" />
@@ -108,7 +108,7 @@ function NotFoundState() {
   const navigate = useNavigate();
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-destructive/5 flex items-center justify-center p-4">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-background via-background to-destructive/5 flex items-center justify-center p-4">
       <Card className="max-w-md w-full border-border/50">
         <CardContent className="pt-8 text-center space-y-6">
           <div className="relative mx-auto w-fit">
@@ -237,7 +237,7 @@ export default function OrderTracking() {
   const isReady = currentStatus === "ready" || currentStatus === "delivered";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-background via-background to-primary/5">
       {/* Header */}
       <header className="sticky top-0 z-10 glass border-b border-border/50 px-4 py-3">
         <div className="max-w-lg mx-auto flex items-center justify-between">
