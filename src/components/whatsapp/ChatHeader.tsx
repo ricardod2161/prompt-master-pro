@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { TypingIndicator } from "./TypingIndicator";
 
 interface ChatHeaderProps {
   customerName: string | null;
