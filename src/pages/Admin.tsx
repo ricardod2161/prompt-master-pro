@@ -7,18 +7,20 @@ import { AdminDashboard } from "@/components/admin/AdminDashboard";
 import { AdminUsersList } from "@/components/admin/AdminUsersList";
 import { AdminUnitsManager } from "@/components/admin/AdminUnitsManager";
 import { AdminActivityLogs } from "@/components/admin/AdminActivityLogs";
+import { AIMetricsPanel } from "@/components/admin/AIMetricsPanel";
 import { Card } from "@/components/ui/card";
 import { AdminCustomersList } from "@/components/admin/AdminCustomersList";
-import { 
-  LayoutDashboard, 
-  Users, 
-  Building2, 
-  ScrollText, 
-  Loader2, 
+import {
+  LayoutDashboard,
+  Users,
+  Building2,
+  ScrollText,
+  Loader2,
   ShieldAlert,
   Sparkles,
   Crown,
   UserCheck,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -102,12 +104,13 @@ export default function Admin() {
 
       {/* Tabs with premium styling */}
       <Tabs defaultValue="dashboard" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid h-auto p-1 bg-muted/50 backdrop-blur">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-6 lg:w-auto lg:inline-grid h-auto p-1 bg-muted/50 backdrop-blur">
           {[
             { value: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
             { value: "customers", icon: UserCheck, label: "Clientes" },
             { value: "users", icon: Users, label: "Usuários" },
             { value: "units", icon: Building2, label: "Unidades" },
+            { value: "ai", icon: Bot, label: "IA" },
             { value: "logs", icon: ScrollText, label: "Logs" },
           ].map((tab) => (
             <TabsTrigger
@@ -138,6 +141,10 @@ export default function Admin() {
 
         <TabsContent value="units" className="space-y-4 animate-fade-in">
           <AdminUnitsManager />
+        </TabsContent>
+
+        <TabsContent value="ai" className="space-y-4 animate-fade-in">
+          <AIMetricsPanel />
         </TabsContent>
 
         <TabsContent value="logs" className="space-y-4 animate-fade-in">
