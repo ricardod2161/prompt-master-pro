@@ -8,6 +8,7 @@ import { AdminUsersList } from "@/components/admin/AdminUsersList";
 import { AdminUnitsManager } from "@/components/admin/AdminUnitsManager";
 import { AdminActivityLogs } from "@/components/admin/AdminActivityLogs";
 import { AIMetricsPanel } from "@/components/admin/AIMetricsPanel";
+import { AISystemsWalletPanel } from "@/components/admin/AISystemsWalletPanel";
 import { Card } from "@/components/ui/card";
 import { AdminCustomersList } from "@/components/admin/AdminCustomersList";
 import {
