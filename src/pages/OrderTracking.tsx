@@ -138,23 +138,31 @@ export default function OrderTracking() {
   }, [unitSettings, unitInfo, order]);
 
   // Copy Pix code to clipboard
-  const handleCopyPix = useCallback(async () => {
+  const handleCopyPix = useCallback(() => {
     if (!pixCode) return;
 
-    try {
-      await navigator.clipboard.writeText(pixCode);
+    // iOS Safari-safe copy: try Clipboard API sync, fallback to execCommand on textarea.
+    // Do NOT use async/await before writeText — it breaks user activation on iOS.
+    const showOk = () =>
       toast.success("Código Pix copiado!", {
         description: "Cole no app do seu banco para pagar",
       });
-      
-      // Haptic feedback
-      if (navigator.vibrate) {
-        navigator.vibrate(50);
-      }
-    } catch {
+    const showErr = () =>
       toast.error("Erro ao copiar", {
-        description: "Tente selecionar e copiar manualmente",
+        description: "Selecione e copie manualmente",
       });
+
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(pixCode).then(showOk).catch(() => {
+          fallbackCopy(pixCode) ? showOk() : showErr();
+        });
+      } else {
+        fallbackCopy(pixCode) ? showOk() : showErr();
+      }
+      if (navigator.vibrate) navigator.vibrate(50);
+    } catch {
+      fallbackCopy(pixCode) ? showOk() : showErr();
     }
   }, [pixCode]);
 
