@@ -50,6 +50,13 @@ export function useOrderTracking(token: string) {
     queryFn: async () => {
       if (!token) return null;
 
+      // Accept either tracking_token OR order id (for backward compatibility
+      // with older WhatsApp / Stripe / notification links that used order.id).
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token);
+      const filter = isUuid
+        ? `id.eq.${token},tracking_token.eq.${token}`
+        : `tracking_token.eq.${token}`;
+
       const { data: order, error } = await supabase
         .from("orders")
         .select(`
@@ -71,7 +78,7 @@ export function useOrderTracking(token: string) {
           ),
           tables (number)
         `)
-        .eq("tracking_token", token)
+        .or(filter)
         .maybeSingle();
 
       if (error) throw error;
