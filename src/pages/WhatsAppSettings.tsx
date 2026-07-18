@@ -95,6 +95,10 @@ import {
   computeTodayStats,
 } from "@/hooks/useAudioTranscriptionLogs";
 import { SubscriptionGate } from "@/components/subscription/SubscriptionGate";
+import { WebhookTab } from "@/components/whatsapp-settings/WebhookTab";
+import { ConversationsTab } from "@/components/whatsapp-settings/ConversationsTab";
+import { DiagnosticoTab } from "@/components/whatsapp-settings/DiagnosticoTab";
+import { SecurityTab } from "@/components/whatsapp-settings/SecurityTab";
 
 // BUG FIX: use env variable instead of hardcoded project ID
 const WEBHOOK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`;
@@ -929,605 +933,68 @@ export default function WhatsAppSettings() {
 
           {/* Conversations Tab */}
           <TabsContent value="conversations" className="space-y-6">
-            <Card className="border shadow-sm">
-              <CardHeader className="pb-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-green-500/10 rounded-lg">
-                      <Users className="h-5 w-5 text-green-500" />
-                    </div>
-                    <div>
-                      <CardTitle>Conversas</CardTitle>
-                      <CardDescription>
-                        Gerencie as conversas ativas do WhatsApp
-                      </CardDescription>
-                    </div>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => refetchConversations()}
-                    className="self-start sm:self-auto"
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Atualizar
-                  </Button>
-                </div>
-
-                {/* Search input */}
-                {conversations && conversations.length > 0 && (
-                  <div className="relative mt-2">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Buscar por nome ou telefone..."
-                      value={conversationSearch}
-                      onChange={(e) => setConversationSearch(e.target.value)}
-                      className="pl-9 h-9 bg-muted/40 border-0"
-                    />
-                  </div>
-                )}
-              </CardHeader>
-              <CardContent>
-                {loadingConversations ? (
-                  <LoadingSkeleton />
-                ) : !conversations || conversations.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <div className="p-4 bg-muted rounded-full mb-4">
-                      <MessageSquare className="h-8 w-8 text-muted-foreground" />
-                    </div>
-                    <h3 className="text-lg font-medium mb-2">Nenhuma conversa</h3>
-                    <p className="text-sm text-muted-foreground max-w-sm">
-                      As conversas aparecerão aqui quando clientes entrarem em contato pelo WhatsApp.
-                    </p>
-                  </div>
-                ) : filteredConversations.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                    <Search className="h-8 w-8 mb-2 opacity-40" />
-                    <p className="text-sm">Nenhuma conversa encontrada para "{conversationSearch}"</p>
-                  </div>
-                ) : (
-                  <ScrollArea className="h-[500px]">
-                    <div className="space-y-3">
-                      {filteredConversations.map((conversation) => {
-                        // Indicator: last_message might be from user (waiting for reply)
-                        // We use a heuristic: if bot is active the last msg may be from user
-                        const isWaitingReply = conversation.is_bot_active === false;
-
-                        return (
-                          <div
-                            key={conversation.id}
-                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border bg-card hover:bg-muted/30 transition-colors"
-                          >
-                            <div className="flex items-center gap-4">
-                              {/* Avatar with status dot */}
-                              <div className="relative shrink-0">
-                                <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                                  <User className="h-6 w-6 text-green-600 dark:text-green-400" />
-                                </div>
-                                {/* Status indicator: orange = human takeover / green = bot active */}
-                                <span
-                                  className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-card ${
-                                    isWaitingReply
-                                      ? "bg-orange-500"
-                                      : "bg-green-500"
-                                  }`}
-                                  title={isWaitingReply ? "Atendimento humano ativo" : "Bot ativo"}
-                                />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="font-medium truncate">
-                                  {conversation.customer_name || "Cliente"}
-                                </p>
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                  <Phone className="h-3 w-3" />
-                                  <span>{conversation.phone}</span>
-                                </div>
-                                <p className="text-sm text-muted-foreground truncate max-w-[260px] mt-0.5">
-                                  {conversation.last_message || "—"}
-                                </p>
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-3 sm:gap-4 flex-wrap sm:flex-nowrap">
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Clock className="h-4 w-4 shrink-0" />
-                                <span className="whitespace-nowrap text-xs">
-                                  {conversation.last_message_at
-                                    ? formatDistanceToNow(new Date(conversation.last_message_at), {
-                                        addSuffix: true,
-                                        locale: ptBR,
-                                      })
-                                    : "—"}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">Bot</span>
-                                <Switch
-                                  checked={conversation.is_bot_active || false}
-                                  onCheckedChange={(checked) =>
-                                    toggleBot.mutate({
-                                      conversationId: conversation.id,
-                                      isBotActive: checked,
-                                    })
-                                  }
-                                  className="data-[state=checked]:bg-green-600"
-                                />
-                              </div>
-                              {/* Open chat button */}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8 text-xs gap-1.5 shrink-0"
-                                onClick={() => navigate(`/whatsapp?conversation=${conversation.id}`)}
-                              >
-                                <OpenChatIcon className="h-3.5 w-3.5" />
-                                Abrir Chat
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </ScrollArea>
-                )}
-              </CardContent>
-            </Card>
+            <ConversationsTab
+              conversations={conversations}
+              filteredConversations={filteredConversations}
+              loading={loadingConversations}
+              search={conversationSearch}
+              onSearchChange={setConversationSearch}
+              onRefetch={() => refetchConversations()}
+              onToggleBot={(conversationId, isBotActive) =>
+                toggleBot.mutate({ conversationId, isBotActive })
+              }
+            />
           </TabsContent>
 
           {/* Webhook Tab */}
           <TabsContent value="webhook" className="space-y-6">
-            <Card className="border shadow-sm">
-              <CardHeader className="pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-500/10 rounded-lg">
-                    <Link className="h-5 w-5 text-purple-500" />
-                  </div>
-                  <div>
-                    <CardTitle>URL do Webhook</CardTitle>
-                    <CardDescription>
-                      Configure este webhook na Evolution API para receber mensagens
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">Webhook URL</Label>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="flex-1 p-4 bg-muted/50 rounded-xl border-2 border-dashed font-mono text-sm break-all">
-                      {WEBHOOK_URL}
-                    </div>
-                    <Button
-                      onClick={handleCopyWebhook}
-                      variant="outline"
-                      className="h-auto sm:h-[60px] px-6 shrink-0"
-                    >
-                      {copied ? (
-                        <>
-                          <Check className="h-4 w-4 mr-2 text-green-500" />
-                          Copiado!
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-4 w-4 mr-2" />
-                          Copiar
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div className="space-y-4">
-                  <h4 className="font-medium">Como configurar na Evolution API:</h4>
-                  <div className="space-y-3">
-                    {[
-                      "Acesse o painel da Evolution API",
-                      "Vá em Configurações da Instância → Webhook",
-                      "Cole a URL acima no campo de Webhook",
-                      'Ative os eventos "messages.upsert"',
-                      "Salve as configurações",
-                    ].map((step, i) => (
-                      <div key={i} className="flex gap-3">
-                        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
-                          {i + 1}
-                        </span>
-                        <p className="text-sm text-muted-foreground">{step}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl border border-yellow-200 dark:border-yellow-800">
-                  <div className="flex gap-3">
-                    <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 shrink-0 mt-0.5" />
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                        Importante
-                      </p>
-                      <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                        O webhook deve estar configurado corretamente para que as mensagens sejam 
-                        recebidas e processadas pelo bot. Certifique-se de que a URL está acessível 
-                        externamente.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <WebhookTab webhookUrl={WEBHOOK_URL} copied={copied} onCopy={handleCopyWebhook} />
           </TabsContent>
 
-          {/* Audio Diagnostic Tab — BUG FIX: renamed from "audio-diag" to "diagnostico" */}
+          {/* Audio Diagnostic Tab */}
           <TabsContent value="diagnostico" className="space-y-6">
-            {/* Seção A — Estatísticas do dia */}
-            <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-              <Card className="border shadow-sm">
-                <CardContent className="p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                      <Mic className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">{audioTodayStats.total}</p>
-                      <p className="text-xs text-muted-foreground">Áudios hoje</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border shadow-sm">
-                <CardContent className="p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-status-success/10 rounded-lg">
-                      <Check className="h-5 w-5 text-status-success" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold text-status-success">{audioTodayStats.success}</p>
-                      <p className="text-xs text-muted-foreground">Com sucesso</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border shadow-sm">
-                <CardContent className="p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-destructive/10 rounded-lg">
-                      <MicOff className="h-5 w-5 text-destructive" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold text-destructive">{audioTodayStats.failed}</p>
-                      <p className="text-xs text-muted-foreground">Falhas</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border shadow-sm">
-                <CardContent className="p-5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground">Taxa sucesso</span>
-                    </div>
-                    <span className="text-sm font-bold">{audioTodayStats.successRate}%</span>
-                  </div>
-                  <Progress value={audioTodayStats.successRate} className="h-2" />
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Seção B — Logs em tempo real */}
-            <Card className="border shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Radio className="h-5 w-5 text-primary" />
-                  Logs em Tempo Real
-                  <Badge variant="outline" className="ml-auto text-xs">
-                    Últimas 48h — {audioLogs.length} registros
-                  </Badge>
-                </CardTitle>
-                <CardDescription>
-                  Falhas de transcrição de áudio. Use o botão Retry para tentar novamente.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                {loadingAudioLogs ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : audioLogs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
-                    <Mic className="h-10 w-10 opacity-30" />
-                    <p className="text-sm">Nenhuma falha de transcrição nas últimas 48 horas 🎉</p>
-                  </div>
-                ) : (
-                  <ScrollArea className="h-[360px]">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-xs">Horário</TableHead>
-                          <TableHead className="text-xs">Telefone</TableHead>
-                          <TableHead className="text-xs">Motivo</TableHead>
-                          <TableHead className="text-xs">Mime</TableHead>
-                          <TableHead className="text-xs">Tamanho</TableHead>
-                          <TableHead className="text-xs">Status</TableHead>
-                          <TableHead className="text-xs text-right">Ações</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {audioLogs.map((log) => {
-                          const maxRetriesReached = (log.retry_count ?? 0) >= MAX_RETRY_COUNT;
-                          return (
-                            <TableRow key={log.id}>
-                              <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                                {format(new Date(log.created_at), "HH:mm:ss dd/MM")}
-                              </TableCell>
-                              <TableCell className="text-xs font-mono">
-                                {log.phone.replace(/\D/g, "").slice(-11)}
-                              </TableCell>
-                              <TableCell className="text-xs max-w-[140px] truncate">
-                                {log.failure_reason || "—"}
-                              </TableCell>
-                              <TableCell className="text-xs text-muted-foreground">
-                                {log.mimetype?.split("/")[1] || "—"}
-                              </TableCell>
-                              <TableCell className="text-xs text-muted-foreground">
-                                {log.file_size
-                                  ? log.file_size > 1024 * 100
-                                    ? `${(log.file_size / 1024).toFixed(0)}KB`
-                                    : `${log.file_size}B`
-                                  : "—"}
-                              </TableCell>
-                              <TableCell>
-                                {log.status === "success" ? (
-                                  <Badge className="text-xs bg-status-success/10 text-status-success border-0 hover:bg-status-success/20">
-                                    ✓ Sucesso
-                                  </Badge>
-                                ) : log.status === "retried" ? (
-                                  <Badge className="text-xs bg-status-warning/10 text-status-warning border-0 hover:bg-status-warning/20">
-                                    ↻ Retried
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="destructive" className="text-xs">
-                                    ✗ Falha
-                                  </Badge>
-                                )}
-                                {(log.retry_count ?? 0) > 0 && (
-                                  <span className="ml-1 text-xs text-muted-foreground">
-                                    ×{log.retry_count}
-                                  </span>
-                                )}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {log.status !== "success" && log.audio_base64 && (
-                                  maxRetriesReached ? (
-                                    /* BUG FIX: show "max retries" label instead of retry button */
-                                    <span className="text-xs text-muted-foreground italic">
-                                      Máx. atingido
-                                    </span>
-                                  ) : (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-7 text-xs gap-1"
-                                      disabled={retryingId === log.id || retryTranscription.isPending}
-                                      onClick={async () => {
-                                        setRetryingId(log.id);
-                                        try {
-                                          await retryTranscription.mutateAsync(log.id);
-                                        } finally {
-                                          setRetryingId(null);
-                                        }
-                                      }}
-                                    >
-                                      {retryingId === log.id ? (
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                      ) : (
-                                        <RefreshCw className="h-3 w-3" />
-                                      )}
-                                      Retry
-                                    </Button>
-                                  )
-                                )}
-                                {log.transcription_result && (
-                                  <span className="text-xs text-muted-foreground ml-1 max-w-[120px] truncate block text-right" title={log.transcription_result}>
-                                    "{log.transcription_result.substring(0, 30)}…"
-                                  </span>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </ScrollArea>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Seção C — Histórico 7 dias */}
-            <Card className="border shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-primary" />
-                  Histórico — Últimos 7 Dias
-                </CardTitle>
-                <CardDescription>
-                  Comparativo de transcrições com sucesso vs falhas por dia.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {audioHistory.length === 0 ? (
-                  <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
-                    Sem dados históricos
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart data={audioHistory} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fontSize: 11 }}
-                        tickFormatter={(v) => format(new Date(v + "T12:00:00"), "dd/MM")}
-                      />
-                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                      <Tooltip
-                        formatter={(value, name) => [value, name === "success" ? "Sucesso" : "Falhas"]}
-                        labelFormatter={(label) => format(new Date(label + "T12:00:00"), "dd/MM/yyyy")}
-                      />
-                      <Legend formatter={(v) => v === "success" ? "Sucesso" : "Falhas"} />
-                      <Bar dataKey="success" fill="hsl(var(--status-success))" radius={[3, 3, 0, 0]} />
-                      <Bar dataKey="failed" fill="hsl(var(--destructive))" radius={[3, 3, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </CardContent>
-            </Card>
+            <DiagnosticoTab
+              audioLogs={audioLogs}
+              audioHistory={audioHistory}
+              todayStats={audioTodayStats}
+              loadingAudioLogs={loadingAudioLogs}
+              retryingId={retryingId}
+              isRetryPending={retryTranscription.isPending}
+              maxRetryCount={MAX_RETRY_COUNT}
+              onRetry={async (logId) => {
+                setRetryingId(logId);
+                try {
+                  await retryTranscription.mutateAsync(logId);
+                } finally {
+                  setRetryingId(null);
+                }
+              }}
+            />
           </TabsContent>
 
           {/* Security Tab */}
           <TabsContent value="security" className="space-y-6">
-            <Card className="border shadow-sm">
-              <CardHeader className="pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-orange-500/10 rounded-lg">
-                    <Shield className="h-5 w-5 text-orange-500" />
-                  </div>
-                  <div>
-                    <CardTitle>Proteção por Senha</CardTitle>
-                    <CardDescription>
-                      Proteja as configurações do WhatsApp com uma senha de acesso
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between rounded-xl border-2 p-5 transition-colors hover:bg-muted/30">
-                  <div className="space-y-1">
-                    <Label htmlFor="enable-password" className="text-base font-medium">
-                      Ativar Proteção por Senha
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Quando ativado, será necessário digitar uma senha para acessar esta página
-                    </p>
-                  </div>
-                  <Switch
-                    id="enable-password"
-                    checked={enablePasswordProtection}
-                    onCheckedChange={(checked) => {
-                      setEnablePasswordProtection(checked);
-                      if (!checked) {
-                        setNewPassword("");
-                        setConfirmPassword("");
-                      }
-                    }}
-                    className="data-[state=checked]:bg-orange-600"
-                  />
-                </div>
-
-                {enablePasswordProtection && (
-                  <>
-                    <Separator />
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="new-password" className="text-sm font-medium">
-                          {hasPasswordProtection ? "Nova Senha" : "Senha"}
-                        </Label>
-                        <div className="relative">
-                          <Input
-                            id="new-password"
-                            type={showNewPassword ? "text" : "password"}
-                            placeholder="Digite a senha"
-                            value={newPassword}
-                            onChange={(e) => setNewPassword(e.target.value)}
-                            className="pr-10"
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                            onClick={() => setShowNewPassword(!showNewPassword)}
-                          >
-                            {showNewPassword ? (
-                              <EyeOff className="h-4 w-4 text-muted-foreground" />
-                            ) : (
-                              <Eye className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </Button>
-                        </div>
-                        <p className="text-xs text-muted-foreground">Mínimo de 4 caracteres</p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="confirm-password" className="text-sm font-medium">
-                          Confirmar Senha
-                        </Label>
-                        <div className="relative">
-                          <Input
-                            id="confirm-password"
-                            type={showConfirmPassword ? "text" : "password"}
-                            placeholder="Confirme a senha"
-                            value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                            className="pr-10"
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          >
-                            {showConfirmPassword ? (
-                              <EyeOff className="h-4 w-4 text-muted-foreground" />
-                            ) : (
-                              <Eye className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                <Button
-                  onClick={handleSavePasswordSettings}
-                  disabled={createSettings.isPending || updateSettings.isPending}
-                  className="h-11 bg-orange-600 hover:bg-orange-700"
-                >
-                  {(createSettings.isPending || updateSettings.isPending) ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4 mr-2" />
-                  )}
-                  Salvar Configurações de Segurança
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Security Info */}
-            <Card className="border shadow-sm bg-muted/30">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-blue-500" />
-                  Informações sobre a proteção
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  {[
-                    { title: "Proteção por sessão", desc: "O desbloqueio persiste enquanto a aba estiver aberta — sem redigitar a cada troca de página" },
-                    { title: "Sem recuperação", desc: "Se esquecer a senha, você precisará acessar o banco de dados para removê-la" },
-                    { title: "Compartilhamento", desc: "Compartilhe a senha apenas com pessoas autorizadas a configurar o WhatsApp" },
-                    { title: "Alteração", desc: "Você pode alterar ou remover a senha a qualquer momento nesta aba" },
-                  ].map((item) => (
-                    <div key={item.title} className="space-y-1">
-                      <p className="text-sm font-medium">{item.title}</p>
-                      <p className="text-xs text-muted-foreground">{item.desc}</p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <SecurityTab
+              enablePasswordProtection={enablePasswordProtection}
+              onEnableChange={(checked) => {
+                setEnablePasswordProtection(checked);
+                if (!checked) {
+                  setNewPassword("");
+                  setConfirmPassword("");
+                }
+              }}
+              hasPasswordProtection={hasPasswordProtection}
+              newPassword={newPassword}
+              onNewPasswordChange={setNewPassword}
+              showNewPassword={showNewPassword}
+              onToggleShowNewPassword={() => setShowNewPassword(!showNewPassword)}
+              confirmPassword={confirmPassword}
+              onConfirmPasswordChange={setConfirmPassword}
+              showConfirmPassword={showConfirmPassword}
+              onToggleShowConfirmPassword={() => setShowConfirmPassword(!showConfirmPassword)}
+              onSave={handleSavePasswordSettings}
+              saving={createSettings.isPending || updateSettings.isPending}
+            />
           </TabsContent>
         </Tabs>
       </div>
