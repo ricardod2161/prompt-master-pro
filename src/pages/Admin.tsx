@@ -146,6 +146,10 @@ export default function Admin() {
           <AdminUnitsManager />
         </TabsContent>
 
+        <TabsContent value="wallets" className="space-y-4 animate-fade-in">
+          <AISystemsWalletPanel />
+        </TabsContent>
+
         <TabsContent value="ai" className="space-y-4 animate-fade-in">
           <AIMetricsPanel />
         </TabsContent>
