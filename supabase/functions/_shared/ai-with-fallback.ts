@@ -183,6 +183,8 @@ export async function chatWithFallback(opts: ChatOptions): Promise<ChatResult> {
   const {
     functionName,
     unitId,
+    userId,
+    systemSlug,
     messages,
     preferredModel = "google/gemini-2.5-flash",
     openaiFallbackModel = "gpt-4o-mini",
