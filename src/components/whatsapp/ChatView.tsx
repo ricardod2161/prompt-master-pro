@@ -135,7 +135,7 @@ export function ChatView({
             {/* Typing Indicator */}
             {(isTyping || isRecording) && (
               <div className="self-start">
-                <TypingIndicator isRecording={isRecording} />
+                <TypingIndicator mode={isRecording ? "recording" : "typing"} />
               </div>
             )}
 

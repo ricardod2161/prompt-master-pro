@@ -1,32 +1,53 @@
+import { Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface TypingIndicatorProps {
-  isRecording?: boolean;
+  mode: "typing" | "recording";
   className?: string;
 }
 
-export function TypingIndicator({ isRecording, className }: TypingIndicatorProps) {
-  return (
-    <div className={cn("flex items-center gap-2", className)}>
-      <div className="flex items-center gap-1 px-4 py-2.5 bg-muted rounded-2xl rounded-bl-md">
-        <div className="flex gap-1">
-          <span 
-            className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" 
-            style={{ animationDelay: "0ms", animationDuration: "600ms" }}
-          />
-          <span 
-            className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" 
-            style={{ animationDelay: "150ms", animationDuration: "600ms" }}
-          />
-          <span 
-            className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" 
-            style={{ animationDelay: "300ms", animationDuration: "600ms" }}
-          />
-        </div>
-      </div>
-      <span className="text-xs text-muted-foreground">
-        {isRecording ? "gravando..." : "digitando..."}
+/**
+ * WhatsApp-like real-time status indicator.
+ * - "typing": three dots with a staggered bounce animation
+ * - "recording": pulsing microphone icon with animated sound bars
+ */
+export function TypingIndicator({ mode, className }: TypingIndicatorProps) {
+  if (mode === "recording") {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center gap-1.5 text-xs font-medium text-green-600",
+          className
+        )}
+        aria-live="polite"
+      >
+        <span className="relative inline-flex h-3 w-3 items-center justify-center">
+          <Mic className="h-3 w-3 animate-pulse" />
+        </span>
+        <span>gravando áudio</span>
+        <span className="inline-flex items-end gap-[2px] h-3">
+          <span className="w-[2px] bg-green-600 rounded-full animate-[recBar_0.9s_ease-in-out_infinite]" style={{ animationDelay: "0ms" }} />
+          <span className="w-[2px] bg-green-600 rounded-full animate-[recBar_0.9s_ease-in-out_infinite]" style={{ animationDelay: "150ms" }} />
+          <span className="w-[2px] bg-green-600 rounded-full animate-[recBar_0.9s_ease-in-out_infinite]" style={{ animationDelay: "300ms" }} />
+        </span>
       </span>
-    </div>
+    );
+  }
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 text-xs font-medium text-green-600",
+        className
+      )}
+      aria-live="polite"
+    >
+      <span>digitando</span>
+      <span className="inline-flex items-center gap-[3px]">
+        <span className="h-1 w-1 rounded-full bg-green-600 animate-[typingDot_1.2s_ease-in-out_infinite]" style={{ animationDelay: "0ms" }} />
+        <span className="h-1 w-1 rounded-full bg-green-600 animate-[typingDot_1.2s_ease-in-out_infinite]" style={{ animationDelay: "200ms" }} />
+        <span className="h-1 w-1 rounded-full bg-green-600 animate-[typingDot_1.2s_ease-in-out_infinite]" style={{ animationDelay: "400ms" }} />
+      </span>
+    </span>
   );
 }
