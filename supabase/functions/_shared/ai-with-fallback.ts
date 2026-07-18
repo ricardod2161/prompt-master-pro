@@ -312,6 +312,15 @@ export async function chatWithFallback(opts: ChatOptions): Promise<ChatResult> {
         fallbackUsed: true,
       });
 
+      if (systemSlug) {
+        await debitAISystem({
+          systemSlug, amount: 1, model: openaiFallbackModel,
+          tokensInput: usage.prompt_tokens, tokensOutput: usage.completion_tokens,
+          costUsd: cost, responseMs: Date.now() - t1,
+          unitId, userId, metadata: { function: functionName, fallback: true },
+        });
+      }
+
       return { text, provider: "openai", model: openaiFallbackModel, fallbackUsed: true, totalTokens };
     }
 
