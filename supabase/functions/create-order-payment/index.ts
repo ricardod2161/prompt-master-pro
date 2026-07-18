@@ -99,8 +99,8 @@ serve(async (req) => {
     const session = await stripe.checkout.sessions.create({
       line_items: lineItems,
       mode: "payment",
-      success_url: `${origin}/track/${order.id}?paid=true`,
-      cancel_url: `${origin}/track/${order.id}`,
+      success_url: `${origin}/track/${order.tracking_token || order.id}?paid=true`,
+      cancel_url: `${origin}/track/${order.tracking_token || order.id}`,
       metadata: {
         order_id: order.id,
         order_number: String(order.order_number),

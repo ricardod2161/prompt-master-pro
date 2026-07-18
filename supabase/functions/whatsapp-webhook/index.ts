@@ -1313,7 +1313,7 @@ async function confirmarPedido(
   }
 
   // Add tracking link
-  const trackingUrl = `https://restauranteos.lovable.app/track/${order.id}`;
+  const trackingUrl = `https://restauranteos.lovable.app/track/${order.tracking_token || order.id}`;
   resultado += `\n📍 *Acompanhe seu pedido:*\n${trackingUrl}\n`;
 
   resultado += `\n🙏 *Agradecemos a preferência!*`;
