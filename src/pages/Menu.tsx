@@ -4,19 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,73 +39,34 @@ import {
   CheckCircle2,
   Tags,
   DollarSign,
-  Upload,
-  X,
   ArrowUpDown,
   FilterX,
   Download,
   Eye,
   EyeOff,
-  Layers,
   Power,
   PowerOff,
   LayoutGrid,
   List,
   FolderInput,
-  Flame,
 } from "lucide-react";
 import { ProductCard } from "@/components/menu/ProductCard";
 import { CategoryChips } from "@/components/menu/CategoryChips";
 import { Checkbox } from "@/components/ui/checkbox";
-
-interface Category {
-  id: string;
-  name: string;
-  description: string | null;
-  sort_order: number;
-  active: boolean;
-}
-
-interface ProductVariation {
-  id: string;
-  product_id: string;
-  name: string;
-  price: number;
-  delivery_price: number | null;
-  available: boolean;
-  sort_order: number;
-}
-
-interface Product {
-  id: string;
-  name: string;
-  description: string | null;
-  price: number;
-  delivery_price: number | null;
-  category_id: string | null;
-  available: boolean;
-  preparation_time: number;
-  image_url?: string | null;
-  created_at?: string;
-  is_variable_price?: boolean;
-  min_price?: number | null;
-  max_price?: number | null;
-  categories?: Category;
-  variations?: ProductVariation[];
-}
-
-type SortOption = "name-asc" | "name-desc" | "price-asc" | "price-desc" | "recent";
-type AvailabilityFilter = "all" | "available" | "unavailable";
-type ViewMode = "grid" | "list";
-
-// Variation form item
-interface VariationFormItem {
-  id?: string;
-  name: string;
-  price: string;
-  delivery_price: string;
-  _deleted?: boolean;
-}
+import { CategoryDialog } from "@/components/menu/CategoryDialog";
+import { ProductDialog } from "@/components/menu/ProductDialog";
+import { ProductListView } from "@/components/menu/ProductListView";
+import type {
+  Category,
+  Product,
+  ProductVariation,
+  SortOption,
+  AvailabilityFilter,
+  ViewMode,
+  VariationFormItem,
+  ProductFormState,
+  CategoryFormState,
+} from "@/types/menu";
 
 export default function Menu() {
   const { selectedUnit } = useUnit();
@@ -147,7 +95,7 @@ export default function Menu() {
   // Product dialog state
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [productForm, setProductForm] = useState({
+  const [productForm, setProductForm] = useState<ProductFormState>({
     name: "",
     description: "",
     price: "",
@@ -163,13 +111,12 @@ export default function Menu() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   // Category dialog state
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [categoryForm, setCategoryForm] = useState({
+  const [categoryForm, setCategoryForm] = useState<CategoryFormState>({
     name: "",
     description: "",
   });
@@ -193,7 +140,6 @@ export default function Menu() {
     if (!selectedUnit) return;
     setLoading(true);
     try {
-      // Start of today in ISO format for filtering
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
 
@@ -208,13 +154,11 @@ export default function Menu() {
           .select("*, categories(*)")
           .eq("unit_id", selectedUnit.id)
           .order("name"),
-        // FIX: Single query with RLS filtering (no nested sub-query)
         supabase
           .from("product_variations")
           .select("*, products!inner(unit_id)")
           .eq("products.unit_id", selectedUnit.id)
           .order("sort_order"),
-        // FIX: Filter by unit and only today's orders via JOIN
         supabase
           .from("order_items")
           .select("product_id, quantity, orders!inner(unit_id, created_at)")
@@ -226,7 +170,6 @@ export default function Menu() {
       if (categoriesRes.error) throw categoriesRes.error;
       if (productsRes.error) throw productsRes.error;
 
-      // Map variations to products
       const variationsMap: Record<string, ProductVariation[]> = {};
       if (variationsRes.data) {
         variationsRes.data.forEach((v: any) => {
@@ -240,7 +183,6 @@ export default function Menu() {
         variations: variationsMap[p.id] || [],
       }));
 
-      // Count orders per product (today only, current unit)
       const counts: Record<string, number> = {};
       if (orderCountsRes.data) {
         orderCountsRes.data.forEach((item: any) => {
@@ -261,20 +203,13 @@ export default function Menu() {
     }
   };
 
-  // Invalidate React Query caches after mutations (keeps PDV/digital menu in sync)
   const invalidateRelatedCaches = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["products"] });
     queryClient.invalidateQueries({ queryKey: ["categories"] });
   }, [queryClient]);
 
   // Image upload
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Imagem muito grande", { description: "Máximo 5MB" });
-      return;
-    }
+  const handleImageSelect = (file: File) => {
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
   };
@@ -305,7 +240,6 @@ export default function Menu() {
   const removeImage = () => {
     setImageFile(null);
     setImagePreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   // Product CRUD
@@ -379,7 +313,6 @@ export default function Menu() {
     if (!selectedUnit) return;
     setFormError(null);
 
-    // Validations
     const trimmedName = productForm.name.trim();
     if (!trimmedName) {
       setFormError("O nome do produto não pode ser vazio ou conter apenas espaços.");
@@ -437,7 +370,6 @@ export default function Menu() {
         productId = data.id;
       }
 
-      // Handle variations
       const activeVariations = variationsForm.filter((v) => !v._deleted);
       const deletedVariations = variationsForm.filter((v) => v._deleted && v.id);
 
@@ -511,7 +443,6 @@ export default function Menu() {
     }
   };
 
-  // Duplicate product
   const handleDuplicateProduct = async (product: Product) => {
     if (!selectedUnit) return;
     try {
@@ -576,7 +507,6 @@ export default function Menu() {
   const handleBulkAction = async (action: "activate" | "deactivate" | "delete") => {
     if (selectedProducts.size === 0) return;
 
-    // Confirm bulk delete via dialog
     if (action === "delete") {
       setBulkDeleteDialog(true);
       return;
@@ -642,7 +572,6 @@ export default function Menu() {
     }
   };
 
-  // Export CSV — FIX: handle variable price products correctly
   const exportCSV = () => {
     const headers = ["Nome", "Categoria", "Preço", "Preço Delivery", "Disponível", "Tempo Preparo", "Variações"];
     const rows = products.map((p) => {
@@ -766,14 +695,12 @@ export default function Menu() {
 
   const availableCount = useMemo(() => products.filter((p) => p.available).length, [products]);
 
-  // FIX: avgPrice excludes variable-price products (which have price=0)
   const avgPrice = useMemo(() => {
     const fixedPriceProducts = products.filter((p) => !p.is_variable_price && p.price > 0);
     if (fixedPriceProducts.length === 0) return 0;
     return fixedPriceProducts.reduce((sum, p) => sum + p.price, 0) / fixedPriceProducts.length;
   }, [products]);
 
-  // Top 3 products by today's order count
   const topProductIds = useMemo(() => {
     const sorted = Object.entries(orderCounts)
       .sort(([, a], [, b]) => b - a)
@@ -843,368 +770,57 @@ export default function Menu() {
             <Download className="w-4 h-4 mr-1" />
             Exportar
           </Button>
-          <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm" onClick={() => openCategoryDialog()}>
-                <FolderOpen className="w-4 h-4 mr-1" />
-                Categoria
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <form onSubmit={handleSaveCategory}>
-                <DialogHeader>
-                  <DialogTitle>{editingCategory ? "Editar Categoria" : "Nova Categoria"}</DialogTitle>
-                  <DialogDescription>
-                    {editingCategory ? "Atualize os dados da categoria" : "Crie uma nova categoria de produtos"}
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label>Nome *</Label>
-                    <Input
-                      value={categoryForm.name}
-                      onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
-                      placeholder="Ex: Lanches"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Descrição</Label>
-                    <Textarea
-                      value={categoryForm.description}
-                      onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
-                      placeholder="Descrição opcional"
-                    />
-                  </div>
-                </div>
-                <DialogFooter className="flex justify-between sm:justify-between">
-                  {editingCategory && (
-                    <Button type="button" variant="destructive" onClick={() => confirmDeleteCategory(editingCategory.id)}>
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Excluir
-                    </Button>
-                  )}
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" onClick={() => setCategoryDialogOpen(false)}>
-                      Cancelar
-                    </Button>
-                    <Button type="submit" disabled={savingCategory}>
-                      {savingCategory ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Salvando...</> : "Salvar"}
-                    </Button>
-                  </div>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={productDialogOpen} onOpenChange={setProductDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" onClick={() => openProductDialog()}>
-                <Plus className="w-4 h-4 mr-1" />
-                Produto
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-              <form onSubmit={handleSaveProduct}>
-                <DialogHeader>
-                  <DialogTitle>{editingProduct ? "Editar Produto" : "Novo Produto"}</DialogTitle>
-                  <DialogDescription>
-                    {editingProduct ? "Atualize os dados do produto" : "Adicione um novo produto ao cardápio"}
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  {/* Form error */}
-                  {formError && (
-                    <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-3 py-2">
-                      {formError}
-                    </div>
-                  )}
-
-                  {/* Image Upload */}
-                  <div className="space-y-2">
-                    <Label>Foto do Produto</Label>
-                    <div className="flex items-center gap-3">
-                      {imagePreview ? (
-                        <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-border">
-                          <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                          <button
-                            type="button"
-                            onClick={removeImage}
-                            className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-0.5"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="w-24 h-24 rounded-lg border-2 border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center gap-1 transition-colors"
-                        >
-                          <Upload className="w-5 h-5 text-muted-foreground" />
-                          <span className="text-[10px] text-muted-foreground">Upload</span>
-                        </button>
-                      )}
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageSelect}
-                        className="hidden"
-                      />
-                      <div className="text-xs text-muted-foreground">
-                        <p>JPG, PNG ou WebP</p>
-                        <p>Máximo 5MB</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Nome *</Label>
-                    <Input
-                      value={productForm.name}
-                      onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-                      placeholder="Ex: X-Burger"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Descrição</Label>
-                    <Textarea
-                      value={productForm.description}
-                      onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-                      placeholder="Ingredientes, observações..."
-                    />
-                  </div>
-
-                  {/* Variable Price Toggle */}
-                  <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
-                    <div className="space-y-0.5">
-                      <Label className="text-sm font-medium flex items-center gap-1.5">
-                        🔄 Preço Variável
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        Cliente define o valor (porções, kg, etc.)
-                      </p>
-                    </div>
-                    <Switch
-                      checked={productForm.is_variable_price}
-                      onCheckedChange={(checked) => setProductForm({ ...productForm, is_variable_price: checked, price: checked ? "" : productForm.price })}
-                    />
-                  </div>
-
-                  {/* Min/Max price fields when variable */}
-                  {productForm.is_variable_price && (
-                    <div className="grid grid-cols-2 gap-4 p-3 rounded-lg border border-primary/20 bg-primary/5">
-                      <div className="space-y-2">
-                        <Label className="text-xs">Valor Mínimo (opcional)</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={productForm.min_price}
-                          onChange={(e) => setProductForm({ ...productForm, min_price: e.target.value })}
-                          placeholder="Ex: 10,00"
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs">Valor Máximo (opcional)</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={productForm.max_price}
-                          onChange={(e) => setProductForm({ ...productForm, max_price: e.target.value })}
-                          placeholder="Ex: 200,00"
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Fixed price fields when NOT variable */}
-                  {!productForm.is_variable_price && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Preço Base</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={productForm.price}
-                          onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
-                          placeholder="0,00"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Preço Delivery</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={productForm.delivery_price}
-                          onChange={(e) => setProductForm({ ...productForm, delivery_price: e.target.value })}
-                          placeholder="0,00"
-                        />
-                      </div>
-                    </div>
-                  )}
-                  {productForm.is_variable_price && (
-                    <div className="space-y-2">
-                      <Label>Preço Delivery (fixo, opcional)</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={productForm.delivery_price}
-                        onChange={(e) => setProductForm({ ...productForm, delivery_price: e.target.value })}
-                        placeholder="0,00"
-                      />
-                    </div>
-                  )}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Categoria</Label>
-                      <Select
-                        value={productForm.category_id}
-                        onValueChange={(value) => setProductForm({ ...productForm, category_id: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {categories.map((cat) => (
-                            <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Tempo de Preparo (min) *</Label>
-                      <Input
-                        type="number"
-                        min="1"
-                        value={productForm.preparation_time}
-                        onChange={(e) => setProductForm({ ...productForm, preparation_time: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {/* Variations Section — FIX: Added delivery_price field */}
-                  <div className="space-y-3 pt-2 border-t border-border">
-                    <div className="flex items-center justify-between">
-                      <Label className="flex items-center gap-1.5">
-                        <Layers className="w-4 h-4" />
-                        Variações (P/M/G)
-                      </Label>
-                      <Button type="button" variant="outline" size="sm" onClick={addVariation}>
-                        <Plus className="w-3 h-3 mr-1" />
-                        Adicionar
-                      </Button>
-                    </div>
-                    {variationsForm.filter((v) => !v._deleted).length === 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        Nenhuma variação. Adicione para oferecer tamanhos ou sabores com preços diferentes.
-                      </p>
-                    )}
-                    {variationsForm.map((variation, index) =>
-                      variation._deleted ? null : (
-                        <div key={index} className="flex gap-2 items-end">
-                          <div className="flex-1 space-y-1">
-                            <Label className="text-xs">Nome</Label>
-                            <Input
-                              value={variation.name}
-                              onChange={(e) => updateVariation(index, "name", e.target.value)}
-                              placeholder="Ex: Grande"
-                              className="h-8 text-sm"
-                            />
-                          </div>
-                          <div className="w-20 space-y-1">
-                            <Label className="text-xs">Preço</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={variation.price}
-                              onChange={(e) => updateVariation(index, "price", e.target.value)}
-                              placeholder="0,00"
-                              className="h-8 text-sm"
-                            />
-                          </div>
-                          <div className="w-20 space-y-1">
-                            <Label className="text-xs">Delivery</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={variation.delivery_price}
-                              onChange={(e) => updateVariation(index, "delivery_price", e.target.value)}
-                              placeholder="0,00"
-                              className="h-8 text-sm"
-                            />
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 shrink-0"
-                            onClick={() => removeVariation(index)}
-                          >
-                            <X className="w-3.5 h-3.5 text-destructive" />
-                          </Button>
-                        </div>
-                      )
-                    )}
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setProductDialogOpen(false)}>
-                    Cancelar
-                  </Button>
-                  <Button type="submit" disabled={savingProduct || uploadingImage}>
-                    {savingProduct || uploadingImage ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{uploadingImage ? "Enviando foto..." : "Salvando..."}</>
-                    ) : "Salvar"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Button variant="outline" size="sm" onClick={() => openCategoryDialog()}>
+            <FolderOpen className="w-4 h-4 mr-1" />
+            Categoria
+          </Button>
+          <Button size="sm" onClick={() => openProductDialog()}>
+            <Plus className="w-4 h-4 mr-1" />
+            Produto
+          </Button>
         </div>
       </div>
 
+      {/* Dialogs (controlados por estado) */}
+      <CategoryDialog
+        open={categoryDialogOpen}
+        onOpenChange={setCategoryDialogOpen}
+        editingCategory={editingCategory}
+        categoryForm={categoryForm}
+        onFormChange={setCategoryForm}
+        onSubmit={handleSaveCategory}
+        onDelete={confirmDeleteCategory}
+        saving={savingCategory}
+      />
+
+      <ProductDialog
+        open={productDialogOpen}
+        onOpenChange={setProductDialogOpen}
+        editingProduct={editingProduct}
+        categories={categories}
+        productForm={productForm}
+        onFormChange={setProductForm}
+        variationsForm={variationsForm}
+        onAddVariation={addVariation}
+        onUpdateVariation={updateVariation}
+        onRemoveVariation={removeVariation}
+        imagePreview={imagePreview}
+        onImageSelect={handleImageSelect}
+        onRemoveImage={removeImage}
+        formError={formError}
+        saving={savingProduct}
+        uploadingImage={uploadingImage}
+        onSubmit={handleSaveProduct}
+      />
+
       {/* Metrics Dashboard */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard
-          title="Total de Produtos"
-          value={products.length}
-          icon={Package}
-          iconColor="primary"
-        />
-        <StatCard
-          title="Disponíveis"
-          value={`${availableCount}/${products.length}`}
-          icon={CheckCircle2}
-          iconColor="success"
-        />
-        <StatCard
-          title="Categorias"
-          value={categories.filter((c) => c.active !== false).length}
-          icon={Tags}
-          iconColor="info"
-        />
-        {/* FIX: avgPrice now excludes variable-price products */}
-        <StatCard
-          title="Preço Médio"
-          value={formatCurrency(avgPrice)}
-          icon={DollarSign}
-          iconColor="warning"
-        />
+        <StatCard title="Total de Produtos" value={products.length} icon={Package} iconColor="primary" />
+        <StatCard title="Disponíveis" value={`${availableCount}/${products.length}`} icon={CheckCircle2} iconColor="success" />
+        <StatCard title="Categorias" value={categories.filter((c) => c.active !== false).length} icon={Tags} iconColor="info" />
+        <StatCard title="Preço Médio" value={formatCurrency(avgPrice)} icon={DollarSign} iconColor="warning" />
       </div>
 
-      {/* Category Chips — FIX: always rendered (even with no categories) */}
       <CategoryChips
         categories={categories}
         filterCategory={filterCategory}
@@ -1226,7 +842,6 @@ export default function Menu() {
           />
         </div>
         <div className="flex gap-2 flex-wrap items-center">
-          {/* Availability filter */}
           <Select value={availabilityFilter} onValueChange={(v) => setAvailabilityFilter(v as AvailabilityFilter)}>
             <SelectTrigger className="w-[140px]">
               {availabilityFilter === "unavailable" ? (
@@ -1257,7 +872,6 @@ export default function Menu() {
             </SelectContent>
           </Select>
 
-          {/* View Mode Toggle */}
           <div className="flex border border-border rounded-md overflow-hidden">
             <Button
               variant={viewMode === "grid" ? "default" : "ghost"}
@@ -1301,25 +915,14 @@ export default function Menu() {
           </div>
           {selectionMode && (
             <div className="flex gap-1.5 flex-wrap">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleBulkAction("activate")}
-                disabled={bulkProcessing}
-              >
+              <Button variant="outline" size="sm" onClick={() => handleBulkAction("activate")} disabled={bulkProcessing}>
                 <Power className="w-3.5 h-3.5 mr-1" />
                 Ativar
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleBulkAction("deactivate")}
-                disabled={bulkProcessing}
-              >
+              <Button variant="outline" size="sm" onClick={() => handleBulkAction("deactivate")} disabled={bulkProcessing}>
                 <PowerOff className="w-3.5 h-3.5 mr-1" />
                 Desativar
               </Button>
-              {/* Move to category */}
               <Popover open={moveCategoryOpen} onOpenChange={setMoveCategoryOpen}>
                 <PopoverTrigger asChild>
                   <Button variant="outline" size="sm" disabled={bulkProcessing}>
@@ -1349,13 +952,7 @@ export default function Menu() {
                   ))}
                 </PopoverContent>
               </Popover>
-              {/* FIX: Bulk delete now opens confirmation dialog */}
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => handleBulkAction("delete")}
-                disabled={bulkProcessing}
-              >
+              <Button variant="destructive" size="sm" onClick={() => handleBulkAction("delete")} disabled={bulkProcessing}>
                 <Trash2 className="w-3.5 h-3.5 mr-1" />
                 Excluir ({selectedProducts.size})
               </Button>
@@ -1364,14 +961,13 @@ export default function Menu() {
         </div>
       )}
 
-      {/* Results indicator */}
       {hasActiveFilters && (
         <p className="text-xs text-muted-foreground">
           {filteredProducts.length} resultado(s) encontrado(s)
         </p>
       )}
 
-      {/* Products — Grid View */}
+      {/* Products */}
       {filteredProducts.length > 0 ? (
         viewMode === "grid" ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2">
@@ -1394,124 +990,19 @@ export default function Menu() {
             ))}
           </div>
         ) : (
-          /* List View */
-          <div className="rounded-lg border border-border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="w-8 p-2">
-                    <Checkbox
-                      checked={selectedProducts.size === filteredProducts.length && filteredProducts.length > 0}
-                      onCheckedChange={(checked) => (checked ? selectAll() : clearSelection())}
-                    />
-                  </th>
-                  <th className="text-left p-2 font-medium">Produto</th>
-                  <th className="text-left p-2 font-medium hidden sm:table-cell">Categoria</th>
-                  <th className="text-left p-2 font-medium">Preço</th>
-                  <th className="text-left p-2 font-medium hidden md:table-cell">Delivery</th>
-                  <th className="text-left p-2 font-medium hidden lg:table-cell">Pedidos hoje</th>
-                  <th className="text-center p-2 font-medium">Ativo</th>
-                  <th className="text-right p-2 font-medium">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredProducts.map((product) => {
-                  const isTop = topProductIds.has(product.id);
-                  const todayCount = orderCounts[product.id] || 0;
-                  return (
-                    <tr
-                      key={product.id}
-                      className={`border-t border-border/50 hover:bg-muted/30 transition-colors ${selectedProducts.has(product.id) ? "bg-primary/5" : ""} ${!product.available ? "opacity-60" : ""}`}
-                    >
-                      <td className="p-2">
-                        <Checkbox
-                          checked={selectedProducts.has(product.id)}
-                          onCheckedChange={(checked) => toggleSelectProduct(product.id, !!checked)}
-                        />
-                      </td>
-                      <td className="p-2">
-                        <div className="flex items-center gap-2">
-                          {product.image_url && (
-                            <img
-                              src={product.image_url}
-                              alt={product.name}
-                              className="w-8 h-8 rounded object-cover shrink-0"
-                            />
-                          )}
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1">
-                              {isTop && <Flame className="w-3 h-3 text-status-warning shrink-0" />}
-                              <span className="font-medium truncate max-w-[180px]">{product.name}</span>
-                            </div>
-                            {product.description && (
-                              <p className="text-xs text-muted-foreground truncate max-w-[180px]">
-                                {product.description}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-2 hidden sm:table-cell">
-                        <span className="text-muted-foreground text-xs">
-                          {product.categories?.name || "—"}
-                        </span>
-                      </td>
-                      <td className="p-2">
-                        <span className="font-medium text-primary text-xs">
-                          {product.is_variable_price
-                            ? "Variável"
-                            : (product.variations && product.variations.length > 0)
-                            ? `${formatCurrency(Math.min(product.price, ...product.variations.map(v => v.price)))}+`
-                            : formatCurrency(product.price)}
-                        </span>
-                      </td>
-                      <td className="p-2 hidden md:table-cell">
-                        <span className="text-muted-foreground text-xs">
-                          {product.delivery_price ? formatCurrency(product.delivery_price) : "—"}
-                        </span>
-                      </td>
-                      <td className="p-2 hidden lg:table-cell">
-                        {todayCount > 0 ? (
-                          <Badge variant="secondary" className="text-xs">
-                            {todayCount}×
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        )}
-                      </td>
-                      <td className="p-2 text-center">
-                        <Switch
-                          checked={product.available ?? true}
-                          onCheckedChange={() => handleToggleProductAvailability(product)}
-                          className="scale-75"
-                        />
-                      </td>
-                      <td className="p-2">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => openProductDialog(product)}
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => confirmDeleteProduct(product.id)}
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <ProductListView
+            filteredProducts={filteredProducts}
+            selectedProducts={selectedProducts}
+            topProductIds={topProductIds}
+            orderCounts={orderCounts}
+            onToggleSelect={toggleSelectProduct}
+            onSelectAll={selectAll}
+            onClearSelection={clearSelection}
+            onEdit={openProductDialog}
+            onDelete={confirmDeleteProduct}
+            onToggleAvailability={handleToggleProductAvailability}
+            formatCurrency={formatCurrency}
+          />
         )
       ) : (
         <div className="text-center py-16">
