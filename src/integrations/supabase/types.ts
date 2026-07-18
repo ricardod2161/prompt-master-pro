@@ -94,6 +94,71 @@ export type Database = {
           },
         ]
       }
+      ai_provider_logs: {
+        Row: {
+          completion_tokens: number | null
+          created_at: string
+          duration_ms: number | null
+          error_message: string | null
+          estimated_cost_usd: number | null
+          fallback_used: boolean
+          function_name: string
+          http_status: number | null
+          id: string
+          metadata: Json | null
+          model: string | null
+          prompt_tokens: number | null
+          provider: string
+          status: string
+          total_tokens: number | null
+          unit_id: string | null
+        }
+        Insert: {
+          completion_tokens?: number | null
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          estimated_cost_usd?: number | null
+          fallback_used?: boolean
+          function_name: string
+          http_status?: number | null
+          id?: string
+          metadata?: Json | null
+          model?: string | null
+          prompt_tokens?: number | null
+          provider: string
+          status: string
+          total_tokens?: number | null
+          unit_id?: string | null
+        }
+        Update: {
+          completion_tokens?: number | null
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          estimated_cost_usd?: number | null
+          fallback_used?: boolean
+          function_name?: string
+          http_status?: number | null
+          id?: string
+          metadata?: Json | null
+          model?: string | null
+          prompt_tokens?: number | null
+          provider?: string
+          status?: string
+          total_tokens?: number | null
+          unit_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_provider_logs_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audio_transcription_logs: {
         Row: {
           audio_base64: string | null

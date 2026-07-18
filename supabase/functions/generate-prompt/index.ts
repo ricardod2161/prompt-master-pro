@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { chatWithFallback } from "../_shared/ai-with-fallback.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -228,43 +230,29 @@ serve(async (req) => {
       userMessage += `\n=== CARDÁPIO REAL (resumo) ===\n${menuSummary}\n`;
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+    // Chamada com fallback automático: Lovable AI → OpenAI se falhar
+    let result;
+    try {
+      result = await chatWithFallback({
+        functionName: "generate-prompt",
+        unitId: body.unitId ?? null,
+        preferredModel: "google/gemini-2.5-flash",
+        openaiFallbackModel: "gpt-4o-mini",
         messages: [
           { role: "system", content: META_PROMPT },
           { role: "user", content: userMessage },
         ],
-      }),
-    });
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns minutos." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Créditos de IA esgotados." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[generate-prompt] both providers failed:", msg);
       return new Response(
-        JSON.stringify({ error: "Erro ao gerar prompt com IA." }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Nenhum provedor de IA disponível no momento. Tente novamente em alguns minutos." }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const aiResponse = await response.json();
-    const generatedPrompt = aiResponse.choices?.[0]?.message?.content?.trim();
-
+    const generatedPrompt = result.text?.trim();
     if (!generatedPrompt) {
       return new Response(
         JSON.stringify({ error: "Não foi possível gerar o prompt. Tente novamente." }),
@@ -273,7 +261,13 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, prompt: generatedPrompt }),
+      JSON.stringify({
+        success: true,
+        prompt: generatedPrompt,
+        provider: result.provider,
+        model: result.model,
+        fallbackUsed: result.fallbackUsed,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
