@@ -129,7 +129,6 @@ Por favor, forneça:
         ],
         tools,
         toolChoice: { type: "function", function: { name: "analyze_logs_result" } },
-        metadata: { logs_count: logs.length } as any,
       });
     } catch (e: any) {
       if (typeof e?.message === "string" && e.message.startsWith("AI_GATE_BLOCKED")) {
