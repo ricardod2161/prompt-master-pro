@@ -315,6 +315,10 @@ export default function Reports() {
             </div>
           </TabsContent>
 
+          <TabsContent value="payments" className="mt-4">
+            <ConfirmedPaymentsReport />
+          </TabsContent>
+
           <TabsContent value="pix" className="mt-4">
             <PixTransactionsDashboard />
           </TabsContent>
