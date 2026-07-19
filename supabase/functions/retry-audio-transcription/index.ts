@@ -42,41 +42,34 @@ async function transcribeAudio(base64Audio: string, mimetype: string): Promise<s
     });
 
     if (!response.ok) {
-      // Fallback: use Gemini vision for audio transcription
-      const geminiResponse = await fetch(
-        "https://router.lovable.app/api/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${lovableApiKey}`,
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: "Transcreva com precisão o áudio abaixo. Retorne APENAS a transcrição, sem explicações adicionais. Se não conseguir transcrever, retorne null.",
-                  },
-                  {
-                    type: "image_url",
-                    image_url: { url: dataUrl },
-                  },
-                ],
-              },
-            ],
-            max_tokens: 500,
-          }),
-        }
-      );
-
-      if (!geminiResponse.ok) return null;
-      const geminiData = await geminiResponse.json();
-      const text = geminiData.choices?.[0]?.message?.content?.trim();
-      return text && text !== "null" ? text : null;
+      // Fallback: use Gemini vision para transcrever áudio via chatWithFallback
+      try {
+        const result = await chatWithFallback({
+          functionName: "retry-audio-transcription",
+          systemSlug: "whatsapp",
+          preferredModel: "google/gemini-2.5-flash",
+          openaiFallbackModel: "gpt-4o-mini",
+          disableFallback: true, // multimodal via image_url não é compatível com fallback OpenAI
+          maxTokens: 500,
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Transcreva com precisão o áudio abaixo. Retorne APENAS a transcrição, sem explicações adicionais. Se não conseguir transcrever, retorne null.",
+                },
+                { type: "image_url", image_url: { url: dataUrl } },
+              ] as any,
+            },
+          ],
+        });
+        const text = (result.text || "").trim();
+        return text && text !== "null" ? text : null;
+      } catch (e) {
+        console.error("Gemini fallback transcription failed:", e);
+        return null;
+      }
     }
 
     const data = await response.json();
