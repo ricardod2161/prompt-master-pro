@@ -228,12 +228,14 @@ export function AIMetricsPanel() {
                 <TableRow>
                   <TableHead>Quando</TableHead>
                   <TableHead>Função</TableHead>
+                  <TableHead>Sistema</TableHead>
                   <TableHead>Provedor</TableHead>
                   <TableHead>Modelo</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Tokens</TableHead>
                   <TableHead className="text-right">Duração</TableHead>
                   <TableHead className="text-right">Custo (USD)</TableHead>
+                  <TableHead className="text-right">Créditos</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
