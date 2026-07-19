@@ -140,6 +140,9 @@ export function AISystemsWalletPanel() {
   const txsTotal = txsPage?.total ?? 0;
   const txsPages = Math.max(1, Math.ceil(txsTotal / HISTORY_PAGE_SIZE));
 
+  useEffect(() => { setHistoryPage(0); }, [selectedSystem?.id]);
+
+
 
   const adjust = useMutation({
     mutationFn: async ({ slug, amount, reason }: { slug: string; amount: number; reason: string }) => {
