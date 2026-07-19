@@ -91,8 +91,13 @@ serve(async (req) => {
       });
     }
 
+    // Gate da carteira IA — bloqueia antes de gastar crédito de marketing ou chamar o modelo
+    const gate = await checkAISystem("marketing", 1);
+    if (!gate.ok) return aiGateBlockedResponse(gate, corsHeaders);
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY não configurada");
+
 
     let prompt: string;
 
