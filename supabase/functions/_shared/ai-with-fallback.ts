@@ -1,36 +1,41 @@
-// Chat completion helper com fallback automático:
-// 1. Tenta Lovable AI Gateway (Gemini/GPT via LOVABLE_API_KEY)
-// 2. Se falhar com 402/429/5xx/timeout → cai pra OpenAI direto
-// 3. Loga cada tentativa em `ai_provider_logs`
+// PONTO ÚNICO DE CHAMADA DE IA (gate + provider + debit + log).
+// Toda função de IA do sistema DEVE passar por aqui.
 //
-// Uso:
-//   import { chatWithFallback } from "../_shared/ai-with-fallback.ts";
-//   const { text } = await chatWithFallback({
-//     functionName: "generate-prompt",
-//     unitId,
-//     messages: [{ role: "user", content: "..." }],
-//     preferredModel: "google/gemini-2.5-flash",
-//     openaiFallbackModel: "gpt-4o-mini",
-//   });
+// Ordem obrigatória em cada invocação:
+//   1) checkAISystem(systemSlug)  — aborta se bloqueado/sem crédito
+//   2) chama Lovable AI (fallback OpenAI opcional em 402/429/5xx)
+//   3) debitAISystem(...)         — debita a carteira do sistema
+//   4) grava linha em ai_provider_logs (com credits_debited e system_slug)
+//
+// Suporta: content string OU array (multimodal: input_audio/image_url),
+// tools + tool_choice (function-calling), e desabilitar fallback quando o
+// provedor alternativo não conseguir processar o payload (ex: input_audio).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { debitAISystem, checkAISystem, estimateCostUsd } from "./ai-wallet.ts";
 
-type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+type ChatContent = string | Array<Record<string, unknown>>;
+export type ChatMessage = { role: "system" | "user" | "assistant" | "tool"; content: ChatContent; [k: string]: unknown };
 
 interface ChatOptions {
   functionName: string;
   unitId?: string | null;
   userId?: string | null;
-  /** Slug do sistema que originou a chamada (restaurant, whatsapp, marketing, ...).
-   *  Obrigatório para debitar a carteira correta E aplicar o gate de verificação. */
+  /** Slug do sistema (restaurant, whatsapp, marketing, admin). Obrigatório em produção — sem ele não há gate, débito nem tracking correto. */
   systemSlug?: string;
   messages: ChatMessage[];
-  preferredModel?: string;              // ex: "google/gemini-2.5-flash"
-  openaiFallbackModel?: string;         // ex: "gpt-4o-mini"
+  preferredModel?: string;
+  openaiFallbackModel?: string;
   temperature?: number;
   maxTokens?: number;
-  timeoutMs?: number;                   // default 30s
+  timeoutMs?: number;
+  /** Ferramentas (function-calling). Repassadas como estão para o gateway. */
+  tools?: unknown;
+  toolChoice?: unknown;
+  /** Créditos a debitar por chamada (default 1). */
+  creditsToDebit?: number;
+  /** Se true, não tenta OpenAI ao falhar (útil p/ multimodal input_audio). */
+  disableFallback?: boolean;
 }
 
 interface ChatResult {
@@ -39,8 +44,11 @@ interface ChatResult {
   model: string;
   fallbackUsed: boolean;
   totalTokens?: number;
+  /** Mensagem crua do assistente (inclui tool_calls quando houver). */
+  message: any;
+  /** JSON completo do provedor. */
+  raw: any;
 }
-
 
 function getSupabaseAdmin() {
   const url = Deno.env.get("SUPABASE_URL");
@@ -51,6 +59,7 @@ function getSupabaseAdmin() {
 
 async function logAttempt(entry: {
   functionName: string;
+  systemSlug?: string;
   unitId?: string | null;
   provider: string;
   model?: string;
@@ -61,6 +70,7 @@ async function logAttempt(entry: {
   completionTokens?: number;
   totalTokens?: number;
   estimatedCostUsd?: number;
+  creditsDebited?: number;
   fallbackUsed: boolean;
   errorMessage?: string;
 }) {
@@ -69,6 +79,7 @@ async function logAttempt(entry: {
     if (!admin) return;
     await admin.from("ai_provider_logs").insert({
       function_name: entry.functionName,
+      system_slug: entry.systemSlug ?? null,
       unit_id: entry.unitId ?? null,
       provider: entry.provider,
       model: entry.model ?? null,
@@ -79,6 +90,7 @@ async function logAttempt(entry: {
       completion_tokens: entry.completionTokens ?? null,
       total_tokens: entry.totalTokens ?? null,
       estimated_cost_usd: entry.estimatedCostUsd ?? null,
+      credits_debited: entry.creditsDebited ?? null,
       fallback_used: entry.fallbackUsed,
       error_message: entry.errorMessage ?? null,
     });
@@ -87,78 +99,44 @@ async function logAttempt(entry: {
   }
 }
 
-async function callLovable(opts: {
+async function callGateway(url: string, apiKey: string, opts: {
   model: string;
   messages: ChatMessage[];
   temperature?: number;
   maxTokens?: number;
   timeoutMs: number;
+  tools?: unknown;
+  toolChoice?: unknown;
 }) {
-  const apiKey = Deno.env.get("LOVABLE_API_KEY");
-  if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
-
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
-
   try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const body: Record<string, unknown> = {
+      model: opts.model,
+      messages: opts.messages,
+    };
+    if (opts.temperature !== undefined) body.temperature = opts.temperature;
+    if (opts.maxTokens !== undefined) body.max_tokens = opts.maxTokens;
+    if (opts.tools !== undefined) body.tools = opts.tools;
+    if (opts.toolChoice !== undefined) body.tool_choice = opts.toolChoice;
+
+    const res = await fetch(url, {
       method: "POST",
       signal: controller.signal,
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: opts.model,
-        messages: opts.messages,
-        ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
-        ...(opts.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
-      }),
+      body: JSON.stringify(body),
     });
-    const body = await res.text();
-    return { status: res.status, body };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function callOpenAI(opts: {
-  model: string;
-  messages: ChatMessage[];
-  temperature?: number;
-  maxTokens?: number;
-  timeoutMs: number;
-}) {
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
-  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
-
-  try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: opts.model,
-        messages: opts.messages,
-        ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
-        ...(opts.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
-      }),
-    });
-    const body = await res.text();
-    return { status: res.status, body };
+    const bodyText = await res.text();
+    return { status: res.status, body: bodyText };
   } finally {
     clearTimeout(timer);
   }
 }
 
 function shouldFallback(httpStatus: number): boolean {
-  // 402 (créditos), 429 (rate limit), 5xx (indisponível) → fallback
   return httpStatus === 402 || httpStatus === 429 || httpStatus >= 500;
 }
 
@@ -174,174 +152,178 @@ export async function chatWithFallback(opts: ChatOptions): Promise<ChatResult> {
     temperature,
     maxTokens,
     timeoutMs = 30_000,
+    tools,
+    toolChoice,
+    creditsToDebit = 1,
+    disableFallback = false,
   } = opts;
 
-  // ── Gate: verificar carteira ANTES de chamar qualquer provedor ──
+  // ── 1) GATE ───────────────────────────────────────────
   if (systemSlug) {
-    const gate = await checkAISystem(systemSlug, 1);
+    const gate = await checkAISystem(systemSlug, creditsToDebit);
     if (!gate.ok) {
       const err = new Error(`AI_GATE_BLOCKED:${gate.reason ?? "UNKNOWN"}`);
       (err as any).code = gate.reason;
       (err as any).available = gate.available ?? 0;
-      throw err;
-    }
-  }
-
-  // ── Tentativa 1: Lovable AI ───────────────────────────
-  const t0 = Date.now();
-  let lovableError: string | undefined;
-  let lovableStatus = 0;
-
-
-  try {
-    const { status, body } = await callLovable({
-      model: preferredModel,
-      messages,
-      temperature,
-      maxTokens,
-      timeoutMs,
-    });
-    lovableStatus = status;
-
-    if (status >= 200 && status < 300) {
-      const parsed = JSON.parse(body);
-      const text = parsed.choices?.[0]?.message?.content ?? "";
-      const usage = parsed.usage ?? {};
-      const totalTokens = usage.total_tokens ?? 0;
-      const cost = await estimateCostUsd(preferredModel, totalTokens);
-
+      // log da tentativa bloqueada
       await logAttempt({
         functionName,
-        unitId,
-        provider: "lovable",
-        model: preferredModel,
-        status: "success",
-        httpStatus: status,
-        durationMs: Date.now() - t0,
-        promptTokens: usage.prompt_tokens,
-        completionTokens: usage.completion_tokens,
-        totalTokens,
-        estimatedCostUsd: cost,
-        fallbackUsed: false,
-      });
-
-      if (systemSlug) {
-        await debitAISystem({
-          systemSlug, amount: 1, model: preferredModel,
-          tokensInput: usage.prompt_tokens, tokensOutput: usage.completion_tokens,
-          costUsd: cost, responseMs: Date.now() - t0,
-          unitId, userId, metadata: { function: functionName, fallback: false },
-        });
-      }
-
-      return { text, provider: "lovable", model: preferredModel, fallbackUsed: false, totalTokens };
-    }
-
-    lovableError = `HTTP ${status}: ${body.slice(0, 500)}`;
-
-    if (!shouldFallback(status)) {
-      // Erro terminal (400 bad request etc.) — não vale a pena fallback
-      await logAttempt({
-        functionName,
+        systemSlug,
         unitId,
         provider: "lovable",
         model: preferredModel,
         status: "error",
-        httpStatus: status,
-        durationMs: Date.now() - t0,
+        durationMs: 0,
         fallbackUsed: false,
+        creditsDebited: 0,
+        errorMessage: `GATE_BLOCKED:${gate.reason ?? "UNKNOWN"}`,
+      });
+      throw err;
+    }
+  }
+
+  const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+  if (!lovableKey) throw new Error("LOVABLE_API_KEY not configured");
+
+  // ── 2) LOVABLE ────────────────────────────────────────
+  const t0 = Date.now();
+  let lovableError: string | undefined;
+  let lovableStatus = 0;
+
+  try {
+    const { status, body } = await callGateway(
+      "https://ai.gateway.lovable.dev/v1/chat/completions",
+      lovableKey,
+      { model: preferredModel, messages, temperature, maxTokens, timeoutMs, tools, toolChoice },
+    );
+    lovableStatus = status;
+
+    if (status >= 200 && status < 300) {
+      const parsed = JSON.parse(body);
+      const message = parsed.choices?.[0]?.message ?? {};
+      const text = typeof message.content === "string" ? message.content : "";
+      const usage = parsed.usage ?? {};
+      const totalTokens = usage.total_tokens ?? 0;
+      const cost = await estimateCostUsd(preferredModel, totalTokens);
+      const durationMs = Date.now() - t0;
+
+      // ── 3) DEBIT ───────────────────────────────────────
+      if (systemSlug) {
+        await debitAISystem({
+          systemSlug, amount: creditsToDebit, model: preferredModel,
+          tokensInput: usage.prompt_tokens, tokensOutput: usage.completion_tokens,
+          costUsd: cost, responseMs: durationMs,
+          unitId, userId, metadata: { function: functionName, fallback: false },
+        });
+      }
+
+      // ── 4) LOG ─────────────────────────────────────────
+      await logAttempt({
+        functionName, systemSlug, unitId,
+        provider: "lovable", model: preferredModel,
+        status: "success", httpStatus: status, durationMs,
+        promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens,
+        totalTokens, estimatedCostUsd: cost,
+        creditsDebited: systemSlug ? creditsToDebit : 0,
+        fallbackUsed: false,
+      });
+
+      return { text, provider: "lovable", model: preferredModel, fallbackUsed: false, totalTokens, message, raw: parsed };
+    }
+
+    lovableError = `HTTP ${status}: ${body.slice(0, 500)}`;
+
+    if (!shouldFallback(status) || disableFallback) {
+      await logAttempt({
+        functionName, systemSlug, unitId,
+        provider: "lovable", model: preferredModel,
+        status: "error", httpStatus: status,
+        durationMs: Date.now() - t0,
+        creditsDebited: 0, fallbackUsed: false,
         errorMessage: lovableError,
       });
       throw new Error(`Lovable AI error: ${lovableError}`);
     }
   } catch (e) {
-    lovableError = e instanceof Error ? e.message : String(e);
-    if (lovableStatus === 0) lovableStatus = 0; // timeout/network
+    if (!lovableError) lovableError = e instanceof Error ? e.message : String(e);
   }
 
-  // Log da falha do Lovable antes do fallback
+  // log da falha antes do fallback (se estivermos indo pro fallback)
   await logAttempt({
-    functionName,
-    unitId,
-    provider: "lovable",
-    model: preferredModel,
-    status: "error",
-    httpStatus: lovableStatus || undefined,
+    functionName, systemSlug, unitId,
+    provider: "lovable", model: preferredModel,
+    status: "error", httpStatus: lovableStatus || undefined,
     durationMs: Date.now() - t0,
-    fallbackUsed: false,
+    creditsDebited: 0, fallbackUsed: false,
     errorMessage: lovableError,
   });
 
-  // ── Tentativa 2: OpenAI fallback ──────────────────────
+  if (disableFallback) {
+    throw new Error(lovableError ?? "Lovable AI failed");
+  }
+
+  // ── 2b) OPENAI FALLBACK ───────────────────────────────
   console.warn(`[ai-fallback] Lovable failed (${lovableError}), trying OpenAI ${openaiFallbackModel}`);
+  const openaiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!openaiKey) throw new Error(`Lovable failed and OPENAI_API_KEY not configured. Lovable err: ${lovableError}`);
 
   const t1 = Date.now();
   try {
-    const { status, body } = await callOpenAI({
-      model: openaiFallbackModel,
-      messages,
-      temperature,
-      maxTokens,
-      timeoutMs,
-    });
+    const { status, body } = await callGateway(
+      "https://api.openai.com/v1/chat/completions",
+      openaiKey,
+      { model: openaiFallbackModel, messages, temperature, maxTokens, timeoutMs, tools, toolChoice },
+    );
 
     if (status >= 200 && status < 300) {
       const parsed = JSON.parse(body);
-      const text = parsed.choices?.[0]?.message?.content ?? "";
+      const message = parsed.choices?.[0]?.message ?? {};
+      const text = typeof message.content === "string" ? message.content : "";
       const usage = parsed.usage ?? {};
       const totalTokens = usage.total_tokens ?? 0;
       const cost = await estimateCostUsd(openaiFallbackModel, totalTokens);
-
-      await logAttempt({
-        functionName,
-        unitId,
-        provider: "openai",
-        model: openaiFallbackModel,
-        status: "success",
-        httpStatus: status,
-        durationMs: Date.now() - t1,
-        promptTokens: usage.prompt_tokens,
-        completionTokens: usage.completion_tokens,
-        totalTokens,
-        estimatedCostUsd: cost,
-        fallbackUsed: true,
-      });
+      const durationMs = Date.now() - t1;
 
       if (systemSlug) {
         await debitAISystem({
-          systemSlug, amount: 1, model: openaiFallbackModel,
+          systemSlug, amount: creditsToDebit, model: openaiFallbackModel,
           tokensInput: usage.prompt_tokens, tokensOutput: usage.completion_tokens,
-          costUsd: cost, responseMs: Date.now() - t1,
+          costUsd: cost, responseMs: durationMs,
           unitId, userId, metadata: { function: functionName, fallback: true },
         });
       }
 
-      return { text, provider: "openai", model: openaiFallbackModel, fallbackUsed: true, totalTokens };
+      await logAttempt({
+        functionName, systemSlug, unitId,
+        provider: "openai", model: openaiFallbackModel,
+        status: "success", httpStatus: status, durationMs,
+        promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens,
+        totalTokens, estimatedCostUsd: cost,
+        creditsDebited: systemSlug ? creditsToDebit : 0,
+        fallbackUsed: true,
+      });
+
+      return { text, provider: "openai", model: openaiFallbackModel, fallbackUsed: true, totalTokens, message, raw: parsed };
     }
 
     const errMsg = `OpenAI HTTP ${status}: ${body.slice(0, 500)}`;
     await logAttempt({
-      functionName,
-      unitId,
-      provider: "openai",
-      model: openaiFallbackModel,
-      status: "error",
-      httpStatus: status,
+      functionName, systemSlug, unitId,
+      provider: "openai", model: openaiFallbackModel,
+      status: "error", httpStatus: status,
       durationMs: Date.now() - t1,
-      fallbackUsed: true,
+      creditsDebited: 0, fallbackUsed: true,
       errorMessage: errMsg,
     });
     throw new Error(errMsg);
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e);
     await logAttempt({
-      functionName,
-      unitId,
-      provider: "openai",
-      model: openaiFallbackModel,
+      functionName, systemSlug, unitId,
+      provider: "openai", model: openaiFallbackModel,
       status: "error",
       durationMs: Date.now() - t1,
-      fallbackUsed: true,
+      creditsDebited: 0, fallbackUsed: true,
       errorMessage: errMsg,
     });
     throw new Error(`Both providers failed. Lovable: ${lovableError}. OpenAI: ${errMsg}`);
