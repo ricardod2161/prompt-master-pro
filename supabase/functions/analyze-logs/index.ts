@@ -48,6 +48,13 @@ serve(async (req) => {
       );
     }
 
+    // Gate: bloqueia antes da chamada ao modelo se a carteira admin estiver sem saldo
+    const gate = await checkAISystem("admin", 1);
+    if (!gate.ok) return aiGateBlockedResponse(gate, corsHeaders);
+
+    const t0 = Date.now();
+
+
     // Preparar contexto dos logs para análise
     const logsContext = logs.map((log: any) => ({
       action: log.action,
