@@ -208,7 +208,7 @@ export async function chatWithFallback(opts: ChatOptions): Promise<ChatResult> {
       const text = parsed.choices?.[0]?.message?.content ?? "";
       const usage = parsed.usage ?? {};
       const totalTokens = usage.total_tokens ?? 0;
-      const cost = estimateCostUsd(preferredModel, totalTokens);
+      const cost = await estimateCostUsd(preferredModel, totalTokens);
 
       await logAttempt({
         functionName,
@@ -290,7 +290,7 @@ export async function chatWithFallback(opts: ChatOptions): Promise<ChatResult> {
       const text = parsed.choices?.[0]?.message?.content ?? "";
       const usage = parsed.usage ?? {};
       const totalTokens = usage.total_tokens ?? 0;
-      const cost = estimateCostUsd(openaiFallbackModel, totalTokens);
+      const cost = await estimateCostUsd(openaiFallbackModel, totalTokens);
 
       await logAttempt({
         functionName,
