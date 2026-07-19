@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { checkAISystem, debitAISystem, estimateCostUsd, aiGateBlockedResponse } from "../_shared/ai-wallet.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -45,6 +47,13 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Gate: bloqueia antes da chamada ao modelo se a carteira admin estiver sem saldo
+    const gate = await checkAISystem("admin", 1);
+    if (!gate.ok) return aiGateBlockedResponse(gate, corsHeaders);
+
+    const t0 = Date.now();
+
 
     // Preparar contexto dos logs para análise
     const logsContext = logs.map((log: any) => ({
@@ -169,6 +178,16 @@ Por favor, forneça:
     }
 
     const aiResponse = await response.json();
+    const _u = aiResponse.usage ?? {};
+    const _model = "google/gemini-3-flash-preview";
+    await debitAISystem({
+      systemSlug: "admin", amount: 1, model: _model,
+      tokensInput: _u.prompt_tokens, tokensOutput: _u.completion_tokens,
+      costUsd: await estimateCostUsd(_model, _u.total_tokens ?? 0),
+      responseMs: Date.now() - t0,
+      metadata: { function: "analyze-logs", logs_count: logs.length },
+    });
+
     
     // Extrair resultado da tool call
     const toolCall = aiResponse.choices?.[0]?.message?.tool_calls?.[0];

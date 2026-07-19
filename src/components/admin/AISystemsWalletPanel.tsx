@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -74,10 +74,13 @@ export function AISystemsWalletPanel() {
   const [monthlyLimit, setMonthlyLimit] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [search, setSearch] = useState("");
+  const [historyPage, setHistoryPage] = useState(0);
+  const HISTORY_PAGE_SIZE = 25;
   const [openDialog, setOpenDialog] = useState<
     | { type: "add" | "remove" | "limits" | "history"; systemId: string }
     | null
   >(null);
+
 
   const { data: systems, isLoading: sLoading } = useQuery({
     queryKey: ["ai_systems"],
@@ -117,20 +120,29 @@ export function AISystemsWalletPanel() {
     refetchInterval: 60_000,
   });
 
-  const { data: txs } = useQuery({
-    queryKey: ["ai_system_transactions", selectedSystem?.id],
-    enabled: !!selectedSystem,
+  const { data: txsPage } = useQuery({
+    queryKey: ["ai_system_transactions", selectedSystem?.id, historyPage],
+    enabled: !!selectedSystem && openDialog?.type === "history",
     queryFn: async () => {
-      const { data, error } = await supabase
+      const from = historyPage * HISTORY_PAGE_SIZE;
+      const to = from + HISTORY_PAGE_SIZE - 1;
+      const { data, count, error } = await supabase
         .from("ai_system_transactions" as any)
-        .select("*")
+        .select("*", { count: "exact" })
         .eq("system_id", selectedSystem!.id)
         .order("created_at", { ascending: false })
-        .limit(100);
+        .range(from, to);
       if (error) throw error;
-      return data as unknown as AITx[];
+      return { rows: data as unknown as AITx[], total: count ?? 0 };
     },
   });
+  const txs = txsPage?.rows;
+  const txsTotal = txsPage?.total ?? 0;
+  const txsPages = Math.max(1, Math.ceil(txsTotal / HISTORY_PAGE_SIZE));
+
+  useEffect(() => { setHistoryPage(0); }, [selectedSystem?.id]);
+
+
 
   const adjust = useMutation({
     mutationFn: async ({ slug, amount, reason }: { slug: string; amount: number; reason: string }) => {
@@ -702,7 +714,10 @@ export function AISystemsWalletPanel() {
       {/* Dialog: History */}
       <Dialog
         open={openDialog?.type === "history"}
-        onOpenChange={(o) => !o && setOpenDialog(null)}
+        onOpenChange={(o) => {
+          if (!o) setOpenDialog(null);
+          else setHistoryPage(0);
+        }}
       >
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
@@ -710,10 +725,10 @@ export function AISystemsWalletPanel() {
               <History className="h-5 w-5" /> Histórico de transações — {selectedSystem?.name}
             </DialogTitle>
             <DialogDescription>
-              Últimas 100 movimentações da carteira.
+              {txsTotal.toLocaleString("pt-BR")} movimentações registradas.
             </DialogDescription>
           </DialogHeader>
-          <div className="overflow-auto -mx-6 px-6">
+          <div className="overflow-auto -mx-6 px-6 flex-1">
             <Table>
               <TableHeader className="sticky top-0 bg-background z-10">
                 <TableRow>
@@ -768,8 +783,32 @@ export function AISystemsWalletPanel() {
               </TableBody>
             </Table>
           </div>
+          <DialogFooter className="flex-row items-center justify-between sm:justify-between gap-2 border-t pt-3">
+            <div className="text-xs text-muted-foreground">
+              Página {historyPage + 1} de {txsPages} · {HISTORY_PAGE_SIZE} por página
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={historyPage === 0}
+                onClick={() => setHistoryPage((p) => Math.max(0, p - 1))}
+              >
+                Anterior
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={historyPage + 1 >= txsPages}
+                onClick={() => setHistoryPage((p) => p + 1)}
+              >
+                Próxima
+              </Button>
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }

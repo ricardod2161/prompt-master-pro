@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { debitAISystem, estimateCostUsd } from "../_shared/ai-wallet.ts";
+import { debitAISystem, estimateCostUsd, checkAISystem, aiGateBlockedResponse } from "../_shared/ai-wallet.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -91,8 +91,13 @@ serve(async (req) => {
       });
     }
 
+    // Gate da carteira IA — bloqueia antes de gastar crédito de marketing ou chamar o modelo
+    const gate = await checkAISystem("marketing", 1);
+    if (!gate.ok) return aiGateBlockedResponse(gate, corsHeaders);
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY não configurada");
+
 
     let prompt: string;
 
@@ -164,9 +169,10 @@ Do NOT include:
     await debitAISystem({
       systemSlug: "marketing", amount: 1, model: "google/gemini-3-pro-image-preview",
       tokensInput: _mu.prompt_tokens, tokensOutput: _mu.completion_tokens,
-      costUsd: estimateCostUsd("google/gemini-2.5-flash-image", _mu.total_tokens ?? 0),
+      costUsd: await estimateCostUsd("google/gemini-3-pro-image-preview", _mu.total_tokens ?? 0),
       metadata: { function: "generate-marketing-image" },
     });
+
     const imageData = aiData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
 
     if (!imageData) {

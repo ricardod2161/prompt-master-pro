@@ -94,6 +94,27 @@ export type Database = {
           },
         ]
       }
+      ai_model_pricing: {
+        Row: {
+          model: string
+          notes: string | null
+          price_per_1m_tokens: number
+          updated_at: string
+        }
+        Insert: {
+          model: string
+          notes?: string | null
+          price_per_1m_tokens?: number
+          updated_at?: string
+        }
+        Update: {
+          model?: string
+          notes?: string | null
+          price_per_1m_tokens?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ai_provider_logs: {
         Row: {
           completion_tokens: number | null

@@ -14,7 +14,7 @@
 //   });
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { debitAISystem } from "./ai-wallet.ts";
+import { debitAISystem, checkAISystem, estimateCostUsd } from "./ai-wallet.ts";
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
@@ -23,7 +23,7 @@ interface ChatOptions {
   unitId?: string | null;
   userId?: string | null;
   /** Slug do sistema que originou a chamada (restaurant, whatsapp, marketing, ...).
-   *  Obrigatório para debitar a carteira correta. */
+   *  Obrigatório para debitar a carteira correta E aplicar o gate de verificação. */
   systemSlug?: string;
   messages: ChatMessage[];
   preferredModel?: string;              // ex: "google/gemini-2.5-flash"
@@ -41,23 +41,6 @@ interface ChatResult {
   totalTokens?: number;
 }
 
-// Preços aproximados por 1M tokens (input+output combinados, USD)
-// Fonte: preços públicos dos provedores (2026-01)
-const PRICE_PER_1M_TOKENS: Record<string, number> = {
-  "google/gemini-2.5-flash": 0.30,
-  "google/gemini-3-flash-preview": 0.35,
-  "google/gemini-2.5-pro": 3.50,
-  "google/gemini-3.1-pro-preview": 5.00,
-  "openai/gpt-5-mini": 0.50,
-  "openai/gpt-5.5": 5.00,
-  "gpt-4o-mini": 0.30,
-  "gpt-4o": 5.00,
-};
-
-function estimateCostUsd(model: string, totalTokens: number): number {
-  const rate = PRICE_PER_1M_TOKENS[model] ?? 1.0;
-  return (totalTokens / 1_000_000) * rate;
-}
 
 function getSupabaseAdmin() {
   const url = Deno.env.get("SUPABASE_URL");
@@ -193,10 +176,22 @@ export async function chatWithFallback(opts: ChatOptions): Promise<ChatResult> {
     timeoutMs = 30_000,
   } = opts;
 
+  // ── Gate: verificar carteira ANTES de chamar qualquer provedor ──
+  if (systemSlug) {
+    const gate = await checkAISystem(systemSlug, 1);
+    if (!gate.ok) {
+      const err = new Error(`AI_GATE_BLOCKED:${gate.reason ?? "UNKNOWN"}`);
+      (err as any).code = gate.reason;
+      (err as any).available = gate.available ?? 0;
+      throw err;
+    }
+  }
+
   // ── Tentativa 1: Lovable AI ───────────────────────────
   const t0 = Date.now();
   let lovableError: string | undefined;
   let lovableStatus = 0;
+
 
   try {
     const { status, body } = await callLovable({
@@ -213,7 +208,7 @@ export async function chatWithFallback(opts: ChatOptions): Promise<ChatResult> {
       const text = parsed.choices?.[0]?.message?.content ?? "";
       const usage = parsed.usage ?? {};
       const totalTokens = usage.total_tokens ?? 0;
-      const cost = estimateCostUsd(preferredModel, totalTokens);
+      const cost = await estimateCostUsd(preferredModel, totalTokens);
 
       await logAttempt({
         functionName,
@@ -295,7 +290,7 @@ export async function chatWithFallback(opts: ChatOptions): Promise<ChatResult> {
       const text = parsed.choices?.[0]?.message?.content ?? "";
       const usage = parsed.usage ?? {};
       const totalTokens = usage.total_tokens ?? 0;
-      const cost = estimateCostUsd(openaiFallbackModel, totalTokens);
+      const cost = await estimateCostUsd(openaiFallbackModel, totalTokens);
 
       await logAttempt({
         functionName,

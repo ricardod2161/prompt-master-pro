@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
-import { debitAISystem, estimateCostUsd } from "../_shared/ai-wallet.ts";
+import { debitAISystem, estimateCostUsd, checkAISystem } from "../_shared/ai-wallet.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1627,6 +1627,14 @@ async function analyzeImage(imageBase64: string, mimetype: string): Promise<stri
     throw new Error("LOVABLE_API_KEY not configured");
   }
 
+  // Gate: se a carteira WhatsApp está sem saldo/bloqueada, pula análise de imagem
+  const gate = await checkAISystem("whatsapp", 1);
+  if (!gate.ok) {
+    console.warn(`[WHATSAPP-GATE] image-analysis skipped: ${gate.reason}`);
+    return "";
+  }
+
+
   try {
     const response = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
@@ -1670,7 +1678,7 @@ async function analyzeImage(imageBase64: string, mimetype: string): Promise<stri
     await debitAISystem({
       systemSlug: "whatsapp", amount: 1, model: "google/gemini-2.5-flash",
       tokensInput: _iu.prompt_tokens, tokensOutput: _iu.completion_tokens,
-      costUsd: estimateCostUsd("google/gemini-2.5-flash", _iu.total_tokens ?? 0),
+      costUsd: await estimateCostUsd("google/gemini-2.5-flash", _iu.total_tokens ?? 0),
       metadata: { function: "whatsapp-webhook", stage: "image-analysis" },
     });
     return data.choices?.[0]?.message?.content || "";
@@ -1821,9 +1829,17 @@ async function processWithAI(
     throw new Error("RATE_LIMIT");
   }
 
+  // Gate: bloqueia o loop se a carteira WhatsApp estiver sem saldo / bloqueada
+  const gate = await checkAISystem("whatsapp", 1);
+  if (!gate.ok) {
+    console.warn(`[WHATSAPP-GATE] bot-turn blocked: ${gate.reason}`);
+    throw new Error(`AI_GATE_BLOCKED:${gate.reason ?? "UNKNOWN"}`);
+  }
+
   while (iterations < MAX_ITERATIONS) {
     iterations++;
     console.log(`AI iteration ${iterations}/${MAX_ITERATIONS}`);
+
 
     const aiResponse = await callAIWithRetry(currentMessages);
 
@@ -1849,7 +1865,7 @@ async function processWithAI(
       model: "google/gemini-2.5-pro",
       tokensInput: _u.prompt_tokens,
       tokensOutput: _u.completion_tokens,
-      costUsd: estimateCostUsd("google/gemini-2.5-pro", _u.total_tokens ?? 0),
+      costUsd: await estimateCostUsd("google/gemini-2.5-pro", _u.total_tokens ?? 0),
       unitId,
       metadata: { function: "whatsapp-webhook", stage: "bot-turn", iter: iterations },
     });
