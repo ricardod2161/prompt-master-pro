@@ -711,7 +711,10 @@ export function AISystemsWalletPanel() {
       {/* Dialog: History */}
       <Dialog
         open={openDialog?.type === "history"}
-        onOpenChange={(o) => !o && setOpenDialog(null)}
+        onOpenChange={(o) => {
+          if (!o) setOpenDialog(null);
+          else setHistoryPage(0);
+        }}
       >
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
@@ -719,10 +722,10 @@ export function AISystemsWalletPanel() {
               <History className="h-5 w-5" /> Histórico de transações — {selectedSystem?.name}
             </DialogTitle>
             <DialogDescription>
-              Últimas 100 movimentações da carteira.
+              {txsTotal.toLocaleString("pt-BR")} movimentações registradas.
             </DialogDescription>
           </DialogHeader>
-          <div className="overflow-auto -mx-6 px-6">
+          <div className="overflow-auto -mx-6 px-6 flex-1">
             <Table>
               <TableHeader className="sticky top-0 bg-background z-10">
                 <TableRow>
@@ -777,8 +780,32 @@ export function AISystemsWalletPanel() {
               </TableBody>
             </Table>
           </div>
+          <DialogFooter className="flex-row items-center justify-between sm:justify-between gap-2 border-t pt-3">
+            <div className="text-xs text-muted-foreground">
+              Página {historyPage + 1} de {txsPages} · {HISTORY_PAGE_SIZE} por página
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={historyPage === 0}
+                onClick={() => setHistoryPage((p) => Math.max(0, p - 1))}
+              >
+                Anterior
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={historyPage + 1 >= txsPages}
+                onClick={() => setHistoryPage((p) => p + 1)}
+              >
+                Próxima
+              </Button>
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }
