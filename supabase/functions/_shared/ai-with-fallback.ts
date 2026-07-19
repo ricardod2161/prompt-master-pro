@@ -77,7 +77,7 @@ async function logAttempt(entry: {
   try {
     const admin = getSupabaseAdmin();
     if (!admin) return;
-    await admin.from("ai_provider_logs").insert({
+    const { error } = await admin.from("ai_provider_logs").insert({
       function_name: entry.functionName,
       system_slug: entry.systemSlug ?? null,
       unit_id: entry.unitId ?? null,
@@ -94,6 +94,9 @@ async function logAttempt(entry: {
       fallback_used: entry.fallbackUsed,
       error_message: entry.errorMessage ?? null,
     });
+    if (error) {
+      console.error("[ai-fallback] failed to log:", error.message);
+    }
   } catch (e) {
     console.error("[ai-fallback] failed to log:", e);
   }
