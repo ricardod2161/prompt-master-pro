@@ -1627,6 +1627,14 @@ async function analyzeImage(imageBase64: string, mimetype: string): Promise<stri
     throw new Error("LOVABLE_API_KEY not configured");
   }
 
+  // Gate: se a carteira WhatsApp está sem saldo/bloqueada, pula análise de imagem
+  const gate = await checkAISystem("whatsapp", 1);
+  if (!gate.ok) {
+    console.warn(`[WHATSAPP-GATE] image-analysis skipped: ${gate.reason}`);
+    return "";
+  }
+
+
   try {
     const response = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
