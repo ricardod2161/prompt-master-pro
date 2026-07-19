@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { TrendingUp, DollarSign, ShoppingBag, Users, Calendar, QrCode } from "lucide-react";
+import { TrendingUp, DollarSign, ShoppingBag, Users, Calendar, QrCode, CheckCircle2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -11,6 +11,7 @@ import { useOrders } from "@/hooks/useOrders";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { PixTransactionsDashboard } from "@/components/reports/PixTransactionsDashboard";
+import { ConfirmedPaymentsReport } from "@/components/reports/ConfirmedPaymentsReport";
 import { SubscriptionGate } from "@/components/subscription/SubscriptionGate";
 
 const COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6"];
@@ -122,6 +123,10 @@ export default function Reports() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="sales">📊 Vendas</TabsTrigger>
+            <TabsTrigger value="payments" className="gap-1">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Pagamentos Confirmados
+            </TabsTrigger>
             <TabsTrigger value="pix" className="gap-1">
               <QrCode className="h-3.5 w-3.5" />
               Pix
@@ -308,6 +313,10 @@ export default function Reports() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          <TabsContent value="payments" className="mt-4">
+            <ConfirmedPaymentsReport />
           </TabsContent>
 
           <TabsContent value="pix" className="mt-4">
