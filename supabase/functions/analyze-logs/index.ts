@@ -171,7 +171,6 @@ Por favor, forneça:
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-    }
   } catch (error) {
     console.error("Error in analyze-logs:", error);
     return new Response(
