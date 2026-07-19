@@ -1495,67 +1495,32 @@ async function transcribeAudio(audioBase64: string, mimetype: string): Promise<s
 
 // Analyze image using Gemini
 async function analyzeImage(imageBase64: string, mimetype: string): Promise<string> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    throw new Error("LOVABLE_API_KEY not configured");
-  }
-
-  // Gate: se a carteira WhatsApp está sem saldo/bloqueada, pula análise de imagem
-  const gate = await checkAISystem("whatsapp", 1);
-  if (!gate.ok) {
-    console.warn(`[WHATSAPP-GATE] image-analysis skipped: ${gate.reason}`);
-    return "";
-  }
-
-
   try {
-    const response = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
+    const result = await chatWithFallback({
+      functionName: "whatsapp-webhook:image-analysis",
+      systemSlug: "whatsapp",
+      preferredModel: "google/gemini-2.5-flash",
+      disableFallback: true, // image_url via data URL — evita fallback OpenAI que não suporta este payload
+      maxTokens: 200,
+      messages: [
+        {
+          role: "user",
+          content: [
             {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: "Descreva brevemente esta imagem em 1-2 frases em português. Se for um comprovante de pagamento (Pix, transferência), identifique. Se for um endereço/localização, identifique. Se for outra coisa, descreva o conteúdo principal.",
-                },
-                {
-                  type: "image_url",
-                  image_url: {
-                    url: `data:${mimetype};base64,${imageBase64}`,
-                  },
-                },
-              ],
+              type: "text",
+              text: "Descreva brevemente esta imagem em 1-2 frases em português. Se for um comprovante de pagamento (Pix, transferência), identifique. Se for um endereço/localização, identifique. Se for outra coisa, descreva o conteúdo principal.",
             },
-          ],
-          max_tokens: 200,
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      console.error("Image analysis error:", response.status);
+            { type: "image_url", image_url: { url: `data:${mimetype};base64,${imageBase64}` } },
+          ] as any,
+        },
+      ],
+    });
+    return result.text || "";
+  } catch (error: any) {
+    if (typeof error?.message === "string" && error.message.startsWith("AI_GATE_BLOCKED")) {
+      console.warn(`[WHATSAPP-GATE] image-analysis skipped: ${error.code ?? "BLOCKED"}`);
       return "";
     }
-
-    const data = await response.json();
-    const _iu = data.usage ?? {};
-    await debitAISystem({
-      systemSlug: "whatsapp", amount: 1, model: "google/gemini-2.5-flash",
-      tokensInput: _iu.prompt_tokens, tokensOutput: _iu.completion_tokens,
-      costUsd: await estimateCostUsd("google/gemini-2.5-flash", _iu.total_tokens ?? 0),
-      metadata: { function: "whatsapp-webhook", stage: "image-analysis" },
-    });
-    return data.choices?.[0]?.message?.content || "";
-  } catch (error) {
     console.error("Error analyzing image:", error);
     return "";
   }
