@@ -172,28 +172,6 @@ Por favor, forneça:
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
     }
-
-    // Fallback se não houver tool call
-    const content = aiResponse.choices?.[0]?.message?.content;
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        analysis: {
-          health_status: "ok",
-          health_summary: content || "Análise concluída",
-          issues: [],
-          patterns: [],
-          recommendations: [],
-          stats: {
-            total_analyzed: logs.length,
-            errors_count: logs.filter((l: any) => l.severity === "error").length,
-            warnings_count: logs.filter((l: any) => l.severity === "warning").length,
-            info_count: logs.filter((l: any) => l.severity === "info").length,
-          },
-        },
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
   } catch (error) {
     console.error("Error in analyze-logs:", error);
     return new Response(
