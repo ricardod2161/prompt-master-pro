@@ -1829,9 +1829,17 @@ async function processWithAI(
     throw new Error("RATE_LIMIT");
   }
 
+  // Gate: bloqueia o loop se a carteira WhatsApp estiver sem saldo / bloqueada
+  const gate = await checkAISystem("whatsapp", 1);
+  if (!gate.ok) {
+    console.warn(`[WHATSAPP-GATE] bot-turn blocked: ${gate.reason}`);
+    throw new Error(`AI_GATE_BLOCKED:${gate.reason ?? "UNKNOWN"}`);
+  }
+
   while (iterations < MAX_ITERATIONS) {
     iterations++;
     console.log(`AI iteration ${iterations}/${MAX_ITERATIONS}`);
+
 
     const aiResponse = await callAIWithRetry(currentMessages);
 
