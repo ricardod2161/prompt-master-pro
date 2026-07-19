@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { checkAISystem, debitAISystem, estimateCostUsd, aiGateBlockedResponse } from "../_shared/ai-wallet.ts";
+import { aiGateBlockedResponse } from "../_shared/ai-wallet.ts";
+import { chatWithFallback } from "../_shared/ai-with-fallback.ts";
 
 
 const corsHeaders = {
