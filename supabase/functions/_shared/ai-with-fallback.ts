@@ -176,10 +176,22 @@ export async function chatWithFallback(opts: ChatOptions): Promise<ChatResult> {
     timeoutMs = 30_000,
   } = opts;
 
+  // ── Gate: verificar carteira ANTES de chamar qualquer provedor ──
+  if (systemSlug) {
+    const gate = await checkAISystem(systemSlug, 1);
+    if (!gate.ok) {
+      const err = new Error(`AI_GATE_BLOCKED:${gate.reason ?? "UNKNOWN"}`);
+      (err as any).code = gate.reason;
+      (err as any).available = gate.available ?? 0;
+      throw err;
+    }
+  }
+
   // ── Tentativa 1: Lovable AI ───────────────────────────
   const t0 = Date.now();
   let lovableError: string | undefined;
   let lovableStatus = 0;
+
 
   try {
     const { status, body } = await callLovable({
