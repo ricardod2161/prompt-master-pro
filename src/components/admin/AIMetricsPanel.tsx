@@ -41,6 +41,8 @@ interface AILog {
   duration_ms: number | null;
   total_tokens: number | null;
   estimated_cost_usd: number | null;
+  credits_debited: number | null;
+  system_slug: string | null;
   fallback_used: boolean;
   error_message: string | null;
 }
