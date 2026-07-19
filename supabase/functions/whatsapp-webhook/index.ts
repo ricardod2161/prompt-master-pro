@@ -1618,102 +1618,60 @@ async function processWithAI(
   customerPhone: string,
   customerName: string
 ): Promise<ProcessWithAIResult> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    throw new Error("LOVABLE_API_KEY is not configured");
-  }
-
   const MAX_ITERATIONS = 8;
   let iterations = 0;
   const currentMessages: any[] = [...messages];
   let pendingMenuMessages: string[] | undefined;
 
-  // Helper to call AI with retry on rate limit
-  async function callAIWithRetry(msgs: any[]): Promise<Response> {
+  // Helper: chamada única de IA com retry em 429. Toda chamada passa pelo
+  // chatWithFallback → gate + provider + debit + log (ai_provider_logs).
+  async function callAI(msgs: any[], iter: number) {
     const MAX_RETRIES = 3;
     const BACKOFF_MS = [2000, 4000, 8000];
-    
+
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      const resp = await fetch(
-        "https://ai.gateway.lovable.dev/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-pro",
-            messages: msgs,
-            tools,
-            tool_choice: "auto",
-            max_tokens: 3000,
-          }),
+      try {
+        return await chatWithFallback({
+          functionName: iter === 1 ? "whatsapp-webhook:reply" : `whatsapp-webhook:reply:iter-${iter}`,
+          systemSlug: "whatsapp",
+          unitId,
+          preferredModel: "google/gemini-2.5-pro",
+          openaiFallbackModel: "gpt-4o-mini",
+          maxTokens: 3000,
+          messages: msgs,
+          tools,
+          toolChoice: "auto",
+        });
+      } catch (e: any) {
+        const msg = typeof e?.message === "string" ? e.message : String(e);
+        // 429 → backoff manual e nova tentativa; chatWithFallback já tenta OpenAI,
+        // mas mantemos o backoff caso ambos os provedores estejam saturados.
+        if (msg.includes("429") && attempt < MAX_RETRIES) {
+          const waitMs = BACKOFF_MS[attempt];
+          console.log(`[RATE_LIMIT] iter=${iter} attempt=${attempt + 1} — retrying in ${waitMs}ms`);
+          await new Promise(r => setTimeout(r, waitMs));
+          continue;
         }
-      );
-
-      if (resp.status === 429 && attempt < MAX_RETRIES) {
-        const waitMs = BACKOFF_MS[attempt];
-        console.log(`[RATE_LIMIT] Attempt ${attempt + 1}/${MAX_RETRIES} got 429, retrying in ${waitMs}ms...`);
-        await resp.text(); // consume body
-        await new Promise(r => setTimeout(r, waitMs));
-        continue;
+        if (msg.startsWith("AI_GATE_BLOCKED")) throw e;
+        if (msg.includes("402")) throw new Error("PAYMENT_REQUIRED");
+        if (attempt >= MAX_RETRIES) throw e;
+        throw e;
       }
-      
-      return resp;
     }
-    
-    // Should never reach here, but TypeScript needs it
     throw new Error("RATE_LIMIT");
-  }
-
-  // Gate: bloqueia o loop se a carteira WhatsApp estiver sem saldo / bloqueada
-  const gate = await checkAISystem("whatsapp", 1);
-  if (!gate.ok) {
-    console.warn(`[WHATSAPP-GATE] bot-turn blocked: ${gate.reason}`);
-    throw new Error(`AI_GATE_BLOCKED:${gate.reason ?? "UNKNOWN"}`);
   }
 
   while (iterations < MAX_ITERATIONS) {
     iterations++;
     console.log(`AI iteration ${iterations}/${MAX_ITERATIONS}`);
 
+    const aiResult = await callAI(currentMessages, iterations);
+    const message = aiResult.message ?? {};
 
-    const aiResponse = await callAIWithRetry(currentMessages);
-
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error("AI API error:", aiResponse.status, errorText);
-      
-      if (aiResponse.status === 429) {
-        throw new Error("RATE_LIMIT");
-      }
-      if (aiResponse.status === 402) {
-        throw new Error("PAYMENT_REQUIRED");
-      }
-      throw new Error(`AI API error: ${aiResponse.status}`);
-    }
-
-    const aiData = await aiResponse.json();
-    // Débito na carteira do sistema WhatsApp
-    const _u = aiData.usage ?? {};
-    await debitAISystem({
-      systemSlug: "whatsapp",
-      amount: 1,
-      model: "google/gemini-2.5-pro",
-      tokensInput: _u.prompt_tokens,
-      tokensOutput: _u.completion_tokens,
-      costUsd: await estimateCostUsd("google/gemini-2.5-pro", _u.total_tokens ?? 0),
-      unitId,
-      metadata: { function: "whatsapp-webhook", stage: "bot-turn", iter: iterations },
-    });
-    const choice = aiData.choices?.[0];
-    
-    if (!choice) {
+    if (!message) {
       throw new Error("No response from AI");
     }
 
-    const message = choice.message;
     
     // Check if AI wants to call tools via standard tool_calls
     if (message.tool_calls && message.tool_calls.length > 0) {
