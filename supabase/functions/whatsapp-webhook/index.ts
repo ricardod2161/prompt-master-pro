@@ -1678,7 +1678,7 @@ async function analyzeImage(imageBase64: string, mimetype: string): Promise<stri
     await debitAISystem({
       systemSlug: "whatsapp", amount: 1, model: "google/gemini-2.5-flash",
       tokensInput: _iu.prompt_tokens, tokensOutput: _iu.completion_tokens,
-      costUsd: estimateCostUsd("google/gemini-2.5-flash", _iu.total_tokens ?? 0),
+      costUsd: await estimateCostUsd("google/gemini-2.5-flash", _iu.total_tokens ?? 0),
       metadata: { function: "whatsapp-webhook", stage: "image-analysis" },
     });
     return data.choices?.[0]?.message?.content || "";
@@ -1857,7 +1857,7 @@ async function processWithAI(
       model: "google/gemini-2.5-pro",
       tokensInput: _u.prompt_tokens,
       tokensOutput: _u.completion_tokens,
-      costUsd: estimateCostUsd("google/gemini-2.5-pro", _u.total_tokens ?? 0),
+      costUsd: await estimateCostUsd("google/gemini-2.5-pro", _u.total_tokens ?? 0),
       unitId,
       metadata: { function: "whatsapp-webhook", stage: "bot-turn", iter: iterations },
     });
