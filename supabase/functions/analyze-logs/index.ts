@@ -49,13 +49,6 @@ serve(async (req) => {
       );
     }
 
-    // Gate: bloqueia antes da chamada ao modelo se a carteira admin estiver sem saldo
-    const gate = await checkAISystem("admin", 1);
-    if (!gate.ok) return aiGateBlockedResponse(gate, corsHeaders);
-
-    const t0 = Date.now();
-
-
     // Preparar contexto dos logs para análise
     const logsContext = logs.map((log: any) => ({
       action: log.action,
@@ -79,125 +72,106 @@ Por favor, forneça:
 4. Padrões ou tendências observadas
 5. Recomendações preventivas`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
+    const tools = [
+      {
+        type: "function",
+        function: {
+          name: "analyze_logs_result",
+          description: "Resultado estruturado da análise de logs",
+          parameters: {
+            type: "object",
+            properties: {
+              health_status: { type: "string", enum: ["ok", "warning", "critical"] },
+              health_summary: { type: "string" },
+              issues: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    description: { type: "string" },
+                    severity: { type: "string", enum: ["info", "warning", "error"] },
+                    affected_area: { type: "string" },
+                    suggested_fix: { type: "string" },
+                    occurrences: { type: "number" },
+                  },
+                  required: ["title", "description", "severity", "suggested_fix"],
+                },
+              },
+              patterns: { type: "array", items: { type: "string" } },
+              recommendations: { type: "array", items: { type: "string" } },
+              stats: {
+                type: "object",
+                properties: {
+                  total_analyzed: { type: "number" },
+                  errors_count: { type: "number" },
+                  warnings_count: { type: "number" },
+                  info_count: { type: "number" },
+                },
+              },
+            },
+            required: ["health_status", "health_summary", "issues", "recommendations", "stats"],
+          },
+        },
       },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+    ];
+
+    let result;
+    try {
+      result = await chatWithFallback({
+        functionName: "analyze-logs",
+        systemSlug: "admin",
+        preferredModel: "google/gemini-3-flash-preview",
+        openaiFallbackModel: "gpt-4o-mini",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: userPrompt },
         ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "analyze_logs_result",
-              description: "Resultado estruturado da análise de logs",
-              parameters: {
-                type: "object",
-                properties: {
-                  health_status: {
-                    type: "string",
-                    enum: ["ok", "warning", "critical"],
-                    description: "Status geral de saúde do sistema",
-                  },
-                  health_summary: {
-                    type: "string",
-                    description: "Resumo executivo em uma frase",
-                  },
-                  issues: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        title: { type: "string", description: "Título do problema" },
-                        description: { type: "string", description: "Descrição detalhada" },
-                        severity: { type: "string", enum: ["info", "warning", "error"] },
-                        affected_area: { type: "string", description: "Área afetada (pedidos, estoque, pagamentos, etc)" },
-                        suggested_fix: { type: "string", description: "Sugestão de correção" },
-                        occurrences: { type: "number", description: "Número de ocorrências" },
-                      },
-                      required: ["title", "description", "severity", "suggested_fix"],
-                    },
-                    description: "Lista de problemas identificados",
-                  },
-                  patterns: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "Padrões ou tendências observadas",
-                  },
-                  recommendations: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "Recomendações preventivas",
-                  },
-                  stats: {
-                    type: "object",
-                    properties: {
-                      total_analyzed: { type: "number" },
-                      errors_count: { type: "number" },
-                      warnings_count: { type: "number" },
-                      info_count: { type: "number" },
-                    },
-                  },
-                },
-                required: ["health_status", "health_summary", "issues", "recommendations", "stats"],
-              },
-            },
-          },
-        ],
-        tool_choice: { type: "function", function: { name: "analyze_logs_result" } },
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("AI Gateway error:", response.status, errorText);
-      
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns minutos." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        tools,
+        toolChoice: { type: "function", function: { name: "analyze_logs_result" } },
+        metadata: { logs_count: logs.length } as any,
+      });
+    } catch (e: any) {
+      if (typeof e?.message === "string" && e.message.startsWith("AI_GATE_BLOCKED")) {
+        return aiGateBlockedResponse({ ok: false, reason: e.code ?? "SYSTEM_BLOCKED", available: e.available ?? 0 }, corsHeaders);
       }
-      
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Créditos de IA esgotados. Entre em contato com o suporte." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
+      console.error("analyze-logs AI error:", e);
       return new Response(
         JSON.stringify({ error: "Erro ao processar análise de IA" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const aiResponse = await response.json();
-    const _u = aiResponse.usage ?? {};
-    const _model = "google/gemini-3-flash-preview";
-    await debitAISystem({
-      systemSlug: "admin", amount: 1, model: _model,
-      tokensInput: _u.prompt_tokens, tokensOutput: _u.completion_tokens,
-      costUsd: await estimateCostUsd(_model, _u.total_tokens ?? 0),
-      responseMs: Date.now() - t0,
-      metadata: { function: "analyze-logs", logs_count: logs.length },
-    });
-
-    
     // Extrair resultado da tool call
-    const toolCall = aiResponse.choices?.[0]?.message?.tool_calls?.[0];
+    const toolCall = result.message?.tool_calls?.[0];
     if (toolCall?.function?.arguments) {
       const analysisResult = JSON.parse(toolCall.function.arguments);
       return new Response(
         JSON.stringify({ success: true, analysis: analysisResult }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Fallback se não houver tool call
+    return new Response(
+      JSON.stringify({
+        success: true,
+        analysis: {
+          health_status: "ok",
+          health_summary: result.text || "Análise concluída",
+          issues: [],
+          patterns: [],
+          recommendations: [],
+          stats: {
+            total_analyzed: logs.length,
+            errors_count: logs.filter((l: any) => l.severity === "error").length,
+            warnings_count: logs.filter((l: any) => l.severity === "warning").length,
+            info_count: logs.filter((l: any) => l.severity === "info").length,
+          },
+        },
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
     }
 
     // Fallback se não houver tool call
