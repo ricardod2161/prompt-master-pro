@@ -1397,224 +1397,96 @@ async function downloadMedia(
 
 // Transcribe audio using Gemini Pro (best ogg/opus support) with multiple fallbacks
 async function transcribeAudio(audioBase64: string, mimetype: string): Promise<string> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    console.error("LOVABLE_API_KEY not configured for transcription");
-    return "";
-  }
-
   console.log(`Transcribing audio (mimetype: ${mimetype}, size: ${audioBase64.length} chars)`);
 
-  // Strategy 1: Use Gemini 2.5 Pro with input_audio (ogg/opus native support — WhatsApp always sends OGG)
-  try {
-    console.log("Attempting transcription with Gemini 2.5 Pro (input_audio/ogg)...");
-
-    const geminiProResponse = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-pro",
-          messages: [
+  const strategies: Array<{
+    label: string;
+    functionName: string;
+    model: string;
+    messages: any[];
+  }> = [
+    {
+      label: "Gemini 2.5 Pro (input_audio/ogg)",
+      functionName: "whatsapp-webhook:transcribe-audio:gemini-pro",
+      model: "google/gemini-2.5-pro",
+      messages: [
+        {
+          role: "user",
+          content: [
             {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: "Transcreva este áudio de voz em português brasileiro.\nContexto: É um cliente fazendo pedido em restaurante via WhatsApp.\nPreste atenção especial a: nomes de produtos, quantidades (ex: 20 reais, 30 reais, 50 reais, porções de carne, porções de frango), formas de pagamento (pix, dinheiro, cartão) e endereços.\nNúmeros como '20', '30', '50' são SEMPRE quantidades de produtos ou valores monetários de pedido — NUNCA troco.\nRetorne APENAS o texto transcrito, sem explicações ou formatação."
-                },
-                {
-                  type: "input_audio",
-                  input_audio: {
-                    data: audioBase64,
-                    format: "ogg"
-                  }
-                }
-              ]
-            }
-          ],
-          max_tokens: 1000,
-        }),
-      }
-    );
-
-    if (geminiProResponse.ok) {
-      const data = await geminiProResponse.json();
-      const transcription = data.choices?.[0]?.message?.content?.trim() || "";
-      if (transcription && transcription.length > 2 && !transcription.toLowerCase().includes("não consigo")) {
-        console.log(`Gemini Pro transcription successful: "${transcription.substring(0, 80)}..."`);
-        return transcription;
-      }
-      console.log("Gemini Pro returned empty or invalid transcription");
-    } else {
-      const errorText = await geminiProResponse.text();
-      console.log("Gemini Pro failed:", geminiProResponse.status, errorText.substring(0, 300));
-    }
-  } catch (error) {
-    console.error("Gemini Pro error:", error);
-  }
-
-  // Strategy 2: Try Gemini Flash with input_audio/ogg
-  try {
-    console.log("Attempting transcription with Gemini Flash (input_audio/ogg)...");
-
-    const geminiFlashResponse = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: "Transcreva este áudio em português brasileiro. Retorne APENAS o texto transcrito."
-                },
-                {
-                  type: "input_audio",
-                  input_audio: {
-                    data: audioBase64,
-                    format: "ogg"
-                  }
-                }
-              ]
-            }
-          ],
-          max_tokens: 1000,
-        }),
-      }
-    );
-
-    if (geminiFlashResponse.ok) {
-      const data = await geminiFlashResponse.json();
-      const transcription = data.choices?.[0]?.message?.content?.trim() || "";
-      if (transcription && transcription.length > 2 && !transcription.toLowerCase().includes("não consigo")) {
-        console.log(`Gemini Flash transcription successful: "${transcription.substring(0, 80)}..."`);
-        return transcription;
-      }
-    } else {
-      const errorText = await geminiFlashResponse.text();
-      console.log("Gemini Flash failed:", geminiFlashResponse.status, errorText.substring(0, 200));
-    }
-  } catch (error) {
-    console.error("Gemini Flash error:", error);
-  }
-
-  // Strategy 3: Try GPT-5 with ogg format
-  try {
-    console.log("Attempting transcription with GPT-5 (input_audio/ogg)...");
-
-    const gptResponse = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "openai/gpt-5",
-          messages: [
-            {
-              role: "system",
-              content: "Você é um transcritor de áudio. Transcreva em português brasileiro. Retorne APENAS o texto transcrito."
+              type: "text",
+              text: "Transcreva este áudio de voz em português brasileiro.\nContexto: É um cliente fazendo pedido em restaurante via WhatsApp.\nPreste atenção especial a: nomes de produtos, quantidades (ex: 20 reais, 30 reais, 50 reais, porções de carne, porções de frango), formas de pagamento (pix, dinheiro, cartão) e endereços.\nNúmeros como '20', '30', '50' são SEMPRE quantidades de produtos ou valores monetários de pedido — NUNCA troco.\nRetorne APENAS o texto transcrito, sem explicações ou formatação.",
             },
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: "Transcreva este áudio:"
-                },
-                {
-                  type: "input_audio",
-                  input_audio: {
-                    data: audioBase64,
-                    format: "ogg"
-                  }
-                }
-              ]
-            }
+            { type: "input_audio", input_audio: { data: audioBase64, format: "ogg" } },
           ],
-          max_tokens: 1000,
-        }),
-      }
-    );
-
-    if (gptResponse.ok) {
-      const data = await gptResponse.json();
-      const transcription = data.choices?.[0]?.message?.content?.trim() || "";
-      if (transcription && transcription.length > 2) {
-        console.log(`GPT-5 transcription successful: "${transcription.substring(0, 80)}..."`);
-        return transcription;
-      }
-    } else {
-      const errorText = await gptResponse.text();
-      console.log("GPT-5 failed:", gptResponse.status, errorText.substring(0, 200));
-    }
-  } catch (error) {
-    console.error("GPT-5 error:", error);
-  }
-
-  // Strategy 4: Gemini via data URL (inline_data fallback — most compatible with ogg/opus)
-  try {
-    console.log("Attempting transcription with Gemini Flash (data URL fallback)...");
-
-    const dataUrl = `data:${mimetype};base64,${audioBase64}`;
-
-    const fallbackResponse = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: "Transcreva este áudio de voz em português. O áudio é de um cliente fazendo pedido em restaurante. Retorne APENAS o texto falado, sem nenhuma explicação."
-                },
-                {
-                  type: "image_url",
-                  image_url: { url: dataUrl }
-                }
-              ]
-            }
+      ],
+    },
+    {
+      label: "Gemini Flash (input_audio/ogg)",
+      functionName: "whatsapp-webhook:transcribe-audio:gemini-flash",
+      model: "google/gemini-2.5-flash",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Transcreva este áudio em português brasileiro. Retorne APENAS o texto transcrito." },
+            { type: "input_audio", input_audio: { data: audioBase64, format: "ogg" } },
           ],
-          max_tokens: 1000,
-        }),
-      }
-    );
+        },
+      ],
+    },
+    {
+      label: "GPT-5 (input_audio/ogg)",
+      functionName: "whatsapp-webhook:transcribe-audio:gpt5",
+      model: "openai/gpt-5",
+      messages: [
+        { role: "system", content: "Você é um transcritor de áudio. Transcreva em português brasileiro. Retorne APENAS o texto transcrito." },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Transcreva este áudio:" },
+            { type: "input_audio", input_audio: { data: audioBase64, format: "ogg" } },
+          ],
+        },
+      ],
+    },
+    {
+      label: "Gemini Flash (data URL fallback)",
+      functionName: "whatsapp-webhook:transcribe-audio:data-url-fallback",
+      model: "google/gemini-2.5-flash",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Transcreva este áudio de voz em português. O áudio é de um cliente fazendo pedido em restaurante. Retorne APENAS o texto falado, sem nenhuma explicação." },
+            { type: "image_url", image_url: { url: `data:${mimetype};base64,${audioBase64}` } },
+          ],
+        },
+      ],
+    },
+  ];
 
-    if (fallbackResponse.ok) {
-      const data = await fallbackResponse.json();
-      const transcription = data.choices?.[0]?.message?.content?.trim() || "";
+  for (const strat of strategies) {
+    try {
+      console.log(`Attempting transcription with ${strat.label}...`);
+      const result = await chatWithFallback({
+        functionName: strat.functionName,
+        systemSlug: "whatsapp",
+        preferredModel: strat.model,
+        disableFallback: true, // input_audio/image_url multimodal não é compatível com OpenAI fallback padrão
+        maxTokens: 1000,
+        messages: strat.messages as any,
+      });
+      const transcription = (result.text || "").trim();
       if (transcription && transcription.length > 2 && !transcription.toLowerCase().includes("não consigo")) {
-        console.log(`Strategy 4 (data URL) transcription successful: "${transcription.substring(0, 80)}..."`);
+        console.log(`${strat.label} transcription successful: "${transcription.substring(0, 80)}..."`);
         return transcription;
       }
-    } else {
-      const errorText = await fallbackResponse.text();
-      console.log("Strategy 4 failed:", fallbackResponse.status, errorText.substring(0, 200));
+      console.log(`${strat.label} returned empty/invalid transcription`);
+    } catch (e) {
+      console.error(`${strat.label} error:`, e);
     }
-  } catch (error) {
-    console.error("Strategy 4 error:", error);
   }
 
   console.log("All transcription strategies failed");
