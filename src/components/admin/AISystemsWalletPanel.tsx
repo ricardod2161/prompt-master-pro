@@ -74,10 +74,13 @@ export function AISystemsWalletPanel() {
   const [monthlyLimit, setMonthlyLimit] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [search, setSearch] = useState("");
+  const [historyPage, setHistoryPage] = useState(0);
+  const HISTORY_PAGE_SIZE = 25;
   const [openDialog, setOpenDialog] = useState<
     | { type: "add" | "remove" | "limits" | "history"; systemId: string }
     | null
   >(null);
+
 
   const { data: systems, isLoading: sLoading } = useQuery({
     queryKey: ["ai_systems"],
