@@ -178,6 +178,16 @@ Por favor, forneça:
     }
 
     const aiResponse = await response.json();
+    const _u = aiResponse.usage ?? {};
+    const _model = "google/gemini-3-flash-preview";
+    await debitAISystem({
+      systemSlug: "admin", amount: 1, model: _model,
+      tokensInput: _u.prompt_tokens, tokensOutput: _u.completion_tokens,
+      costUsd: await estimateCostUsd(_model, _u.total_tokens ?? 0),
+      responseMs: Date.now() - t0,
+      metadata: { function: "analyze-logs", logs_count: logs.length },
+    });
+
     
     // Extrair resultado da tool call
     const toolCall = aiResponse.choices?.[0]?.message?.tool_calls?.[0];
