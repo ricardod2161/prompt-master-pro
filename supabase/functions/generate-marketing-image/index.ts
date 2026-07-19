@@ -169,9 +169,10 @@ Do NOT include:
     await debitAISystem({
       systemSlug: "marketing", amount: 1, model: "google/gemini-3-pro-image-preview",
       tokensInput: _mu.prompt_tokens, tokensOutput: _mu.completion_tokens,
-      costUsd: estimateCostUsd("google/gemini-2.5-flash-image", _mu.total_tokens ?? 0),
+      costUsd: await estimateCostUsd("google/gemini-3-pro-image-preview", _mu.total_tokens ?? 0),
       metadata: { function: "generate-marketing-image" },
     });
+
     const imageData = aiData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
 
     if (!imageData) {
