@@ -120,20 +120,26 @@ export function AISystemsWalletPanel() {
     refetchInterval: 60_000,
   });
 
-  const { data: txs } = useQuery({
-    queryKey: ["ai_system_transactions", selectedSystem?.id],
-    enabled: !!selectedSystem,
+  const { data: txsPage } = useQuery({
+    queryKey: ["ai_system_transactions", selectedSystem?.id, historyPage],
+    enabled: !!selectedSystem && openDialog?.type === "history",
     queryFn: async () => {
-      const { data, error } = await supabase
+      const from = historyPage * HISTORY_PAGE_SIZE;
+      const to = from + HISTORY_PAGE_SIZE - 1;
+      const { data, count, error } = await supabase
         .from("ai_system_transactions" as any)
-        .select("*")
+        .select("*", { count: "exact" })
         .eq("system_id", selectedSystem!.id)
         .order("created_at", { ascending: false })
-        .limit(100);
+        .range(from, to);
       if (error) throw error;
-      return data as unknown as AITx[];
+      return { rows: data as unknown as AITx[], total: count ?? 0 };
     },
   });
+  const txs = txsPage?.rows;
+  const txsTotal = txsPage?.total ?? 0;
+  const txsPages = Math.max(1, Math.ceil(txsTotal / HISTORY_PAGE_SIZE));
+
 
   const adjust = useMutation({
     mutationFn: async ({ slug, amount, reason }: { slug: string; amount: number; reason: string }) => {
