@@ -45,8 +45,7 @@ export function BotSimulator({ prompt, disabled }: BotSimulatorProps) {
     setInput("");
     setIsStreaming(true);
 
-    let assistantSoFar = "";
-
+    let assistantText = "";
     try {
       const resp = await fetch(CHAT_URL, {
         method: "POST",
@@ -57,56 +56,16 @@ export function BotSimulator({ prompt, disabled }: BotSimulatorProps) {
         body: JSON.stringify({ messages: newMessages, systemPrompt: prompt }),
       });
 
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => ({}));
-        throw new Error(errData.error || `Erro ${resp.status}`);
-      }
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.error || `Erro ${resp.status}`);
 
-      if (!resp.body) throw new Error("Sem resposta de streaming");
-
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex: number;
-        while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
-          let line = buffer.slice(0, newlineIndex);
-          buffer = buffer.slice(newlineIndex + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (line.startsWith(":") || line.trim() === "") continue;
-          if (!line.startsWith("data: ")) continue;
-
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
-
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              assistantSoFar += content;
-              setMessages((prev) => {
-                const last = prev[prev.length - 1];
-                if (last?.role === "assistant") {
-                  return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantSoFar } : m);
-                }
-                return [...prev, { role: "assistant", content: assistantSoFar }];
-              });
-            }
-          } catch {
-            buffer = line + "\n" + buffer;
-            break;
-          }
-        }
+      assistantText = data.text || "";
+      if (assistantText) {
+        setMessages((prev) => [...prev, { role: "assistant", content: assistantText }]);
       }
     } catch (e: any) {
       toast({ variant: "destructive", title: "Erro no simulador", description: e.message });
-      // Remove user message if no response
-      if (!assistantSoFar) {
+      if (!assistantText) {
         setMessages((prev) => prev.slice(0, -1));
       }
     } finally {

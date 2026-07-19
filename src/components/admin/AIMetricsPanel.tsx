@@ -41,6 +41,8 @@ interface AILog {
   duration_ms: number | null;
   total_tokens: number | null;
   estimated_cost_usd: number | null;
+  credits_debited: number | null;
+  system_slug: string | null;
   fallback_used: boolean;
   error_message: string | null;
 }
@@ -226,12 +228,14 @@ export function AIMetricsPanel() {
                 <TableRow>
                   <TableHead>Quando</TableHead>
                   <TableHead>Função</TableHead>
+                  <TableHead>Sistema</TableHead>
                   <TableHead>Provedor</TableHead>
                   <TableHead>Modelo</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Tokens</TableHead>
                   <TableHead className="text-right">Duração</TableHead>
                   <TableHead className="text-right">Custo (USD)</TableHead>
+                  <TableHead className="text-right">Créditos</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -241,6 +245,13 @@ export function AIMetricsPanel() {
                       {formatDistanceToNow(new Date(log.created_at), { addSuffix: true, locale: ptBR })}
                     </TableCell>
                     <TableCell className="text-xs font-mono">{log.function_name}</TableCell>
+                    <TableCell className="text-xs">
+                      {log.system_slug ? (
+                        <Badge variant="outline">{log.system_slug}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={log.provider === "openai" ? "destructive" : "secondary"}>
                         {log.provider === "lovable" ? "Lovable" : "OpenAI"}
@@ -273,11 +284,16 @@ export function AIMetricsPanel() {
                         ? `$${Number(log.estimated_cost_usd).toFixed(6)}`
                         : "—"}
                     </TableCell>
+                    <TableCell className="text-right text-xs font-mono">
+                      {log.credits_debited != null
+                        ? Number(log.credits_debited).toLocaleString("pt-BR", { maximumFractionDigits: 4 })
+                        : "—"}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {items.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">
+                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground text-sm">
                       Nenhuma chamada de IA registrada ainda. Use qualquer feature de IA para popular esta lista.
                     </TableCell>
                   </TableRow>

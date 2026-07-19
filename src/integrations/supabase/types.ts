@@ -119,6 +119,7 @@ export type Database = {
         Row: {
           completion_tokens: number | null
           created_at: string
+          credits_debited: number | null
           duration_ms: number | null
           error_message: string | null
           estimated_cost_usd: number | null
@@ -131,12 +132,14 @@ export type Database = {
           prompt_tokens: number | null
           provider: string
           status: string
+          system_slug: string | null
           total_tokens: number | null
           unit_id: string | null
         }
         Insert: {
           completion_tokens?: number | null
           created_at?: string
+          credits_debited?: number | null
           duration_ms?: number | null
           error_message?: string | null
           estimated_cost_usd?: number | null
@@ -149,12 +152,14 @@ export type Database = {
           prompt_tokens?: number | null
           provider: string
           status: string
+          system_slug?: string | null
           total_tokens?: number | null
           unit_id?: string | null
         }
         Update: {
           completion_tokens?: number | null
           created_at?: string
+          credits_debited?: number | null
           duration_ms?: number | null
           error_message?: string | null
           estimated_cost_usd?: number | null
@@ -167,6 +172,7 @@ export type Database = {
           prompt_tokens?: number | null
           provider?: string
           status?: string
+          system_slug?: string | null
           total_tokens?: number | null
           unit_id?: string | null
         }
