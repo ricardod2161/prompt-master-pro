@@ -34,29 +34,22 @@ export function useCustomerOrder(tableId: string) {
   // Validate tableId format upfront
   const isValidTableId = useMemo(() => UUID_REGEX.test(tableId), [tableId]);
 
-  // Fetch table data with optimized caching
+  // Fetch table via public edge function (no broad RLS)
   const tableQuery = useQuery({
     queryKey: ["public-table", tableId],
     queryFn: async () => {
-      if (!isValidTableId) {
-        throw new Error("ID de mesa inválido");
-      }
-
-      const { data, error } = await supabase
-        .from("tables")
-        .select(`*, unit:units(*)`)
-        .eq("id", tableId)
-        .maybeSingle();
-
+      if (!isValidTableId) throw new Error("ID de mesa inválido");
+      const { data, error } = await supabase.functions.invoke("public-table-session", {
+        body: { action: "get_table", tableId },
+      });
       if (error) throw error;
-      if (!data) throw new Error("Mesa não encontrada");
-      
-      return data as Tables<"tables"> & { unit: Tables<"units"> };
+      if (!data?.table) throw new Error("Mesa não encontrada");
+      return data.table as Tables<"tables"> & { unit: Tables<"units"> };
     },
     enabled: !!tableId && isValidTableId,
     retry: 1,
-    staleTime: 5 * 60 * 1000, // 5 minutes - table info rarely changes
-    gcTime: 10 * 60 * 1000, // 10 minutes cache
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const unitId = tableQuery.data?.unit_id;

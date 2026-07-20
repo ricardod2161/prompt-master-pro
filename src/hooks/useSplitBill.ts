@@ -45,23 +45,19 @@ export function useSplitBill(
   const [payingPartial, setPayingPartial] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
 
-  // Fetch existing payments for this table (current session)
+  // Fetch existing payments via public edge function
   const paymentsQuery = useQuery<BillPayment[]>({
     queryKey: ["bill-payments", tableId],
     queryFn: async () => {
       if (!tableId) return [];
-
-      const { data, error } = await supabase
-        .from("bill_payments" as any)
-        .select("*")
-        .eq("table_id", tableId)
-        .order("created_at", { ascending: true });
-
+      const { data, error } = await supabase.functions.invoke("public-table-session", {
+        body: { action: "get_bill", tableId },
+      });
       if (error) {
         console.error("Failed to fetch payments:", error);
         return [];
       }
-      return (data || []) as unknown as BillPayment[];
+      return (data?.payments ?? []) as BillPayment[];
     },
     enabled: !!tableId,
     staleTime: 10 * 1000,
@@ -124,27 +120,27 @@ export function useSplitBill(
 
       setPayingPartial(true);
 
-      // 1. Register the payment in the database
-      const { data: insertedData, error: insertError } = await supabase
-        .from("bill_payments" as any)
-        .insert({
-          table_id: tableId,
-          unit_id: unitId,
-          amount: payment.amount,
-          customer_name: payment.customerName,
-          customer_phone: payment.customerPhone,
-          payment_method: payment.paymentMethod,
-          split_type: payment.splitType,
-          split_details: payment.splitDetails,
-        })
-        .select()
-        .single();
+      // 1. Register the payment via edge function (rate-limited, validated)
+      const { data: insertedResponse, error: insertError } = await supabase.functions.invoke(
+        "create-bill-payment",
+        {
+          body: {
+            table_id: tableId,
+            amount: payment.amount,
+            customer_name: payment.customerName,
+            customer_phone: payment.customerPhone,
+            payment_method: payment.paymentMethod,
+            split_type: payment.splitType,
+            split_details: payment.splitDetails,
+          },
+        },
+      );
 
-      if (insertError) {
-        throw new Error(`Erro ao registrar pagamento: ${insertError.message}`);
+      if (insertError || !insertedResponse?.payment) {
+        throw new Error(`Erro ao registrar pagamento: ${insertError?.message ?? "desconhecido"}`);
       }
 
-      const paymentData = insertedData as unknown as BillPayment;
+      const paymentData = insertedResponse.payment as BillPayment;
 
       // 2. Send WhatsApp notification with partial payment receipt
       const newTotalPaid = totalPaid + payment.amount;
