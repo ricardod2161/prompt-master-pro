@@ -12,28 +12,20 @@ export function useTableBill(tableId: string, unitId: string | undefined) {
   const [closingBill, setClosingBill] = useState(false);
   const [billClosed, setBillClosed] = useState(false);
 
-  // Fetch all active orders for this table
+  // Fetch active orders via public edge function (works for both staff & QR flows)
   const ordersQuery = useQuery({
     queryKey: ["table-bill", tableId],
     queryFn: async () => {
       if (!tableId) return [];
-
-      const { data, error } = await supabase
-        .from("orders")
-        .select(`
-          *,
-          order_items(*)
-        `)
-        .eq("table_id", tableId)
-        .in("status", ["pending", "preparing", "ready", "delivered"])
-        .order("created_at", { ascending: true });
-
+      const { data, error } = await supabase.functions.invoke("public-table-session", {
+        body: { action: "get_bill", tableId },
+      });
       if (error) throw error;
-      return (data || []) as OrderWithItems[];
+      return (data?.orders ?? []) as OrderWithItems[];
     },
     enabled: !!tableId,
-    staleTime: 30 * 1000, // 30 seconds - orders can change frequently
-    refetchInterval: 30 * 1000, // Auto refetch every 30 seconds
+    staleTime: 30 * 1000,
+    refetchInterval: 30 * 1000,
   });
 
   // Calculate totals
