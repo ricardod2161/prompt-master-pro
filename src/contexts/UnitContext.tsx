@@ -9,6 +9,7 @@ interface Unit {
   address: string | null;
   phone: string | null;
   cnpj: string | null;
+  logo_url?: string | null;
 }
 
 interface UnitContextType {
@@ -54,6 +55,15 @@ export function UnitProvider({ children }: { children: ReactNode }) {
           setSelectedUnitState(savedUnit);
         }
       }
+    }
+  }, [units, selectedUnit]);
+
+  // Keep selected unit in sync with fresh data (e.g. after logo update)
+  useEffect(() => {
+    if (!selectedUnit) return;
+    const fresh = units.find((u) => u.id === selectedUnit.id);
+    if (fresh && JSON.stringify(fresh) !== JSON.stringify(selectedUnit)) {
+      setSelectedUnitState(fresh);
     }
   }, [units, selectedUnit]);
 
