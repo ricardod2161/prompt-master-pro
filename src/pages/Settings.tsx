@@ -285,7 +285,10 @@ export default function Settings() {
             unitId={selectedUnit.id}
             logoUrl={logoUrl}
             onFormChange={setUnitForm}
-            onLogoChange={setLogoUrl}
+            onLogoChange={(url) => {
+              setLogoUrl(url);
+              refetchUnits();
+            }}
             onSave={handleSaveUnit}
           />
         </TabsContent>
