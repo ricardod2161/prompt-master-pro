@@ -129,7 +129,15 @@ export function AppSidebar() {
       <SidebarHeader className="border-b border-sidebar-border/50">
         <div className="flex items-center gap-3 px-2 py-3">
           <div className="relative">
-            <Logo size="sm" showText={false} />
+            {selectedUnit?.logo_url ? (
+              <img
+                src={selectedUnit.logo_url}
+                alt={`Logo ${selectedUnit.name}`}
+                className="w-8 h-8 rounded-xl object-cover border border-sidebar-border/50"
+              />
+            ) : (
+              <Logo size="sm" showText={false} />
+            )}
             {/* Online indicator */}
             <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-sidebar" />
           </div>
